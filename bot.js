@@ -9462,8 +9462,10 @@ class TradingBot {
     ) {
       try {
         const balance = await this.client.getBalance();
-        this.liveBalanceCents = Number(balance.balance);
-        this.livePortfolioValueCents = Number(balance.portfolio_value);
+        // Kalshi /portfolio/balance returns dollar amounts as floats (e.g. 25.50).
+        // Internally everything is tracked in cents, so multiply by 100.
+        this.liveBalanceCents = Math.round(Number(balance.balance) * 100);
+        this.livePortfolioValueCents = Math.round(Number(balance.portfolio_value) * 100);
         this.liveBalanceUpdatedAt = Date.now();
       } catch (err) {
         this.lastError = `Unable to refresh live balance: ${err.message}`;
