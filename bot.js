@@ -9107,50 +9107,74 @@ class TradingBot {
             `[bot] Live entry try ${attempt + 1}/${maxEntryAttempts} on ${symbol} did not fill @ ${workingPrice}¢ (IOC; ask ${freshAsk}¢)`
           );
       } catch (err) {
-          // If Kalshi rejects due to insufficient balance, the free balance is
-          // less than the order cost (open positions reserve funds server-side).
-          // Cut contracts in half and retry once at the smaller size.
+          // Kalshi shards balances per exchange shard. Crypto markets live on
+          // shard 2 (as of Aug 24 2026). If the order bounces with
+          // insufficient_balance, try to move funds from shard 0 → shard 2
+          // then retry the order once.
           const isInsufficientBalance =
             err.status === 400 &&
             String(err.body && (err.body.error?.code || err.body.code || '')).includes('insufficient_balance');
-          if (isInsufficientBalance && attemptContracts > 1) {
-            attemptContracts = Math.max(1, Math.floor(attemptContracts / 2));
-            const reducedCost = attemptContracts * workingPrice;
-            console.warn(
-              `[bot] insufficient_balance on ${symbol} — retrying with ${attemptContracts} contracts ($${(reducedCost / 100).toFixed(2)})`
-            );
-            trade.contracts = attemptContracts;
-            trade.stakeDollars = +(reducedCost / 100).toFixed(2);
+          if (isInsufficientBalance) {
+            const CRYPTO_SHARD = 2;
+            const neededCents = attemptContracts * workingPrice;
             try {
-              const order2 = await this.client.createOrder({
-                ticker,
-                side,
-                action: 'buy',
-                count: attemptContracts,
-                priceCents: workingPrice,
-                timeInForce: 'immediate_or_cancel',
-              });
-              orderId = this._extractOrderId(order2);
-              if (orderId) {
-                fill = await this._awaitOrderFill(orderId, {
-                  minFill: 1,
-                  attempts: 3,
-                  delayMs: 100,
-                  seedOrder: order2,
-                  heldSide: side,
-                  action: 'buy',
+              const shard0Bal = await this.client.getBalance({ exchangeIndex: 0 });
+              const shard0FreeCents = Number(shard0Bal.balance);
+              const transferDollars = Math.min(
+                shard0FreeCents / 100,
+                Math.ceil(neededCents / 100) + 1  // a dollar of headroom
+              );
+              if (transferDollars >= 0.01) {
+                console.warn(
+                  `[bot] insufficient_balance on shard ${CRYPTO_SHARD} for ${symbol} — transferring $${transferDollars.toFixed(2)} from shard 0`
+                );
+                await this.client.intraAccountTransfer({
+                  fromShard: 0,
+                  toShard: CRYPTO_SHARD,
+                  amountDollars: transferDollars,
                 });
-                filled = Math.max(0, Number(fill.filled) || 0);
-                if (filled >= 1) break;
+                // Brief pause for the transfer to settle before retrying.
+                await this._sleep(400);
+              } else {
+                console.warn(`[bot] insufficient_balance on ${symbol} and shard 0 also has no free funds ($${(shard0FreeCents / 100).toFixed(2)})`);
+                lastErr = err;
               }
-            } catch (err2) {
-              lastErr = err2;
-              console.error(`[bot] reduced-size retry on ${symbol} also failed:`, err2.message);
+            } catch (transferErr) {
+              console.error(`[bot] shard transfer failed for ${symbol}:`, transferErr.message);
+              lastErr = err;
+            }
+            // lastErr is only set above when transfer impossible — if null, retry.
+            if (!lastErr) {
+              lastErr = err; // reset: will be overwritten on success below
+              try {
+                const order2 = await this.client.createOrder({
+                  ticker,
+                  side,
+                  action: 'buy',
+                  count: attemptContracts,
+                  priceCents: workingPrice,
+                  timeInForce: 'immediate_or_cancel',
+                });
+                orderId = this._extractOrderId(order2);
+                if (orderId) {
+                  fill = await this._awaitOrderFill(orderId, {
+                    minFill: 1,
+                    attempts: 3,
+                    delayMs: 100,
+                    seedOrder: order2,
+                    heldSide: side,
+                    action: 'buy',
+                  });
+                  filled = Math.max(0, Number(fill.filled) || 0);
+                  if (filled >= 1) { lastErr = null; break; }
+                }
+              } catch (err2) {
+                lastErr = err2;
+                console.error(`[bot] post-transfer retry on ${symbol} also failed:`, err2.message);
+              }
             }
           } else {
             lastErr = err;
-          }
-          if (!isInsufficientBalance) {
             console.error(`[bot] Live entry try ${attempt + 1}/${maxEntryAttempts} failed:`, err.message);
           }
         }
@@ -9506,10 +9530,9 @@ class TradingBot {
     ) {
       try {
         const balance = await this.client.getBalance();
-        // Kalshi /portfolio/balance returns dollar amounts as floats (e.g. 25.50).
-        // Internally everything is tracked in cents, so multiply by 100.
-        this.liveBalanceCents = Math.round(Number(balance.balance) * 100);
-        this.livePortfolioValueCents = Math.round(Number(balance.portfolio_value) * 100);
+        // /portfolio/balance returns balance and portfolio_value as integers in cents.
+        this.liveBalanceCents = Number(balance.balance);
+        this.livePortfolioValueCents = Number(balance.portfolio_value);
         this.liveBalanceUpdatedAt = Date.now();
       } catch (err) {
         this.lastError = `Unable to refresh live balance: ${err.message}`;

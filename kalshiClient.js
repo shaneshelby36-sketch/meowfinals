@@ -761,8 +761,33 @@ class KalshiClient {
 
   // ---------- authenticated trading endpoints ----------
 
-  async getBalance() {
-    return this._request('GET', '/portfolio/balance');
+  async getBalance({ exchangeIndex } = {}) {
+    const query = exchangeIndex != null ? { exchange_index: exchangeIndex } : undefined;
+    return this._request('GET', '/portfolio/balance', { auth: true, query });
+  }
+
+  /**
+   * Transfer funds between exchange shards within the same account.
+   * amount: dollars (will be converted to centicents = amount * 10000)
+   * fromShard / toShard: integer shard indexes (0 = default, 2 = crypto, etc.)
+   */
+  async intraAccountTransfer({ fromShard = 0, toShard, amountDollars }) {
+    const centicents = Math.round(Number(amountDollars) * 10000);
+    if (!Number.isFinite(centicents) || centicents < 1) {
+      throw new Error(`Invalid transfer amount: ${amountDollars}`);
+    }
+    if (!Number.isFinite(Number(toShard)) || toShard < 0) {
+      throw new Error(`Invalid destination shard: ${toShard}`);
+    }
+    return this._request('POST', '/portfolio/intra_exchange_instance_transfer', {
+      body: {
+        source: 'event_contract',
+        destination: 'event_contract',
+        amount: centicents,
+        source_exchange_shard: fromShard,
+        destination_exchange_shard: toShard,
+      },
+    });
   }
 
   async getPositions() {
