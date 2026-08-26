@@ -156,7 +156,7 @@ if (KALSHI_ENABLED) {
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const PRODUCTS = (process.env.PRODUCTS || 'BTC-USD,XRP-USD,ETH-USD,SOL-USD,DOGE-USD,BNB-USD,NEAR-USD,HYPE-USD,ZEC-USD').split(',').map((s) => s.trim());
-const COMPUTE_INTERVAL_MS = parseInt(process.env.COMPUTE_INTERVAL_MS || '5000', 10);
+const COMPUTE_INTERVAL_MS = parseInt(process.env.COMPUTE_INTERVAL_MS || '2500', 10);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
 const SYMBOL_OF = {
