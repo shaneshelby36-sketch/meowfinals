@@ -249,6 +249,7 @@ function buildCreateOrderV2Body({
     time_in_force: allowedTif.has(tif) ? tif : 'good_till_canceled',
     self_trade_prevention_type: 'taker_at_cross',
     client_order_id: clientOrderId || crypto.randomUUID(),
+    exchange_index: -1,
   };
 }
 
@@ -331,7 +332,7 @@ function normalizeCreateOrderResponse(data) {
  */
 class KalshiClient {
   constructor({ baseUrl, keyId, privateKeyPath, privateKeyPem }) {
-    this.baseUrl = (baseUrl || 'https://api.elections.kalshi.com/trade-api/v2').replace(/\/+$/, '');
+    this.baseUrl = (baseUrl || 'https://external-api.kalshi.com/trade-api/v2').replace(/\/+$/, '');
     this.keyId = keyId || null;
     this.privateKey = privateKeyPem || (privateKeyPath && fs.existsSync(privateKeyPath)
       ? fs.readFileSync(privateKeyPath, 'utf8')
