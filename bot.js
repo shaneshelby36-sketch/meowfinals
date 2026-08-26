@@ -9107,8 +9107,52 @@ class TradingBot {
             `[bot] Live entry try ${attempt + 1}/${maxEntryAttempts} on ${symbol} did not fill @ ${workingPrice}¢ (IOC; ask ${freshAsk}¢)`
           );
       } catch (err) {
-          lastErr = err;
-          console.error(`[bot] Live entry try ${attempt + 1}/${maxEntryAttempts} failed:`, err.message);
+          // If Kalshi rejects due to insufficient balance, the free balance is
+          // less than the order cost (open positions reserve funds server-side).
+          // Cut contracts in half and retry once at the smaller size.
+          const isInsufficientBalance =
+            err.status === 400 &&
+            String(err.body && (err.body.error?.code || err.body.code || '')).includes('insufficient_balance');
+          if (isInsufficientBalance && attemptContracts > 1) {
+            attemptContracts = Math.max(1, Math.floor(attemptContracts / 2));
+            const reducedCost = attemptContracts * workingPrice;
+            console.warn(
+              `[bot] insufficient_balance on ${symbol} — retrying with ${attemptContracts} contracts ($${(reducedCost / 100).toFixed(2)})`
+            );
+            trade.contracts = attemptContracts;
+            trade.stakeDollars = +(reducedCost / 100).toFixed(2);
+            try {
+              const order2 = await this.client.createOrder({
+                ticker,
+                side,
+                action: 'buy',
+                count: attemptContracts,
+                priceCents: workingPrice,
+                timeInForce: 'immediate_or_cancel',
+              });
+              orderId = this._extractOrderId(order2);
+              if (orderId) {
+                fill = await this._awaitOrderFill(orderId, {
+                  minFill: 1,
+                  attempts: 3,
+                  delayMs: 100,
+                  seedOrder: order2,
+                  heldSide: side,
+                  action: 'buy',
+                });
+                filled = Math.max(0, Number(fill.filled) || 0);
+                if (filled >= 1) break;
+              }
+            } catch (err2) {
+              lastErr = err2;
+              console.error(`[bot] reduced-size retry on ${symbol} also failed:`, err2.message);
+            }
+          } else {
+            lastErr = err;
+          }
+          if (!isInsufficientBalance) {
+            console.error(`[bot] Live entry try ${attempt + 1}/${maxEntryAttempts} failed:`, err.message);
+          }
         }
       }
 
