@@ -1717,6 +1717,7 @@ const SLIDER_UNITS = {
   'bot-model-stagnation-sensitivity': (v) => (Number(v) <= 0 ? 'any progress' : `≥${Math.round(v)}¢`),
   'bot-model-be-chase-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-rapid-adverse': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
+  'bot-model-live-lean-margin': (v) => `${Math.round(v)}%`,
   'bot-model-stall-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-decay-drop': (v) => `${Math.round(v)}pts`,
   'bot-model-decay-stall': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
@@ -2135,6 +2136,7 @@ function wireSliderDisplays() {
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
     'bot-model-rapid-adverse',
+    'bot-model-live-lean-margin',
     'bot-model-decay-drop',
     'bot-model-decay-stall',
     'bot-model-decay-floor',
@@ -2272,6 +2274,7 @@ function wireBotConfigAutoSave() {
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
     'bot-model-rapid-adverse',
+    'bot-model-live-lean-margin',
     'bot-model-decay-drop',
     'bot-model-decay-stall',
     'bot-model-decay-floor',
@@ -2453,6 +2456,11 @@ async function loadBotConfigIntoForm() {
       modelRapidAdverse.value =
         c.modelRapidAdverseCents != null ? c.modelRapidAdverseCents : 0;
     }
+    const modelLiveLeanMargin = document.getElementById('bot-model-live-lean-margin');
+    if (modelLiveLeanMargin) {
+      modelLiveLeanMargin.value =
+        c.modelLiveLeanMarginPct != null ? c.modelLiveLeanMarginPct : 1;
+    }
     const modelDecayDrop = document.getElementById('bot-model-decay-drop');
     if (modelDecayDrop) {
       modelDecayDrop.value = c.modelLeanDecayDropPts != null ? c.modelLeanDecayDropPts : 14;
@@ -2600,6 +2608,7 @@ async function loadBotConfigIntoForm() {
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
     'bot-model-rapid-adverse',
+    'bot-model-live-lean-margin',
     'bot-model-decay-drop',
     'bot-model-decay-stall',
     'bot-model-decay-floor',
@@ -2797,6 +2806,7 @@ async function saveBotConfig(opts = {}) {
     ),
     modelBeChaseSeconds: parseFloat(document.getElementById('bot-model-be-chase-sec')?.value || '20'),
     modelRapidAdverseCents: parseFloat(document.getElementById('bot-model-rapid-adverse')?.value || '0'),
+    modelLiveLeanMarginPct: parseFloat(document.getElementById('bot-model-live-lean-margin')?.value || '1'),
     modelLeanDecayDropPts: parseFloat(document.getElementById('bot-model-decay-drop')?.value || '14'),
     modelLeanDecayStallSeconds: parseFloat(document.getElementById('bot-model-decay-stall')?.value || '6'),
     modelLeanDecayFloor: parseFloat(document.getElementById('bot-model-decay-floor')?.value || '85'),

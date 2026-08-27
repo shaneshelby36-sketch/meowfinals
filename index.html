@@ -545,6 +545,13 @@
             </div>
             <span class="field-hint"><strong>Off by default (0)</strong>. When on: true red ≥ this many ¢ <em>and</em> model decaying → cut after open grace.</span>
           </label>
+          <label>MODEL lean sensitivity (hold margin %)
+            <div class="slider-row">
+              <input id="bot-model-live-lean-margin" type="range" min="0" max="10" step="1" />
+              <span class="slider-value" id="bot-model-live-lean-margin-value">—</span>
+            </div>
+            <span class="field-hint">How tight the lean must stay during a hold before the bot considers it "turning against you." Higher = more sensitive — a smaller lean drop triggers exits sooner. Lower = more forgiving. Default <strong>1%</strong>. Affects stagnation, model-against, lean decay, BE scratch — everything lean-related at once.</span>
+          </label>
           <label>MODEL lean decay trigger (pts drop)
             <div class="slider-row">
               <input id="bot-model-decay-drop" type="range" min="5" max="30" step="1" />
