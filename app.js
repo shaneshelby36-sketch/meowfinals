@@ -1717,6 +1717,7 @@ const SLIDER_UNITS = {
   'bot-model-stagnation-sensitivity': (v) => (Number(v) <= 0 ? 'any progress' : `≥${Math.round(v)}¢`),
   'bot-model-be-chase-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-rapid-adverse': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
+  'bot-model-prob-drift': (v) => `${Math.round(v)}pts`,
   'bot-model-live-lean-margin': (v) => `${Math.round(v)}%`,
   'bot-model-stall-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-decay-drop': (v) => `${Math.round(v)}pts`,
@@ -2136,6 +2137,7 @@ function wireSliderDisplays() {
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
     'bot-model-rapid-adverse',
+    'bot-model-prob-drift',
     'bot-model-live-lean-margin',
     'bot-model-decay-drop',
     'bot-model-decay-stall',
@@ -2274,6 +2276,7 @@ function wireBotConfigAutoSave() {
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
     'bot-model-rapid-adverse',
+    'bot-model-prob-drift',
     'bot-model-live-lean-margin',
     'bot-model-decay-drop',
     'bot-model-decay-stall',
@@ -2456,6 +2459,11 @@ async function loadBotConfigIntoForm() {
       modelRapidAdverse.value =
         c.modelRapidAdverseCents != null ? c.modelRapidAdverseCents : 0;
     }
+    const modelProbDrift = document.getElementById('bot-model-prob-drift');
+    if (modelProbDrift) {
+      modelProbDrift.value =
+        c.modelProbDriftPts != null ? c.modelProbDriftPts : 15;
+    }
     const modelLiveLeanMargin = document.getElementById('bot-model-live-lean-margin');
     if (modelLiveLeanMargin) {
       modelLiveLeanMargin.value =
@@ -2608,6 +2616,7 @@ async function loadBotConfigIntoForm() {
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
     'bot-model-rapid-adverse',
+    'bot-model-prob-drift',
     'bot-model-live-lean-margin',
     'bot-model-decay-drop',
     'bot-model-decay-stall',
@@ -2806,6 +2815,7 @@ async function saveBotConfig(opts = {}) {
     ),
     modelBeChaseSeconds: parseFloat(document.getElementById('bot-model-be-chase-sec')?.value || '20'),
     modelRapidAdverseCents: parseFloat(document.getElementById('bot-model-rapid-adverse')?.value || '0'),
+    modelProbDriftPts: parseFloat(document.getElementById('bot-model-prob-drift')?.value || '15'),
     modelLiveLeanMarginPct: parseFloat(document.getElementById('bot-model-live-lean-margin')?.value || '1'),
     modelLeanDecayDropPts: parseFloat(document.getElementById('bot-model-decay-drop')?.value || '14'),
     modelLeanDecayStallSeconds: parseFloat(document.getElementById('bot-model-decay-stall')?.value || '6'),

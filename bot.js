@@ -741,7 +741,7 @@ const MODEL_FAST_RED_CENTS_DEFAULT = 2;
 /** Min |netDominance| when trend is weakening before signalScore counts as turning. 0 = off. */
 const MODEL_SIGNAL_DOMINANCE_MIN_DEFAULT = 0;
 /** Min drop in held-side live prob (pts) from entry before model exit fires. */
-const MODEL_PROB_DRIFT_PTS_DEFAULT = 3;
+const MODEL_PROB_DRIFT_PTS_DEFAULT = 15;
 /** Min hold before fast-red (0 = cut same tick if bid gaps on fill). */
 const MODEL_FAST_RED_MIN_HOLD_MS_DEFAULT = 0;
 /** Max ask−bid spread allowed at entry — blocks absurd gaps, allows thin 15m books. */

@@ -545,6 +545,13 @@
             </div>
             <span class="field-hint"><strong>Off by default (0)</strong>. When on: true red ≥ this many ¢ <em>and</em> model decaying → cut after open grace.</span>
           </label>
+          <label>MODEL prob drift (pts from entry)
+            <div class="slider-row">
+              <input id="bot-model-prob-drift" type="range" min="3" max="35" step="1" />
+              <span class="slider-value" id="bot-model-prob-drift-value">—</span>
+            </div>
+            <span class="field-hint">How many probability points the held-side lean must drop from its entry value before the model is considered "soft turning." Default <strong>15pts</strong>. Lower = more sensitive to any lean drift; higher = ignores small wobbles on high-confidence entries (e.g. 99%→84% is fine at 15pts).</span>
+          </label>
           <label>MODEL lean sensitivity (hold margin %)
             <div class="slider-row">
               <input id="bot-model-live-lean-margin" type="range" min="0" max="10" step="1" />
