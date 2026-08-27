@@ -8098,6 +8098,25 @@ class TradingBot {
         if (await exitModelAgainst()) return;
       }
 
+      // Soft turning while still flat/green: scratch out early instead of waiting
+      // for price to go underwater. Prevents holding through a full lean collapse.
+      if (
+        bidOk &&
+        engineSoftTurning &&
+        againstBeReady &&
+        !engineClearlyWithUs &&
+        (flatOrGreen || nearFlat) &&
+        !upwardMomentum
+      ) {
+        if (isBankableGreen && heldForBank) {
+          await this._closePosition(trade, heldSideBidCents, 'take_profit', {
+            liveSellPriceCents: heldSideBidCents,
+          });
+          return;
+        }
+        if (await tryModelBreakevenScratch()) return;
+      }
+
       // Soft/50-50 lean no longer instant-BE or MODEL_AGAINST — stagnation owns mushy thesis.
       // (leanStaleScratch still feeds modelDeteriorating for the stagnation check above.)
 
