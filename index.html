@@ -615,6 +615,20 @@
             </div>
             <span class="field-hint">Default <strong>0 (off)</strong>. In the late/settle-close window, if the position is losing <em>at least</em> this many ¢, cut immediately instead of riding to settlement. Prevents large MODEL_LATE_EXIT / MODEL_PRE_CLOSE blowouts.</span>
           </label>
+          <label>MODEL lean-floor base drop (¢)
+            <div class="slider-row">
+              <input id="bot-model-lean-floor-drop" type="range" min="0" max="25" step="1" />
+              <span class="slider-value" id="bot-model-lean-floor-drop-value">—</span>
+            </div>
+            <span class="field-hint">Default <strong>0 (off)</strong>. When lean is deteriorating, cut if bid falls this many ¢ below entry. Higher entries get slightly more slack (see scale). <strong>0</strong> = off — lean machinery alone governs exits.</span>
+          </label>
+          <label>MODEL lean-floor scale (extra ¢ per ¢ above 65)
+            <div class="slider-row">
+              <input id="bot-model-lean-floor-scale" type="range" min="0" max="0.5" step="0.05" />
+              <span class="slider-value" id="bot-model-lean-floor-scale-value">—</span>
+            </div>
+            <span class="field-hint">Default <strong>0.2</strong>. Extra ¢ of drop budget for each ¢ the entry is above 65¢. e.g. 0.2 → entry 75¢ gets +2¢ slack, 85¢ gets +4¢.</span>
+          </label>
           <label>MODEL max loss (¢ below entry)
             <div class="slider-row">
               <input id="bot-model-max-loss" type="range" min="0" max="20" step="1" />

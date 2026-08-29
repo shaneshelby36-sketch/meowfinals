@@ -1728,6 +1728,8 @@ const SLIDER_UNITS = {
   'bot-model-late-barrier': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
   'bot-model-preclose-force': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(2)} min`),
   'bot-model-late-exit-max-loss': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
+  'bot-model-lean-floor-drop': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
+  'bot-model-lean-floor-scale': (v) => `${(+v).toFixed(2)}×`,
   'bot-model-max-loss': (v) => `−${Math.round(v)}¢`,
   'bot-model-hard-floor': (v) => `${Math.round(v)}¢ floor`,
   'bot-model-pace-drawdown': (v) => `${Math.round(v)}% of room`,
@@ -2149,6 +2151,8 @@ function wireSliderDisplays() {
     'bot-model-late-barrier',
     'bot-model-preclose-force',
     'bot-model-late-exit-max-loss',
+    'bot-model-lean-floor-drop',
+    'bot-model-lean-floor-scale',
     'bot-model-max-loss',
     'bot-model-hard-floor',
     'bot-model-pace-drawdown',
@@ -2290,6 +2294,8 @@ function wireBotConfigAutoSave() {
     'bot-model-late-barrier',
     'bot-model-preclose-force',
     'bot-model-late-exit-max-loss',
+    'bot-model-lean-floor-drop',
+    'bot-model-lean-floor-scale',
     'bot-model-sitout',
     'bot-model-global-sitout',
     'bot-settle-min',
@@ -2510,6 +2516,14 @@ async function loadBotConfigIntoForm() {
     if (modelLateExitMaxLoss) {
       modelLateExitMaxLoss.value = c.modelLateExitMaxLossCents != null ? c.modelLateExitMaxLossCents : 0;
     }
+    const modelLeanFloorDrop = document.getElementById('bot-model-lean-floor-drop');
+    if (modelLeanFloorDrop) {
+      modelLeanFloorDrop.value = c.modelLeanFloorBaseDrop != null ? c.modelLeanFloorBaseDrop : 0;
+    }
+    const modelLeanFloorScale = document.getElementById('bot-model-lean-floor-scale');
+    if (modelLeanFloorScale) {
+      modelLeanFloorScale.value = c.modelLeanFloorScale != null ? c.modelLeanFloorScale : 0.2;
+    }
     const modelMaxLoss = document.getElementById('bot-model-max-loss');
     if (modelMaxLoss) modelMaxLoss.value = c.modelMaxLossCents != null ? c.modelMaxLossCents : 0;
     const modelHardFloor = document.getElementById('bot-model-hard-floor');
@@ -2640,6 +2654,8 @@ async function loadBotConfigIntoForm() {
       'bot-model-late-barrier',
       'bot-model-preclose-force',
       'bot-model-late-exit-max-loss',
+      'bot-model-lean-floor-drop',
+      'bot-model-lean-floor-scale',
       'bot-model-max-loss',
       'bot-model-hard-floor',
       'bot-model-pace-drawdown',
@@ -2844,6 +2860,12 @@ async function saveBotConfig(opts = {}) {
     ),
     modelLateExitMaxLossCents: parseFloat(
       document.getElementById('bot-model-late-exit-max-loss')?.value || '0'
+    ),
+    modelLeanFloorBaseDrop: parseFloat(
+      document.getElementById('bot-model-lean-floor-drop')?.value || '0'
+    ),
+    modelLeanFloorScale: parseFloat(
+      document.getElementById('bot-model-lean-floor-scale')?.value || '0.2'
     ),
     modelMaxLossCents: parseFloat(document.getElementById('bot-model-max-loss')?.value || '0'),
     modelHardAdverseCents: parseFloat(document.getElementById('bot-model-max-loss')?.value || '0'),

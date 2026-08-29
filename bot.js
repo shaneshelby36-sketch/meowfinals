@@ -1457,6 +1457,33 @@ function modelHardAdverseCents(config = {}) {
   return MODEL_HARD_ADVERSE_CENTS_DEFAULT;
 }
 
+/**
+ * Lean-gated dynamic floor. Returns the minimum bid price allowed for this
+ * trade when lean is deteriorating. Returns 0 when the feature is off (baseDrop=0)
+ * — the caller must also gate on modelDeteriorating before acting on this.
+ *
+ * floor = entry - baseDrop - scale * max(0, entry - baseEntry)
+ *
+ * Examples with baseDrop=10, scale=0.2, baseEntry=65:
+ *   entry 65¢ → floor 55¢  (−10¢)
+ *   entry 75¢ → floor 63¢  (−12¢)
+ *   entry 85¢ → floor 71¢  (−14¢)
+ */
+function modelLeanGatedFloorCents(trade, config = {}) {
+  const baseDrop = Number(config.modelLeanFloorBaseDrop);
+  if (!(baseDrop > 0)) return 0;
+  const entry = Number(trade && trade.entryPriceCents);
+  if (!Number.isFinite(entry) || entry < 1) return 0;
+  const scale = Number.isFinite(Number(config.modelLeanFloorScale))
+    ? Number(config.modelLeanFloorScale)
+    : MODEL_LEAN_FLOOR_SCALE_DEFAULT;
+  const baseEntry = Number.isFinite(Number(config.modelLeanFloorBaseEntry))
+    ? Number(config.modelLeanFloorBaseEntry)
+    : MODEL_LEAN_FLOOR_BASE_ENTRY_DEFAULT;
+  const extra = scale * Math.max(0, entry - baseEntry);
+  return Math.round(entry - baseDrop - extra);
+}
+
 function modelMaxLossCents(config = {}) {
   const n = Number(config.modelMaxLossCents);
   if (Number.isFinite(n) && n <= 0) return 0;
@@ -2603,6 +2630,18 @@ const MODEL_TRAIL_CENTS_DEFAULT = 0;
 const MODEL_SOFT_LEAN_MARGIN_DEFAULT = 3;
 /** Soft dip (−N¢ + lean fade). 0 = off — price stops were hurting more than helping. */
 const MODEL_MAX_ADVERSE_CENTS_DEFAULT = 0;
+/**
+ * Lean-gated dynamic floor: when lean is deteriorating, only allow the bid
+ * to fall this many ¢ below entry before cutting. 0 = off (lean machinery alone).
+ */
+const MODEL_LEAN_FLOOR_BASE_DROP_DEFAULT = 0;
+/**
+ * Extra ¢ of drop budget per ¢ that the entry is above MODEL_LEAN_FLOOR_BASE_ENTRY.
+ * e.g. 0.2 means a 75¢ entry (10¢ above base 65) gets +2¢ extra slack.
+ */
+const MODEL_LEAN_FLOOR_SCALE_DEFAULT = 0.2;
+/** Entry price at which the base drop applies (no extra slack below this). */
+const MODEL_LEAN_FLOOR_BASE_ENTRY_DEFAULT = 65;
 /** Hard cliff (−N¢ from entry). 0 = off — MODEL losses use stagnation + hard floor. */
 const MODEL_HARD_ADVERSE_CENTS_DEFAULT = 0;
 /** Paper fill ceiling on adverse exits. 0 = off (book live bid). */
@@ -3129,6 +3168,9 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelTrailCents',
   'modelMaxAdverseCents',
   'modelHardAdverseCents',
+  'modelLeanFloorBaseDrop',
+  'modelLeanFloorScale',
+  'modelLeanFloorBaseEntry',
   'modelMaxLossCents',
   'modelHardStopFloorCents',
   'modelMinRoomToFloorCents',
@@ -4251,6 +4293,9 @@ class TradingBot {
       modelTrailCents: MODEL_TRAIL_CENTS_DEFAULT,
       modelMaxAdverseCents: MODEL_MAX_ADVERSE_CENTS_DEFAULT,
       modelHardAdverseCents: MODEL_HARD_ADVERSE_CENTS_DEFAULT,
+      modelLeanFloorBaseDrop: MODEL_LEAN_FLOOR_BASE_DROP_DEFAULT,
+      modelLeanFloorScale: MODEL_LEAN_FLOOR_SCALE_DEFAULT,
+      modelLeanFloorBaseEntry: MODEL_LEAN_FLOOR_BASE_ENTRY_DEFAULT,
       modelMaxLossCents: MODEL_MAX_LOSS_CENTS_DEFAULT,
       modelHardStopFloorCents: MODEL_HARD_STOP_FLOOR_CENTS_DEFAULT,
       modelMinRoomToFloorCents: MODEL_MIN_ROOM_TO_FLOOR_CENTS_DEFAULT,
@@ -8021,6 +8066,19 @@ class TradingBot {
           (engineSoftTurning && leanStaleScratch)
         );
 
+      // Lean-gated dynamic floor: only fires when lean is deteriorating AND bid
+      // has dropped below the entry-scaled floor. Lean firm → completely ignored.
+      if (bidOk && modelDeteriorating && !inOpenGrace && underwater) {
+        const leanFloor = modelLeanGatedFloorCents(trade, this.config);
+        if (leanFloor > 0 && heldSideBidCents < leanFloor) {
+          this.lastDecision =
+            `Lean-gated floor: bid ${Math.round(heldSideBidCents)}¢ < floor ${leanFloor}¢ ` +
+            `(entry ${Math.round(entry)}¢) + lean deteriorating on ${trade.symbol} — cutting.`;
+          await tryModelAgainstCut('model_against');
+          return;
+        }
+      }
+
       // Soft/50-50 no longer instant-cuts — stagnation + hard flip own mushy thesis.
       const peakProgress = modelPeakProgressCents(trade, peak);
 
@@ -11689,6 +11747,10 @@ module.exports = {
   modelTrailCents,
   modelMaxAdverseCents,
   modelHardAdverseCents,
+  modelLeanGatedFloorCents,
+  MODEL_LEAN_FLOOR_BASE_DROP_DEFAULT,
+  MODEL_LEAN_FLOOR_SCALE_DEFAULT,
+  MODEL_LEAN_FLOOR_BASE_ENTRY_DEFAULT,
   modelMaxLossCents,
   modelEffectiveMaxLossCents,
   modelHardStopFloorCents,
