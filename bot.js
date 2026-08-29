@@ -381,7 +381,11 @@ function computeAssetStats(trades, config = {}) {
     .filter(t => t && String(t.status) === 'closed' && (!t.strategy || String(t.strategy).toLowerCase() === 'model'))
     .slice(-lookback);
 
+  // Seed every known coin so inactive ones still show up in the panel.
   const bySymbol = Object.create(null);
+  for (const sym of Object.keys(SERIES_BY_SYMBOL)) {
+    bySymbol[sym] = { symbol: sym, trades: 0, wins: 0, losses: 0, be: 0, pnlCents: 0 };
+  }
   for (const t of closed) {
     const sym = String(t.symbol || '').toUpperCase();
     if (!sym) continue;
