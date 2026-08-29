@@ -5649,11 +5649,11 @@ class TradingBot {
   }
 
   _upsertTradeLog(entry) {
-    if (this._inShadow) return;
     if (this._inCoinShadow) {
       upsertCoinShadowLog(entry);
       return;
     }
+    if (this._inShadow) return;
     upsertTradeLog(entry);
   }
 
