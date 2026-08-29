@@ -1723,9 +1723,11 @@ const SLIDER_UNITS = {
   'bot-model-decay-drop': (v) => `${Math.round(v)}pts`,
   'bot-model-decay-stall': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-decay-floor': (v) => `${Math.round(v)}%`,
+  'bot-model-min-open': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
   'bot-model-settle-close': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
   'bot-model-late-barrier': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
   'bot-model-preclose-force': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(2)} min`),
+  'bot-model-late-exit-max-loss': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
   'bot-model-max-loss': (v) => `−${Math.round(v)}¢`,
   'bot-model-hard-floor': (v) => `${Math.round(v)}¢ floor`,
   'bot-model-pace-drawdown': (v) => `${Math.round(v)}% of room`,
@@ -2142,9 +2144,11 @@ function wireSliderDisplays() {
     'bot-model-decay-drop',
     'bot-model-decay-stall',
     'bot-model-decay-floor',
+    'bot-model-min-open',
     'bot-model-settle-close',
     'bot-model-late-barrier',
     'bot-model-preclose-force',
+    'bot-model-late-exit-max-loss',
     'bot-model-max-loss',
     'bot-model-hard-floor',
     'bot-model-pace-drawdown',
@@ -2281,9 +2285,11 @@ function wireBotConfigAutoSave() {
     'bot-model-decay-drop',
     'bot-model-decay-stall',
     'bot-model-decay-floor',
+    'bot-model-min-open',
     'bot-model-settle-close',
     'bot-model-late-barrier',
     'bot-model-preclose-force',
+    'bot-model-late-exit-max-loss',
     'bot-model-sitout',
     'bot-model-global-sitout',
     'bot-settle-min',
@@ -2481,6 +2487,10 @@ async function loadBotConfigIntoForm() {
     if (modelDecayFloor) {
       modelDecayFloor.value = c.modelLeanDecayFloor != null ? c.modelLeanDecayFloor : 85;
     }
+    const modelMinOpen = document.getElementById('bot-model-min-open');
+    if (modelMinOpen) {
+      modelMinOpen.value = c.modelMinMinutesToOpen != null ? c.modelMinMinutesToOpen : 4;
+    }
     const modelSettleClose = document.getElementById('bot-model-settle-close');
     if (modelSettleClose) {
       modelSettleClose.value =
@@ -2495,6 +2505,10 @@ async function loadBotConfigIntoForm() {
     if (modelPreCloseForce) {
       modelPreCloseForce.value =
         c.modelPreCloseForceMinutes != null ? c.modelPreCloseForceMinutes : 1;
+    }
+    const modelLateExitMaxLoss = document.getElementById('bot-model-late-exit-max-loss');
+    if (modelLateExitMaxLoss) {
+      modelLateExitMaxLoss.value = c.modelLateExitMaxLossCents != null ? c.modelLateExitMaxLossCents : 0;
     }
     const modelMaxLoss = document.getElementById('bot-model-max-loss');
     if (modelMaxLoss) modelMaxLoss.value = c.modelMaxLossCents != null ? c.modelMaxLossCents : 0;
@@ -2621,9 +2635,11 @@ async function loadBotConfigIntoForm() {
     'bot-model-decay-drop',
     'bot-model-decay-stall',
     'bot-model-decay-floor',
+      'bot-model-min-open',
       'bot-model-settle-close',
       'bot-model-late-barrier',
       'bot-model-preclose-force',
+      'bot-model-late-exit-max-loss',
       'bot-model-max-loss',
       'bot-model-hard-floor',
       'bot-model-pace-drawdown',
@@ -2820,10 +2836,14 @@ async function saveBotConfig(opts = {}) {
     modelLeanDecayDropPts: parseFloat(document.getElementById('bot-model-decay-drop')?.value || '14'),
     modelLeanDecayStallSeconds: parseFloat(document.getElementById('bot-model-decay-stall')?.value || '6'),
     modelLeanDecayFloor: parseFloat(document.getElementById('bot-model-decay-floor')?.value || '85'),
+    modelMinMinutesToOpen: parseFloat(document.getElementById('bot-model-min-open')?.value || '4'),
     modelSettleCloseMinutes: parseFloat(document.getElementById('bot-model-settle-close')?.value || '2.5'),
     modelLateBarrierMinutes: parseFloat(document.getElementById('bot-model-late-barrier')?.value || '2'),
     modelPreCloseForceMinutes: parseFloat(
       document.getElementById('bot-model-preclose-force')?.value || '1'
+    ),
+    modelLateExitMaxLossCents: parseFloat(
+      document.getElementById('bot-model-late-exit-max-loss')?.value || '0'
     ),
     modelMaxLossCents: parseFloat(document.getElementById('bot-model-max-loss')?.value || '0'),
     modelHardAdverseCents: parseFloat(document.getElementById('bot-model-max-loss')?.value || '0'),

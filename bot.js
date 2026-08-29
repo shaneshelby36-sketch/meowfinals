@@ -791,6 +791,13 @@ const MODEL_LATE_BARRIER_MINUTES_DEFAULT = 2;
  * Default 2.5 — bank flat/green/small-red instead of gambling settlement.
  */
 const MODEL_SETTLE_CLOSE_MINUTES_DEFAULT = 2.5;
+/**
+ * In the late-barrier / settle-close / pre-close windows, if the position is
+ * losing this many ¢ or more, exit immediately regardless of settleCloseThresh.
+ * Prevents riding a deep loser all the way to settlement (0¢).
+ * Default 0 = off (rely solely on settleCloseThresh / pre-close-force timing).
+ */
+const MODEL_LATE_EXIT_MAX_LOSS_CENTS_DEFAULT = 0;
 /** Last N minutes: always sell (never wait for Kalshi 0/100). */
 const MODEL_PRE_CLOSE_FORCE_MINUTES_DEFAULT = 1;
 /** Confidence required to extend a hold into/through the final barrier. */
@@ -1084,6 +1091,12 @@ function modelPreCloseForceMinutes(config = {}) {
   if (Number.isFinite(n) && n === 0) return 0;
   if (Number.isFinite(n) && n > 0) return n;
   return MODEL_PRE_CLOSE_FORCE_MINUTES_DEFAULT;
+}
+
+function modelLateExitMaxLossCents(config = {}) {
+  const n = Number(config.modelLateExitMaxLossCents);
+  if (Number.isFinite(n) && n > 0) return Math.round(n);
+  return MODEL_LATE_EXIT_MAX_LOSS_CENTS_DEFAULT;
 }
 
 /**
@@ -2576,8 +2589,8 @@ function modelKalshiFavoriteGate({ market, side, priceCents, config = {} } = {})
   };
 }
 
-/** Default model-entry cutoff. It must sit outside the 2-minute late-exit zone. */
-const MODEL_MIN_MINUTES_TO_OPEN_DEFAULT = 2.5;
+/** Default model-entry cutoff. It must sit outside the late-exit zone with margin. */
+const MODEL_MIN_MINUTES_TO_OPEN_DEFAULT = 4;
 /** Confidence required to allow entries below the normal min. */
 const MODEL_PERFECT_CONFIDENCE_DEFAULT = 80;
 /** Lean strength (|probUp−50|) required for perfect-entry exception. */
@@ -3100,6 +3113,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelBankGreenCents',
   'modelNearTargetBankCents',
   'modelSettleCloseLossCents',
+  'modelLateExitMaxLossCents',
   'modelSettleCloseMinutes',
   'modelLateBarrierMinutes',
   'modelPreCloseForceMinutes',
@@ -4217,6 +4231,7 @@ class TradingBot {
       modelBankGreenCents: MODEL_BANK_GREEN_CENTS_DEFAULT,
       modelNearTargetBankCents: MODEL_NEAR_TARGET_BANK_CENTS_DEFAULT,
       modelSettleCloseLossCents: MODEL_SETTLE_CLOSE_UNLESS_LOSS_CENTS_DEFAULT,
+      modelLateExitMaxLossCents: MODEL_LATE_EXIT_MAX_LOSS_CENTS_DEFAULT,
       modelSettleCloseMinutes: MODEL_SETTLE_CLOSE_MINUTES_DEFAULT,
       modelLateBarrierMinutes: MODEL_LATE_BARRIER_MINUTES_DEFAULT,
       modelPreCloseForceMinutes: MODEL_PRE_CLOSE_FORCE_MINUTES_DEFAULT,
@@ -7805,6 +7820,26 @@ class TradingBot {
       const bankHoldMs = minHold > 0 ? Math.min(minHold, 30_000) : 0;
       const heldForBank = bankHoldMs <= 0 || heldMs >= bankHoldMs;
 
+      // Late-entry scratch: if this trade was opened with fewer minutes left than
+      // the entry cutoff (slipped through just before the cutoff), only allow an
+      // exit at flat-or-better — never ride it into a loss in the closing window.
+      const minMinutesToOpen = modelEntryCutoffMinutes(this.config);
+      const minutesAtOpen = Number.isFinite(openedAt) ? (closeTime - openedAt) / 60000 : Infinity;
+      const isLateEntry = minMinutesToOpen > 0 && minutesAtOpen < minMinutesToOpen;
+      if (bidOk && isLateEntry && !inOpenGrace) {
+        if (flatOrGreen || nearFlat) {
+          if (isBankableGreen && heldForBank) {
+            await this._closePosition(trade, heldSideBidCents, 'take_profit', {
+              liveSellPriceCents: heldSideBidCents,
+            });
+          } else {
+            await tryModelBreakevenScratch();
+          }
+        }
+        // Underwater: hold until we reach flat — never force a red exit on a late entry.
+        return;
+      }
+
       // Entry is at ask; mark is bid. Only count red beyond the entry spread haircut.
       const entryBidStamp = Number(trade.modelEntryBidCents);
       const entrySpreadStamp = Number(trade.modelEntrySpreadCents);
@@ -8142,6 +8177,7 @@ class TradingBot {
       const settleCloseThresh = Number.isFinite(Number(this.config.modelSettleCloseLossCents))
         ? Number(this.config.modelSettleCloseLossCents)
         : MODEL_SETTLE_CLOSE_UNLESS_LOSS_CENTS_DEFAULT;
+      const lateExitMaxLoss = modelLateExitMaxLossCents(this.config);
       const inLateBarrier = lateBarrierMins > 0 && minutesRemaining <= lateBarrierMins;
       const inSettleClose = settleCloseMins > 0 && minutesRemaining <= settleCloseMins;
       const inPreCloseForce = preCloseForceMins > 0 && minutesRemaining <= preCloseForceMins;
@@ -8170,8 +8206,10 @@ class TradingBot {
           return true;
         }
         const redCents = underwater ? adverseCents : 0;
+        // Hard loss ceiling: exit immediately if bleeding this much, regardless of timing.
+        const hardCut = lateExitMaxLoss > 0 && redCents >= lateExitMaxLoss;
         // Deep red beyond thresh: only force in the final minute (never settle at 0).
-        if (redCents > settleCloseThresh && !inPreCloseForce) return false;
+        if (redCents > settleCloseThresh && !inPreCloseForce && !hardCut) return false;
         const closed = await this._closePosition(trade, heldSideBidCents, forceReason, {
           liveSellPriceCents: heldSideBidCents,
         });
@@ -8197,7 +8235,8 @@ class TradingBot {
         // Fall through: still allow TP / lean rules while extending.
       } else if (bidOk && inSettleClose) {
         const redCents = underwater ? adverseCents : 0;
-        if (redCents <= settleCloseThresh || flatOrGreen || nearFlat) {
+        const hardCut = lateExitMaxLoss > 0 && redCents >= lateExitMaxLoss;
+        if (redCents <= settleCloseThresh || flatOrGreen || nearFlat || hardCut) {
           await exitModelPreSettle('model_late_exit');
           return;
         }
@@ -11592,6 +11631,8 @@ module.exports = {
   modelSettleCloseMinutes,
   modelLateBarrierMinutes,
   modelPreCloseForceMinutes,
+  modelLateExitMaxLossCents,
+  MODEL_LATE_EXIT_MAX_LOSS_CENTS_DEFAULT,
   modelLateExtendMinConfidence,
   modelLateExtendOk,
   modelMomentumStallMs,

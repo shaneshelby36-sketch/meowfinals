@@ -580,6 +580,13 @@
             </div>
             <span class="field-hint">If the held-side probability drops to or below this level <em>and</em> the thesis is soft, cut immediately (no stall wait). Default <strong>85</strong>.</span>
           </label>
+          <label>MODEL no-entry window (min left)
+            <div class="slider-row">
+              <input id="bot-model-min-open" type="range" min="0" max="8" step="0.5" />
+              <span class="slider-value" id="bot-model-min-open-value">—</span>
+            </div>
+            <span class="field-hint">Default <strong>4</strong>. Block new MODEL entries in the last N minutes. If a trade opens anyway (slipped through), it will only exit at flat-or-better. <strong>0</strong> = off.</span>
+          </label>
           <label>MODEL cash out before settle (min left)
             <div class="slider-row">
               <input id="bot-model-settle-close" type="range" min="0" max="8" step="0.5" />
@@ -600,6 +607,13 @@
               <span class="slider-value" id="bot-model-preclose-force-value">—</span>
             </div>
             <span class="field-hint">Default <strong>1</strong>. Last N minutes: always sell at the bid — never wait for Kalshi settlement. <strong>0</strong> = off.</span>
+          </label>
+          <label>MODEL late-exit max loss (¢)
+            <div class="slider-row">
+              <input id="bot-model-late-exit-max-loss" type="range" min="0" max="50" step="1" />
+              <span class="slider-value" id="bot-model-late-exit-max-loss-value">—</span>
+            </div>
+            <span class="field-hint">Default <strong>0 (off)</strong>. In the late/settle-close window, if the position is losing <em>at least</em> this many ¢, cut immediately instead of riding to settlement. Prevents large MODEL_LATE_EXIT / MODEL_PRE_CLOSE blowouts.</span>
           </label>
           <label>MODEL max loss (¢ below entry)
             <div class="slider-row">
