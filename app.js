@@ -3046,7 +3046,7 @@ async function saveBotConfig(opts = {}) {
     modelLeanDecayDropPts: parseFloat(document.getElementById('bot-model-decay-drop')?.value || '14'),
     modelLeanDecayStallSeconds: parseFloat(document.getElementById('bot-model-decay-stall')?.value || '6'),
     modelLeanDecayFloor: parseFloat(document.getElementById('bot-model-decay-floor')?.value || '85'),
-    modelMinMinutesToOpen: parseFloat(document.getElementById('bot-model-min-open')?.value || '4'),
+    modelMinMinutesToOpen: parseFloat(document.getElementById('bot-model-min-open')?.value || '2.5'),
     modelPeakTouchTp: parseFloat(document.getElementById('bot-model-peak-touch-tp')?.value || '3'),
     modelPeakTouchWindow: parseFloat(document.getElementById('bot-model-peak-touch-window')?.value || '2'),
     modelSettleCloseMinutes: parseFloat(document.getElementById('bot-model-settle-close')?.value || '2.5'),

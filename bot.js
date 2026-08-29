@@ -2735,7 +2735,7 @@ function modelKalshiFavoriteGate({ market, side, priceCents, config = {} } = {})
 }
 
 /** Default model-entry cutoff. It must sit outside the late-exit zone with margin. */
-const MODEL_MIN_MINUTES_TO_OPEN_DEFAULT = 4;
+const MODEL_MIN_MINUTES_TO_OPEN_DEFAULT = 2.5;
 const MODEL_PEAK_TOUCH_TP_DEFAULT = 3;
 const MODEL_PEAK_TOUCH_WINDOW_DEFAULT = 2;
 /** Confidence required to allow entries below the normal min. */
@@ -5870,6 +5870,10 @@ class TradingBot {
     const active = new Set(resolveAutoTradeSymbols(this.config));
     const inactive = Object.keys(SERIES_BY_SYMBOL).filter(sym => !active.has(sym));
     if (!inactive.length) return;
+
+    // Warm the market cache for all inactive coins while NOT in shadow mode,
+    // so _fetchLiveMarket returns real data when coin shadow books run.
+    await this._prefetchKalshiForSymbols(inactive, 5000);
 
     for (const sym of inactive) {
       const bookKey = `coin:${sym}`;
