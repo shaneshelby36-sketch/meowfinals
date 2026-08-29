@@ -12242,6 +12242,7 @@ module.exports = {
   MODEL_PERFECT_CONFIDENCE_DEFAULT,
   MODEL_PERFECT_LEAN_DEFAULT,
   MODEL_MIN_MINUTES_TO_OPEN_DEFAULT,
+  MODEL_PEAK_TOUCH_TP_DEFAULT,
   isSettleTieredExitsEnabled,
   settleExitPlan,
   settleExitTiersForDashboard,
