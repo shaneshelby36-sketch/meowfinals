@@ -1716,6 +1716,7 @@ const SLIDER_UNITS = {
   'bot-model-stagnation-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-stagnation-sensitivity': (v) => (Number(v) <= 0 ? 'any progress' : `≥${Math.round(v)}¢`),
   'bot-model-be-chase-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
+  'bot-model-max-adverse': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
   'bot-model-rapid-adverse': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
   'bot-model-prob-drift': (v) => `${Math.round(v)}pts`,
   'bot-model-live-lean-margin': (v) => `${Math.round(v)}%`,
@@ -2140,6 +2141,7 @@ function wireSliderDisplays() {
     'bot-model-stagnation-sec',
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
+    'bot-model-max-adverse',
     'bot-model-rapid-adverse',
     'bot-model-prob-drift',
     'bot-model-live-lean-margin',
@@ -2283,6 +2285,7 @@ function wireBotConfigAutoSave() {
     'bot-model-stagnation-sec',
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
+    'bot-model-max-adverse',
     'bot-model-rapid-adverse',
     'bot-model-prob-drift',
     'bot-model-live-lean-margin',
@@ -2466,6 +2469,10 @@ async function loadBotConfigIntoForm() {
       modelBeChaseSec.value =
         c.modelBeChaseSeconds != null ? c.modelBeChaseSeconds : 20;
     }
+    const modelMaxAdverse = document.getElementById('bot-model-max-adverse');
+    if (modelMaxAdverse) {
+      modelMaxAdverse.value = c.modelMaxAdverseCents != null ? c.modelMaxAdverseCents : 0;
+    }
     const modelRapidAdverse = document.getElementById('bot-model-rapid-adverse');
     if (modelRapidAdverse) {
       modelRapidAdverse.value =
@@ -2643,6 +2650,7 @@ async function loadBotConfigIntoForm() {
     'bot-model-stagnation-sec',
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
+    'bot-model-max-adverse',
     'bot-model-rapid-adverse',
     'bot-model-prob-drift',
     'bot-model-live-lean-margin',
@@ -2846,6 +2854,7 @@ async function saveBotConfig(opts = {}) {
       document.getElementById('bot-model-stagnation-sensitivity')?.value || '3'
     ),
     modelBeChaseSeconds: parseFloat(document.getElementById('bot-model-be-chase-sec')?.value || '20'),
+    modelMaxAdverseCents: parseFloat(document.getElementById('bot-model-max-adverse')?.value || '0'),
     modelRapidAdverseCents: parseFloat(document.getElementById('bot-model-rapid-adverse')?.value || '0'),
     modelProbDriftPts: parseFloat(document.getElementById('bot-model-prob-drift')?.value || '15'),
     modelLiveLeanMarginPct: parseFloat(document.getElementById('bot-model-live-lean-margin')?.value || '1'),

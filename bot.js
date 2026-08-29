@@ -8066,6 +8066,16 @@ class TradingBot {
           (engineSoftTurning && leanStaleScratch)
         );
 
+      // Unconditional stop: if bid drops this many ¢ below entry, cut immediately
+      // regardless of lean state. Catches fast collapses before lean reacts.
+      const maxAdverse = modelMaxAdverseCents(this.config);
+      if (bidOk && !inOpenGrace && maxAdverse > 0 && adverseCents >= maxAdverse) {
+        this.lastDecision =
+          `Hard adverse stop: −${adverseCents}¢ (≥${maxAdverse}¢) on ${trade.symbol} — cutting.`;
+        await tryModelAgainstCut('model_against');
+        return;
+      }
+
       // Lean-gated dynamic floor: only fires when lean is deteriorating AND bid
       // has dropped below the entry-scaled floor. Lean firm → completely ignored.
       if (bidOk && modelDeteriorating && !inOpenGrace && underwater) {
