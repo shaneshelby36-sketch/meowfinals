@@ -379,15 +379,15 @@ function computeAssetStats(trades, config = {}, { coinShadowTrades = null } = {}
   );
   const activeSet = new Set(resolveAutoTradeSymbols(config));
 
-  // Take the last `lookback` closed MODEL trades (real).
+  // Take the most recent `lookback` closed MODEL trades (real). Trade log is newest-first.
   const closed = (trades || [])
     .filter(t => t && String(t.status) === 'closed' && (!t.strategy || String(t.strategy).toLowerCase() === 'model'))
-    .slice(-lookback);
+    .slice(0, lookback);
 
-  // Coin shadow closed trades (inactive coins only).
+  // Coin shadow closed trades (inactive coins only). Also newest-first.
   const shadowClosed = (coinShadowTrades || [])
     .filter(t => t && String(t.status) === 'closed')
-    .slice(-lookback);
+    .slice(0, lookback);
 
   // Seed every known coin so inactive ones still show up in the panel.
   const bySymbol = Object.create(null);
