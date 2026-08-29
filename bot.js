@@ -2736,6 +2736,7 @@ function modelKalshiFavoriteGate({ market, side, priceCents, config = {} } = {})
 
 /** Default model-entry cutoff. It must sit outside the late-exit zone with margin. */
 const MODEL_MIN_MINUTES_TO_OPEN_DEFAULT = 4;
+const MODEL_PEAK_TOUCH_TP_DEFAULT = 3;
 /** Confidence required to allow entries below the normal min. */
 const MODEL_PERFECT_CONFIDENCE_DEFAULT = 80;
 /** Lean strength (|probUp−50|) required for perfect-entry exception. */
@@ -3339,6 +3340,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelOpenGraceMs',
   'modelMaxEntrySpreadCents',
   'modelMinMinutesToOpen',
+  'modelPeakTouchTp',
   'modelAutoSwitchLowAvailDollars',
   'modelAutoSwitchMinLeadDollars',
   'modelAutoSwitchCooldownMinutes',
@@ -4494,6 +4496,7 @@ class TradingBot {
       modelOpenGraceMs: MODEL_OPEN_GRACE_MS_DEFAULT,
       modelMaxEntrySpreadCents: MODEL_MAX_ENTRY_SPREAD_CENTS_DEFAULT,
       modelMinMinutesToOpen: MODEL_MIN_MINUTES_TO_OPEN_DEFAULT,
+      modelPeakTouchTp: MODEL_PEAK_TOUCH_TP_DEFAULT,
       // After stop-loss: require this many ¢ of bid bounce before re-entry (0 = off).
       // Null/unset uses stopRecoveryCentsRequired() (~40% of stop, min 5¢).
       stopRecoveryCents: 6,
@@ -8720,7 +8723,10 @@ class TradingBot {
 
       // Peak-touch TP: bid has touched the high-water mark 3 times while armed
       // without breaking through to a new high — price is rejecting the ceiling, bank it.
-      if (bidOk && armed && flatOrGreen && (Number(trade.peakTouchCount) || 0) >= 3) {
+      const peakTouchTpNeeded = Number(this.config.modelPeakTouchTp) > 0
+        ? Math.round(Number(this.config.modelPeakTouchTp))
+        : MODEL_PEAK_TOUCH_TP_DEFAULT;
+      if (bidOk && armed && flatOrGreen && (Number(trade.peakTouchCount) || 0) >= peakTouchTpNeeded) {
         this.lastDecision =
           `Peak touched ${trade.peakTouchCount}× at ${Math.round(peak)}¢ without new high on ${trade.symbol} — banking +${greenCents}¢ at bid.`;
         await this._closePosition(trade, heldSideBidCents, 'take_profit', {

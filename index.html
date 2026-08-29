@@ -690,6 +690,13 @@
             </div>
             <span class="field-hint">Default <strong>4</strong>. Block new MODEL entries in the last N minutes. If a trade opens anyway (slipped through), it will only exit at flat-or-better. <strong>0</strong> = off.</span>
           </label>
+          <label>MODEL peak-touch TP (touches needed)
+            <div class="slider-row">
+              <input id="bot-model-peak-touch-tp" type="range" min="1" max="10" step="1" />
+              <span class="slider-value" id="bot-model-peak-touch-tp-value">—</span>
+            </div>
+            <span class="field-hint">Default <strong>3</strong>. TP when bid hits the peak this many times without breaking through. Lower = exits sooner; higher = holds longer. <strong>0</strong> = off.</span>
+          </label>
           <label>MODEL cash out before settle (min left)
             <div class="slider-row">
               <input id="bot-model-settle-close" type="range" min="0" max="8" step="0.5" />

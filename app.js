@@ -1735,6 +1735,7 @@ const SLIDER_UNITS = {
   'bot-model-decay-stall': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-decay-floor': (v) => `${Math.round(v)}%`,
   'bot-model-min-open': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
+  'bot-model-peak-touch-tp': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}×`),
   'bot-model-settle-close': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
   'bot-model-late-barrier': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
   'bot-model-preclose-force': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(2)} min`),
@@ -2238,6 +2239,7 @@ function wireSliderDisplays() {
     'bot-model-decay-stall',
     'bot-model-decay-floor',
     'bot-model-min-open',
+    'bot-model-peak-touch-tp',
     'bot-model-settle-close',
     'bot-model-late-barrier',
     'bot-model-preclose-force',
@@ -2394,6 +2396,7 @@ function wireBotConfigAutoSave() {
     'bot-model-decay-stall',
     'bot-model-decay-floor',
     'bot-model-min-open',
+    'bot-model-peak-touch-tp',
     'bot-model-settle-close',
     'bot-model-late-barrier',
     'bot-model-preclose-force',
@@ -2638,6 +2641,8 @@ async function loadBotConfigIntoForm() {
     if (modelDecayFloor) {
       modelDecayFloor.value = c.modelLeanDecayFloor != null ? c.modelLeanDecayFloor : 85;
     }
+    const modelPeakTouchTp = document.getElementById('bot-model-peak-touch-tp');
+    if (modelPeakTouchTp) modelPeakTouchTp.value = c.modelPeakTouchTp != null ? c.modelPeakTouchTp : 3;
     const modelMinOpen = document.getElementById('bot-model-min-open');
     if (modelMinOpen) {
       modelMinOpen.value = c.modelMinMinutesToOpen != null ? c.modelMinMinutesToOpen : 4;
@@ -2819,6 +2824,7 @@ async function loadBotConfigIntoForm() {
     'bot-model-decay-stall',
     'bot-model-decay-floor',
       'bot-model-min-open',
+      'bot-model-peak-touch-tp',
       'bot-model-settle-close',
       'bot-model-late-barrier',
       'bot-model-preclose-force',
@@ -3035,6 +3041,7 @@ async function saveBotConfig(opts = {}) {
     modelLeanDecayStallSeconds: parseFloat(document.getElementById('bot-model-decay-stall')?.value || '6'),
     modelLeanDecayFloor: parseFloat(document.getElementById('bot-model-decay-floor')?.value || '85'),
     modelMinMinutesToOpen: parseFloat(document.getElementById('bot-model-min-open')?.value || '4'),
+    modelPeakTouchTp: parseFloat(document.getElementById('bot-model-peak-touch-tp')?.value || '3'),
     modelSettleCloseMinutes: parseFloat(document.getElementById('bot-model-settle-close')?.value || '2.5'),
     modelLateBarrierMinutes: parseFloat(document.getElementById('bot-model-late-barrier')?.value || '2'),
     modelPreCloseForceMinutes: parseFloat(
