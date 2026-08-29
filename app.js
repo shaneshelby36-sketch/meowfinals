@@ -1736,6 +1736,7 @@ const SLIDER_UNITS = {
   'bot-model-decay-floor': (v) => `${Math.round(v)}%`,
   'bot-model-min-open': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
   'bot-model-peak-touch-tp': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}×`),
+  'bot-model-peak-touch-window': (v) => `${Math.round(v)}¢`,
   'bot-model-settle-close': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
   'bot-model-late-barrier': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
   'bot-model-preclose-force': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(2)} min`),
@@ -2240,6 +2241,7 @@ function wireSliderDisplays() {
     'bot-model-decay-floor',
     'bot-model-min-open',
     'bot-model-peak-touch-tp',
+    'bot-model-peak-touch-window',
     'bot-model-settle-close',
     'bot-model-late-barrier',
     'bot-model-preclose-force',
@@ -2397,6 +2399,7 @@ function wireBotConfigAutoSave() {
     'bot-model-decay-floor',
     'bot-model-min-open',
     'bot-model-peak-touch-tp',
+    'bot-model-peak-touch-window',
     'bot-model-settle-close',
     'bot-model-late-barrier',
     'bot-model-preclose-force',
@@ -2643,6 +2646,8 @@ async function loadBotConfigIntoForm() {
     }
     const modelPeakTouchTp = document.getElementById('bot-model-peak-touch-tp');
     if (modelPeakTouchTp) modelPeakTouchTp.value = c.modelPeakTouchTp != null ? c.modelPeakTouchTp : 3;
+    const modelPeakTouchWindow = document.getElementById('bot-model-peak-touch-window');
+    if (modelPeakTouchWindow) modelPeakTouchWindow.value = c.modelPeakTouchWindow != null ? c.modelPeakTouchWindow : 2;
     const modelMinOpen = document.getElementById('bot-model-min-open');
     if (modelMinOpen) {
       modelMinOpen.value = c.modelMinMinutesToOpen != null ? c.modelMinMinutesToOpen : 4;
@@ -2825,6 +2830,7 @@ async function loadBotConfigIntoForm() {
     'bot-model-decay-floor',
       'bot-model-min-open',
       'bot-model-peak-touch-tp',
+      'bot-model-peak-touch-window',
       'bot-model-settle-close',
       'bot-model-late-barrier',
       'bot-model-preclose-force',
@@ -3042,6 +3048,7 @@ async function saveBotConfig(opts = {}) {
     modelLeanDecayFloor: parseFloat(document.getElementById('bot-model-decay-floor')?.value || '85'),
     modelMinMinutesToOpen: parseFloat(document.getElementById('bot-model-min-open')?.value || '4'),
     modelPeakTouchTp: parseFloat(document.getElementById('bot-model-peak-touch-tp')?.value || '3'),
+    modelPeakTouchWindow: parseFloat(document.getElementById('bot-model-peak-touch-window')?.value || '2'),
     modelSettleCloseMinutes: parseFloat(document.getElementById('bot-model-settle-close')?.value || '2.5'),
     modelLateBarrierMinutes: parseFloat(document.getElementById('bot-model-late-barrier')?.value || '2'),
     modelPreCloseForceMinutes: parseFloat(

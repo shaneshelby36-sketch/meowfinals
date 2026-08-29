@@ -697,6 +697,13 @@
             </div>
             <span class="field-hint">Default <strong>3</strong>. TP when bid hits the peak this many times without breaking through. Lower = exits sooner; higher = holds longer. <strong>0</strong> = off.</span>
           </label>
+          <label>MODEL peak touch window (¢)
+            <div class="slider-row">
+              <input id="bot-model-peak-touch-window" type="range" min="1" max="5" step="1" />
+              <span class="slider-value" id="bot-model-peak-touch-window-value">—</span>
+            </div>
+            <span class="field-hint">Default <strong>2¢</strong>. How close to the peak counts as a touch. Wider = easier to trigger on thin/wide-spread coins; tighter = stricter on liquid coins like BTC/ETH.</span>
+          </label>
           <label>MODEL cash out before settle (min left)
             <div class="slider-row">
               <input id="bot-model-settle-close" type="range" min="0" max="8" step="0.5" />

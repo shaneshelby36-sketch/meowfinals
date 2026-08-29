@@ -2737,6 +2737,7 @@ function modelKalshiFavoriteGate({ market, side, priceCents, config = {} } = {})
 /** Default model-entry cutoff. It must sit outside the late-exit zone with margin. */
 const MODEL_MIN_MINUTES_TO_OPEN_DEFAULT = 4;
 const MODEL_PEAK_TOUCH_TP_DEFAULT = 3;
+const MODEL_PEAK_TOUCH_WINDOW_DEFAULT = 2;
 /** Confidence required to allow entries below the normal min. */
 const MODEL_PERFECT_CONFIDENCE_DEFAULT = 80;
 /** Lean strength (|probUp−50|) required for perfect-entry exception. */
@@ -3341,6 +3342,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelMaxEntrySpreadCents',
   'modelMinMinutesToOpen',
   'modelPeakTouchTp',
+  'modelPeakTouchWindow',
   'modelAutoSwitchLowAvailDollars',
   'modelAutoSwitchMinLeadDollars',
   'modelAutoSwitchCooldownMinutes',
@@ -4497,6 +4499,7 @@ class TradingBot {
       modelMaxEntrySpreadCents: MODEL_MAX_ENTRY_SPREAD_CENTS_DEFAULT,
       modelMinMinutesToOpen: MODEL_MIN_MINUTES_TO_OPEN_DEFAULT,
       modelPeakTouchTp: MODEL_PEAK_TOUCH_TP_DEFAULT,
+      modelPeakTouchWindow: MODEL_PEAK_TOUCH_WINDOW_DEFAULT,
       // After stop-loss: require this many ¢ of bid bounce before re-entry (0 = off).
       // Null/unset uses stopRecoveryCentsRequired() (~40% of stop, min 5¢).
       stopRecoveryCents: 6,
@@ -7990,7 +7993,10 @@ class TradingBot {
         const _greenNow = Number.isFinite(Number(trade.entryPriceCents))
           ? Math.round(heldSideBidCents - Number(trade.entryPriceCents))
           : -1;
-        const _atPeak = Math.round(heldSideBidCents) >= Math.round(nextPeak) - 2;
+        const _peakWindow = Number(this.config.modelPeakTouchWindow) > 0
+          ? Math.round(Number(this.config.modelPeakTouchWindow))
+          : MODEL_PEAK_TOUCH_WINDOW_DEFAULT;
+        const _atPeak = Math.round(heldSideBidCents) >= Math.round(nextPeak) - _peakWindow;
         if (_atPeak && _greenNow >= _armCentsNow) {
           trade.peakTouchCount = (Number(trade.peakTouchCount) || 0) + 1;
           this._persist();
@@ -12243,6 +12249,7 @@ module.exports = {
   MODEL_PERFECT_LEAN_DEFAULT,
   MODEL_MIN_MINUTES_TO_OPEN_DEFAULT,
   MODEL_PEAK_TOUCH_TP_DEFAULT,
+  MODEL_PEAK_TOUCH_WINDOW_DEFAULT,
   isSettleTieredExitsEnabled,
   settleExitPlan,
   settleExitTiersForDashboard,
