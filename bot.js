@@ -7713,6 +7713,37 @@ class TradingBot {
       const stuckSince = Number(trade.pendingForceExitSince);
       const stuckMs = Number.isFinite(stuckSince) ? now - stuckSince : 0;
       const escalated = stuckMs >= FORCE_EXIT_ESCALATE_MS_DEFAULT;
+
+      // Green TP miss re-evaluation: if the failed exit was a take_profit, the
+      // bid is still above entry, and we're not yet in the closing window —
+      // drop the pending exit and fall through to normal rules. Treat it like a
+      // fresh trade: maybe TP fires again next tick, or we hold for more profit.
+      // Red/BE/model_against exits always force through — the cut decision is final.
+      if (isModelTrade(trade) && forceReason === 'take_profit') {
+        const bidAboveEntry =
+          heldSideBidCents != null &&
+          Number.isFinite(entryPx) &&
+          heldSideBidCents >= entryPx;
+        const nearSettlement =
+          minutesRemaining <= Math.max(
+            modelSettleCloseMinutes(this.config),
+            modelLateBarrierMinutes(this.config)
+          );
+        if (bidAboveEntry && !nearSettlement) {
+          delete trade.pendingForceExit;
+          delete trade.pendingForceExitSince;
+          this._persist();
+          // Fall through to normal model management below.
+        }
+      }
+    }
+
+    if (trade.pendingForceExit) {
+      let forceReason = String(trade.pendingForceExit);
+      const entryPx = Number(trade.entryPriceCents);
+      const stuckSince = Number(trade.pendingForceExitSince);
+      const stuckMs = Number.isFinite(stuckSince) ? now - stuckSince : 0;
+      const escalated = stuckMs >= FORCE_EXIT_ESCALATE_MS_DEFAULT;
       // Stale BE force-retry while truly red can never fill (fake-BE guard).
       // Promote to model_against so we actually cut instead of looping to settlement.
       if (
