@@ -1212,6 +1212,16 @@ body[data-view-mode="bot"] .asset-picker {
 .asset-stat-btn:hover { border-color: var(--text-dim); color: var(--text); }
 .asset-stat-wr.pos, .asset-stat-pnl.pos { color: var(--up); }
 .asset-stat-wr.neg, .asset-stat-pnl.neg { color: var(--down); }
+.asset-stat-row.active-coin { border-color: var(--text-dim); }
+.asset-stat-shadow-tag {
+  display: inline-block;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  border: 1px solid var(--border);
+  padding: 0 4px;
+  margin-left: 4px;
+  vertical-align: middle;
+}
 .bot-field-grid label, .backtest-controls label {
   display: flex;
   flex-direction: column;

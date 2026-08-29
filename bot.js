@@ -27,6 +27,7 @@ pruneArchiveFiles();
 const LEDGER_PATH = dataPath('bot-ledger.json');
 const TRADE_LOG_PATH = dataPath('trade-log.json');
 const SHADOW_BOOKS_PATH = dataPath('shadow-books.json');
+const COIN_SHADOW_LOG_PATH = dataPath('coin-shadow-log.json');
 const CONFIG_PATH = dataPath('bot-config.json');
 const KALSHI_SERIES_CACHE_PATH = dataPath('kalshi-series-cache.json');
 const CALIBRATION_PATH = dataPath('bot-calibration.json');
@@ -366,7 +367,7 @@ const ASSET_AUTO_EXCLUDE_MIN_TRADES_DEFAULT = 10;
  * Per-asset rolling stats over the most recent `lookback` closed MODEL trades.
  * Returns an array of { symbol, trades, wins, losses, be, pnlCents, winRatePct, excluded, pinned }.
  */
-function computeAssetStats(trades, config = {}) {
+function computeAssetStats(trades, config = {}, { coinShadowTrades = null } = {}) {
   const lookback = Number(config.assetStatsLookback) > 0
     ? Math.round(Number(config.assetStatsLookback))
     : ASSET_STATS_LOOKBACK_DEFAULT;
@@ -376,20 +377,28 @@ function computeAssetStats(trades, config = {}) {
   const excludedSet = new Set(
     String(config.assetExcludedSymbols || '').split(/[,|\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
   );
-  // Take the last `lookback` closed MODEL trades.
+  const activeSet = new Set(resolveAutoTradeSymbols(config));
+
+  // Take the last `lookback` closed MODEL trades (real).
   const closed = (trades || [])
     .filter(t => t && String(t.status) === 'closed' && (!t.strategy || String(t.strategy).toLowerCase() === 'model'))
+    .slice(-lookback);
+
+  // Coin shadow closed trades (inactive coins only).
+  const shadowClosed = (coinShadowTrades || [])
+    .filter(t => t && String(t.status) === 'closed')
     .slice(-lookback);
 
   // Seed every known coin so inactive ones still show up in the panel.
   const bySymbol = Object.create(null);
   for (const sym of Object.keys(SERIES_BY_SYMBOL)) {
-    bySymbol[sym] = { symbol: sym, trades: 0, wins: 0, losses: 0, be: 0, pnlCents: 0 };
+    bySymbol[sym] = { symbol: sym, trades: 0, wins: 0, losses: 0, be: 0, pnlCents: 0, shadowTrades: 0, shadowWins: 0, shadowLosses: 0 };
   }
+
   for (const t of closed) {
     const sym = String(t.symbol || '').toUpperCase();
     if (!sym) continue;
-    if (!bySymbol[sym]) bySymbol[sym] = { symbol: sym, trades: 0, wins: 0, losses: 0, be: 0, pnlCents: 0 };
+    if (!bySymbol[sym]) bySymbol[sym] = { symbol: sym, trades: 0, wins: 0, losses: 0, be: 0, pnlCents: 0, shadowTrades: 0, shadowWins: 0, shadowLosses: 0 };
     const b = bySymbol[sym];
     const p = Number(t.pnlCents);
     if (!Number.isFinite(p)) continue;
@@ -400,14 +409,39 @@ function computeAssetStats(trades, config = {}) {
     else b.be += 1;
   }
 
+  for (const t of shadowClosed) {
+    const sym = String(t.symbol || '').toUpperCase();
+    if (!sym) continue;
+    if (!bySymbol[sym]) bySymbol[sym] = { symbol: sym, trades: 0, wins: 0, losses: 0, be: 0, pnlCents: 0, shadowTrades: 0, shadowWins: 0, shadowLosses: 0 };
+    const b = bySymbol[sym];
+    const p = Number(t.pnlCents);
+    if (!Number.isFinite(p)) continue;
+    b.shadowTrades += 1;
+    if (p > 0) b.shadowWins += 1;
+    else if (p < 0) b.shadowLosses += 1;
+  }
+
   return Object.values(bySymbol)
-    .sort((a, b) => b.trades - a.trades)
-    .map(b => ({
-      ...b,
-      winRatePct: b.trades ? +((b.wins / b.trades) * 100).toFixed(1) : null,
-      excluded: excludedSet.has(b.symbol),
-      pinned: pinnedSet.has(b.symbol),
-    }));
+    .sort((a, b) => (b.trades + b.shadowTrades) - (a.trades + a.shadowTrades))
+    .map(b => {
+      const hasReal = b.trades > 0;
+      const hasShadow = b.shadowTrades > 0;
+      const displayTrades = hasReal ? b.trades : b.shadowTrades;
+      const displayWins = hasReal ? b.wins : b.shadowWins;
+      const displayLosses = hasReal ? b.losses : b.shadowLosses;
+      const winRatePct = displayTrades ? +((displayWins / displayTrades) * 100).toFixed(1) : null;
+      return {
+        ...b,
+        winRatePct,
+        displayTrades,
+        displayWins,
+        displayLosses,
+        isShadowOnly: !hasReal && hasShadow,
+        active: activeSet.has(b.symbol),
+        excluded: excludedSet.has(b.symbol),
+        pinned: pinnedSet.has(b.symbol),
+      };
+    });
 }
 
 function summarizeClosedModelTrades(trades) {
@@ -4102,6 +4136,40 @@ function saveTradeLog(trades) {
   }
 }
 
+function loadCoinShadowLog() {
+  try {
+    if (fs.existsSync(COIN_SHADOW_LOG_PATH)) {
+      const data = JSON.parse(fs.readFileSync(COIN_SHADOW_LOG_PATH, 'utf8'));
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data.trades)) return data.trades;
+    }
+  } catch (err) {
+    console.error('[bot] failed to load coin shadow log:', err.message);
+  }
+  return [];
+}
+
+function upsertCoinShadowLog(entry) {
+  if (!entry || !entry.id) return;
+  const trades = loadCoinShadowLog();
+  const idx = trades.findIndex((t) => t.id === entry.id);
+  if (idx >= 0) {
+    trades[idx] = { ...trades[idx], ...entry, updatedAt: Date.now() };
+  } else {
+    trades.unshift({ ...entry, coinShadow: true, updatedAt: Date.now() });
+  }
+  if (trades.length > TRADE_LOG_MAX) trades.length = TRADE_LOG_MAX;
+  try {
+    writeJsonAtomic(COIN_SHADOW_LOG_PATH, {
+      updatedAt: new Date().toISOString(),
+      count: trades.length,
+      trades,
+    });
+  } catch (err) {
+    console.error('[bot] failed to persist coin shadow log:', err.message);
+  }
+}
+
 function emptyShadowLedger() {
   return {
     trades: [],
@@ -4574,6 +4642,8 @@ class TradingBot {
     this._shadowBooks = loadShadowBooks();
     this._rebuildAllShadowLedgerSkim();
     this._inShadow = false;
+    this._inCoinShadow = false;
+    this._coinShadowBooks = Object.create(null);
     this._shadowDirty = false;
     this._setupAvailSnapshots = Object.create(null);
     this._lastAutoSetupSwitchAt = 0;
@@ -4882,7 +4952,8 @@ class TradingBot {
     const enabled = String(this.config.assetAutoExcludeEnabled || 'off').toLowerCase();
     if (enabled === 'off' || enabled === 'false' || enabled === '0') return;
     const trades = loadTradeLog();
-    const stats = computeAssetStats(trades, this.config);
+    const coinShadowTrades = loadCoinShadowLog();
+    const stats = computeAssetStats(trades, this.config, { coinShadowTrades });
     const minTrades = Number(this.config.assetAutoExcludeMinTrades) > 0
       ? Math.round(Number(this.config.assetAutoExcludeMinTrades))
       : ASSET_AUTO_EXCLUDE_MIN_TRADES_DEFAULT;
@@ -4898,32 +4969,56 @@ class TradingBot {
     const excludedSet = new Set(
       String(this.config.assetExcludedSymbols || '').split(/[,|\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
     );
+    const activeSymbols = resolveAutoTradeSymbols(this.config);
+    const activeSet = new Set(activeSymbols);
 
-    let changed = false;
+    let configChanged = false;
+    let autoTradeChanged = false;
     for (const s of stats) {
       if (!s.symbol || pinnedSet.has(s.symbol)) continue;
-      if (s.trades < minTrades) continue;
+      // Use displayTrades (real if any, else shadow) for threshold check.
+      const count = s.displayTrades || 0;
+      if (count < minTrades) continue;
       const wr = s.winRatePct;
       if (!Number.isFinite(wr)) continue;
-      if (!excludedSet.has(s.symbol) && wr < floor) {
+
+      // --- Exclusion: active coin performing poorly ---
+      if (activeSet.has(s.symbol) && !excludedSet.has(s.symbol) && wr < floor) {
         excludedSet.add(s.symbol);
         this._logActivity(
-          `Auto-excluded ${s.symbol}: win rate ${wr}% < ${floor}% over last ${s.trades} trades.`,
+          `Auto-excluded ${s.symbol}: win rate ${wr}% < ${floor}% over last ${count} ${s.isShadowOnly ? 'shadow ' : ''}trades.`,
           { symbol: s.symbol, winRate: wr, threshold: floor }
         );
-        changed = true;
-      } else if (excludedSet.has(s.symbol) && wr >= ceiling) {
-        excludedSet.delete(s.symbol);
-        this._logActivity(
-          `Auto-re-enabled ${s.symbol}: win rate ${wr}% recovered above ${ceiling}% over last ${s.trades} trades.`,
-          { symbol: s.symbol, winRate: wr, threshold: ceiling }
-        );
-        changed = true;
+        configChanged = true;
+      }
+      // --- Re-enable: excluded coin (or inactive shadow coin) performing well ---
+      else if (ceiling > 0 && wr >= ceiling) {
+        if (excludedSet.has(s.symbol)) {
+          excludedSet.delete(s.symbol);
+          this._logActivity(
+            `Auto-re-enabled ${s.symbol}: win rate ${wr}% ≥ ${ceiling}% over last ${count} ${s.isShadowOnly ? 'shadow ' : ''}trades.`,
+            { symbol: s.symbol, winRate: wr, threshold: ceiling }
+          );
+          configChanged = true;
+        }
+        if (!activeSet.has(s.symbol)) {
+          activeSet.add(s.symbol);
+          autoTradeChanged = true;
+          this._logActivity(
+            `Auto-enabled ${s.symbol}: shadow win rate ${wr}% ≥ ${ceiling}% over last ${count} shadow trades.`,
+            { symbol: s.symbol, winRate: wr, threshold: ceiling }
+          );
+        }
       }
     }
 
-    if (changed) {
+    if (configChanged) {
       this.config.assetExcludedSymbols = [...excludedSet].join(',');
+    }
+    if (autoTradeChanged) {
+      this.config.autoTradeSymbols = Object.keys(SERIES_BY_SYMBOL).filter(s => activeSet.has(s)).join(',');
+    }
+    if (configChanged || autoTradeChanged) {
       this._persist();
     }
   }
@@ -5555,6 +5650,10 @@ class TradingBot {
 
   _upsertTradeLog(entry) {
     if (this._inShadow) return;
+    if (this._inCoinShadow) {
+      upsertCoinShadowLog(entry);
+      return;
+    }
     upsertTradeLog(entry);
   }
 
@@ -5753,6 +5852,97 @@ class TradingBot {
     if (this._shadowDirty) this._persistShadowBooks();
   }
 
+  /**
+   * Silent per-coin shadow trading for coins NOT currently in autoTradeSymbols.
+   * Each inactive coin gets its own book keyed "coin:SYM". Closed trades write
+   * to coin-shadow-log.json (never the real trade log). computeAssetStats merges
+   * both logs so auto-enable has real win-rate data for every coin.
+   */
+  async _runCoinShadowBooks(predictions, { openNew = false } = {}) {
+    if (this._inShadow || this._inCoinShadow) return;
+    if (!isModelStrategyMode(this.config)) return;
+    const active = new Set(resolveAutoTradeSymbols(this.config));
+    const inactive = Object.keys(SERIES_BY_SYMBOL).filter(sym => !active.has(sym));
+    if (!inactive.length) return;
+
+    for (const sym of inactive) {
+      const bookKey = `coin:${sym}`;
+      if (!this._coinShadowBooks[bookKey]) {
+        this._coinShadowBooks[bookKey] = {
+          ledger: emptyShadowLedger(),
+          lastDecision: '',
+          confirmGates: Object.create(null),
+          confirmArmed: [],
+          confirmArmedFlag: false,
+          confirmStarted: Date.now(),
+          entryMissUntil: Object.create(null),
+          entryMissStreak: Object.create(null),
+          entryMissSessionClose: Object.create(null),
+        };
+      }
+      const book = this._coinShadowBooks[bookKey];
+      if (!book.ledger || !Array.isArray(book.ledger.trades)) book.ledger = emptyShadowLedger();
+
+      await this._withCoinShadowBook(sym, book, predictions, { openNew });
+    }
+  }
+
+  async _withCoinShadowBook(sym, book, predictions, { openNew = false } = {}) {
+    if (this._inShadow || this._inCoinShadow) return;
+    const snap = this._snapshotLiveBook();
+    this._inCoinShadow = true;
+    this._inShadow = true; // prevent any live order paths
+    try {
+      // Swap in the coin shadow config + ledger
+      this.config = {
+        ...this.config,
+        symbol: 'AUTO',
+        autoTradeSymbols: sym,
+        mode: 'paper',
+      };
+      this.ledger = book.ledger;
+      this.lastDecision = book.lastDecision || '';
+      this.lastError = null;
+      this._modelConfirmGates = book.confirmGates || Object.create(null);
+      this._modelConfirmArmedSymbols = new Set(Array.isArray(book.confirmArmed) ? book.confirmArmed : []);
+      this._modelConfirmGateArmed = !!book.confirmArmedFlag;
+      this._modelConfirmProcessStartedAt = Number(book.confirmStarted) || Date.now();
+      this._entryMissUntil = book.entryMissUntil || Object.create(null);
+      this._entryMissStreak = book.entryMissStreak || Object.create(null);
+      this._entryMissSessionClose = book.entryMissSessionClose || Object.create(null);
+      this._stoppedSymbolsThisCycle = new Set();
+
+      // Manage any open coin shadow positions
+      await this._manageOpenPositionsUnlocked(predictions);
+      try { await this._reviewPendingStopVerdicts(); } catch { /* best-effort */ }
+
+      // Try to open a new shadow position if cycle allows it
+      if (openNew && this.isRunning && predictions) {
+        if (this.openTrades.length < this._effectiveMaxOpenPositions()) {
+          const opp = await this._evaluateSymbolForModel(sym, predictions, { quiet: true });
+          if (opp) await this._openModelRanked([opp]);
+        }
+      }
+
+      // Capture back
+      book.ledger = this.ledger;
+      book.lastDecision = this.lastDecision || '';
+      book.confirmGates = this._modelConfirmGates || Object.create(null);
+      book.confirmArmed = this._modelConfirmArmedSymbols ? [...this._modelConfirmArmedSymbols] : [];
+      book.confirmArmedFlag = !!this._modelConfirmGateArmed;
+      book.confirmStarted = Number(this._modelConfirmProcessStartedAt) || Date.now();
+      book.entryMissUntil = this._entryMissUntil || Object.create(null);
+      book.entryMissStreak = this._entryMissStreak || Object.create(null);
+      book.entryMissSessionClose = this._entryMissSessionClose || Object.create(null);
+    } catch (err) {
+      console.error(`[bot] coin shadow ${sym} failed:`, err && err.message ? err.message : err);
+    } finally {
+      this._restoreLiveBook(snap);
+      this._inCoinShadow = false;
+      this._inShadow = false;
+    }
+  }
+
   async _finishModelShadowCycle(predictions) {
     if (this._inShadow) return;
     if (!isModelStrategyMode(this.config)) return;
@@ -5764,8 +5954,12 @@ class TradingBot {
         this._snapshotSetupAvails(this._modelSetupScoreboard());
       }
       this._maybeAutoSwitchModelSetup();
-      this._checkAssetAutoExclusions();
     }
+    // Coin shadow runs regardless of whether setup shadow books are enabled.
+    await this._withTradeLock(() =>
+      this._runCoinShadowBooks(predictions, { openNew: this.isRunning && !!predictions })
+    );
+    this._checkAssetAutoExclusions();
   }
 
   /**
@@ -8531,6 +8725,7 @@ class TradingBot {
           `Peak touched ${trade.peakTouchCount}× at ${Math.round(peak)}¢ without new high on ${trade.symbol} — banking +${greenCents}¢ at bid.`;
         await this._closePosition(trade, heldSideBidCents, 'take_profit', {
           liveSellPriceCents: heldSideBidCents,
+          stallBank: true,
         });
         return;
       }
@@ -11791,7 +11986,7 @@ class TradingBot {
         lastSwitchAt: this._lastAutoSetupSwitchAt || null,
         note: this._lastAutoSwitchNote || null,
       },
-      assetStats: computeAssetStats(loadTradeLog(), this.config),
+      assetStats: computeAssetStats(loadTradeLog(), this.config, { coinShadowTrades: loadCoinShadowLog() }),
       settleWindowRec,
       stats: {
         totalAttempts: this.ledger.trades.length, // current period open + closed

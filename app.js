@@ -1983,25 +1983,28 @@ function renderAssetStats(stats, config) {
     list.innerHTML = '<p class="settings-hint">No closed trades yet.</p>';
     return;
   }
-  const { engineUrl } = loadSettings();
   list.innerHTML = rows.map(r => {
+    const wrTone = r.winRatePct != null ? (r.winRatePct >= 55 ? 'pos' : r.winRatePct < 40 ? 'neg' : '') : '';
     const pnlDollars = (r.pnlCents / 100).toFixed(2);
     const pnlTone = r.pnlCents > 0 ? 'pos' : r.pnlCents < 0 ? 'neg' : '';
-    const wrTone = r.winRatePct != null ? (r.winRatePct >= 55 ? 'pos' : r.winRatePct < 40 ? 'neg' : '') : '';
+    const shadowTag = r.isShadowOnly ? ' <span class="asset-stat-shadow-tag">shadow</span>' : '';
+    const activeTag = r.active ? ' · live' : '';
     const pinnedLabel = r.pinned ? ' · pinned' : '';
-    const excludedLabel = r.excluded ? ' · excluded' : '';
-    const statusLabel = r.pinned ? 'pinned' : r.excluded ? 'excl' : '';
+    const excludedLabel = r.excluded ? ' · excl' : '';
     const pinBtn = r.pinned
       ? `<button type="button" class="asset-stat-btn" data-sym="${escapeHtml(r.symbol)}" data-action="unpin">unpin</button>`
       : `<button type="button" class="asset-stat-btn" data-sym="${escapeHtml(r.symbol)}" data-action="pin">pin</button>`;
     const exclBtn = r.excluded
       ? `<button type="button" class="asset-stat-btn" data-sym="${escapeHtml(r.symbol)}" data-action="unexclude">restore</button>`
       : `<button type="button" class="asset-stat-btn" data-sym="${escapeHtml(r.symbol)}" data-action="exclude">exclude</button>`;
-    return `<div class="asset-stat-row${r.excluded ? ' excluded' : ''}${r.pinned ? ' pinned' : ''}">
-      <span class="asset-stat-sym">${escapeHtml(r.symbol)}${pinnedLabel}${excludedLabel}</span>
+    const n = r.displayTrades || 0;
+    const w = r.displayWins || 0;
+    const l = r.displayLosses || 0;
+    return `<div class="asset-stat-row${r.excluded ? ' excluded' : ''}${r.pinned ? ' pinned' : ''}${r.active ? ' active-coin' : ''}">
+      <span class="asset-stat-sym">${escapeHtml(r.symbol)}${activeTag}${pinnedLabel}${excludedLabel}${shadowTag}</span>
       <span class="asset-stat-wr ${wrTone}">${r.winRatePct != null ? r.winRatePct + '%' : '—'}</span>
-      <span class="asset-stat-pnl ${pnlTone}">${r.pnlCents >= 0 ? '+' : ''}$${pnlDollars}</span>
-      <span class="asset-stat-n">${r.trades}t · ${r.wins}W/${r.losses}L</span>
+      <span class="asset-stat-pnl ${r.isShadowOnly ? '' : pnlTone}">${r.isShadowOnly ? '—' : (r.pnlCents >= 0 ? '+' : '') + '$' + pnlDollars}</span>
+      <span class="asset-stat-n">${n}t · ${w}W/${l}L</span>
       <span class="asset-stat-actions">${pinBtn}${exclBtn}</span>
     </div>`;
   }).join('');
