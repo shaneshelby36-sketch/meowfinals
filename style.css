@@ -1182,6 +1182,36 @@ body[data-view-mode="bot"] .asset-picker {
 .model-setup-card .setup-shadow.pos { color: var(--up); }
 .model-setup-card .setup-score.neg,
 .model-setup-card .setup-shadow.neg { color: var(--down); }
+.asset-stat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  flex-wrap: wrap;
+}
+.asset-stat-row.excluded { opacity: 0.5; }
+.asset-stat-row.pinned { border-color: var(--text-dim); }
+.asset-stat-sym { font-weight: 600; flex: 1 1 auto; min-width: 60px; }
+.asset-stat-wr { min-width: 38px; }
+.asset-stat-pnl { min-width: 52px; }
+.asset-stat-n { color: var(--text-dim); flex: 1 1 auto; }
+.asset-stat-actions { display: flex; gap: 4px; margin-left: auto; }
+.asset-stat-btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 2px 7px;
+  cursor: pointer;
+}
+.asset-stat-btn:hover { border-color: var(--text-dim); color: var(--text); }
+.asset-stat-wr.pos, .asset-stat-pnl.pos { color: var(--up); }
+.asset-stat-wr.neg, .asset-stat-pnl.neg { color: var(--down); }
 .bot-field-grid label, .backtest-controls label {
   display: flex;
   flex-direction: column;

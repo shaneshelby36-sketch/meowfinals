@@ -1072,6 +1072,7 @@ async function refreshBotStatus() {
     bindActivityLogUi();
     bindTradeLogUi();
     renderModelSetups(data.modelSetups, data.modelShadowBooks);
+    renderAssetStats(data.assetStats, data.config);
     renderModelAutoSwitchNote(data.modelAutoSwitch);
     renderBotDashboard(data);
   } catch (err) {
@@ -1159,6 +1160,7 @@ function renderBotDashboard(data) {
   bindTradeLogUi();
   bindActivityLogUi();
   renderModelSetups(data.modelSetups, data.modelShadowBooks);
+  renderAssetStats(data.assetStats, data.config);
   renderModelAutoSwitchNote(data.modelAutoSwitch);
 }
 
@@ -1746,6 +1748,10 @@ const SLIDER_UNITS = {
   'bot-model-rich-floor': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}¢ floor`),
   'bot-model-sitout': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-global-sitout': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
+  'bot-asset-auto-exclude-min-trades': (v) => `${Math.round(v)} trades`,
+  'bot-asset-auto-exclude-floor': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-asset-auto-exclude-ceiling': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-asset-stats-lookback': (v) => `${Math.round(v)} trades`,
   'bot-settle-min': (v) => `${Math.round(v)}¢`,
   'bot-settle-max': (v) => `${Math.round(v)}¢`,
   'bot-settle-stoploss': (v) => `−${Math.round(v)}¢`,
@@ -1969,6 +1975,70 @@ function renderModelSetups(setups, shadowBooks = null) {
   });
 }
 
+function renderAssetStats(stats, config) {
+  const list = document.getElementById('bot-asset-stats-list');
+  if (!list) return;
+  const rows = Array.isArray(stats) ? stats : [];
+  if (!rows.length) {
+    list.innerHTML = '<p class="settings-hint">No closed trades yet.</p>';
+    return;
+  }
+  const { engineUrl } = loadSettings();
+  list.innerHTML = rows.map(r => {
+    const pnlDollars = (r.pnlCents / 100).toFixed(2);
+    const pnlTone = r.pnlCents > 0 ? 'pos' : r.pnlCents < 0 ? 'neg' : '';
+    const wrTone = r.winRatePct != null ? (r.winRatePct >= 55 ? 'pos' : r.winRatePct < 40 ? 'neg' : '') : '';
+    const pinnedLabel = r.pinned ? ' · pinned' : '';
+    const excludedLabel = r.excluded ? ' · excluded' : '';
+    const statusLabel = r.pinned ? 'pinned' : r.excluded ? 'excl' : '';
+    const pinBtn = r.pinned
+      ? `<button type="button" class="asset-stat-btn" data-sym="${escapeHtml(r.symbol)}" data-action="unpin">unpin</button>`
+      : `<button type="button" class="asset-stat-btn" data-sym="${escapeHtml(r.symbol)}" data-action="pin">pin</button>`;
+    const exclBtn = r.excluded
+      ? `<button type="button" class="asset-stat-btn" data-sym="${escapeHtml(r.symbol)}" data-action="unexclude">restore</button>`
+      : `<button type="button" class="asset-stat-btn" data-sym="${escapeHtml(r.symbol)}" data-action="exclude">exclude</button>`;
+    return `<div class="asset-stat-row${r.excluded ? ' excluded' : ''}${r.pinned ? ' pinned' : ''}">
+      <span class="asset-stat-sym">${escapeHtml(r.symbol)}${pinnedLabel}${excludedLabel}</span>
+      <span class="asset-stat-wr ${wrTone}">${r.winRatePct != null ? r.winRatePct + '%' : '—'}</span>
+      <span class="asset-stat-pnl ${pnlTone}">${r.pnlCents >= 0 ? '+' : ''}$${pnlDollars}</span>
+      <span class="asset-stat-n">${r.trades}t · ${r.wins}W/${r.losses}L</span>
+      <span class="asset-stat-actions">${pinBtn}${exclBtn}</span>
+    </div>`;
+  }).join('');
+  list.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => toggleAssetStatus(btn.dataset.sym, btn.dataset.action, config));
+  });
+}
+
+async function toggleAssetStatus(symbol, action, config) {
+  const { engineUrl } = loadSettings();
+  const feedback = document.getElementById('bot-settings-feedback');
+  const sym = (symbol || '').toUpperCase();
+  const pinned = String(config && config.assetPinnedSymbols || '').split(/[,|\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
+  const excluded = String(config && config.assetExcludedSymbols || '').split(/[,|\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
+  const pinnedSet = new Set(pinned);
+  const excludedSet = new Set(excluded);
+  if (action === 'pin') { pinnedSet.add(sym); excludedSet.delete(sym); }
+  else if (action === 'unpin') { pinnedSet.delete(sym); }
+  else if (action === 'exclude') { excludedSet.add(sym); pinnedSet.delete(sym); }
+  else if (action === 'unexclude') { excludedSet.delete(sym); }
+  try {
+    const res = await fetch(`${engineUrl}/api/bot/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        assetPinnedSymbols: [...pinnedSet].join(','),
+        assetExcludedSymbols: [...excludedSet].join(','),
+      }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (feedback) { feedback.textContent = `${sym} ${action}d.`; feedback.style.color = 'var(--up)'; }
+    await refreshBotStatus();
+  } catch (err) {
+    if (feedback) { feedback.textContent = err.message; feedback.style.color = 'var(--down)'; }
+  }
+}
+
 async function applyModelSetup(setupId) {
   if (!setupId || setupId === 'all-logged') return;
   if (isBotSettingsLocked()) {
@@ -2179,6 +2249,10 @@ function wireSliderDisplays() {
     'bot-model-late-extend-conf',
     'bot-model-sitout',
     'bot-model-global-sitout',
+    'bot-asset-auto-exclude-min-trades',
+    'bot-asset-auto-exclude-floor',
+    'bot-asset-auto-exclude-ceiling',
+    'bot-asset-stats-lookback',
     'bot-settle-min',
     'bot-settle-max',
     'bot-settle-stoploss',
@@ -2325,6 +2399,10 @@ function wireBotConfigAutoSave() {
     'bot-model-lean-floor-scale',
     'bot-model-sitout',
     'bot-model-global-sitout',
+    'bot-asset-auto-exclude-min-trades',
+    'bot-asset-auto-exclude-floor',
+    'bot-asset-auto-exclude-ceiling',
+    'bot-asset-stats-lookback',
     'bot-settle-min',
     'bot-settle-max',
     'bot-settle-stoploss',
@@ -2351,6 +2429,7 @@ function wireBotConfigAutoSave() {
     'bot-second-green',
     'bot-model-invert',
     'bot-model-auto-switch',
+    'bot-asset-auto-exclude',
     'bot-symbol',
     'bot-strategy-mode',
   ]) {
@@ -2626,6 +2705,20 @@ async function loadBotConfigIntoForm() {
           ? Math.round(Math.max(0, Number(c.modelGlobalPostExitCooldownSeconds)))
           : 20;
     }
+    const assetAutoExclude = document.getElementById('bot-asset-auto-exclude');
+    if (assetAutoExclude) {
+      const on = c.assetAutoExcludeEnabled === true || c.assetAutoExcludeEnabled === 1 ||
+        c.assetAutoExcludeEnabled === 'on' || c.assetAutoExcludeEnabled === 'true';
+      assetAutoExclude.value = on ? 'on' : 'off';
+    }
+    const assetExclMinTrades = document.getElementById('bot-asset-auto-exclude-min-trades');
+    if (assetExclMinTrades) assetExclMinTrades.value = c.assetAutoExcludeMinTrades != null ? c.assetAutoExcludeMinTrades : 5;
+    const assetExclFloor = document.getElementById('bot-asset-auto-exclude-floor');
+    if (assetExclFloor) assetExclFloor.value = c.assetAutoExcludeFloor != null ? c.assetAutoExcludeFloor : 30;
+    const assetExclCeiling = document.getElementById('bot-asset-auto-exclude-ceiling');
+    if (assetExclCeiling) assetExclCeiling.value = c.assetAutoExcludeCeiling != null ? c.assetAutoExcludeCeiling : 0;
+    const assetLookback = document.getElementById('bot-asset-stats-lookback');
+    if (assetLookback) assetLookback.value = c.assetStatsLookback != null ? c.assetStatsLookback : 50;
     const settleMin = document.getElementById('bot-settle-min');
     if (settleMin) settleMin.value = c.settleEntryMinCents != null ? c.settleEntryMinCents : 80;
     const settleMax = document.getElementById('bot-settle-max');
@@ -2736,6 +2829,10 @@ async function loadBotConfigIntoForm() {
       'bot-model-rich-floor',
       'bot-model-sitout',
       'bot-model-global-sitout',
+      'bot-asset-auto-exclude-min-trades',
+      'bot-asset-auto-exclude-floor',
+      'bot-asset-auto-exclude-ceiling',
+      'bot-asset-stats-lookback',
       'bot-settle-min',
       'bot-settle-max',
       'bot-settle-stoploss',
@@ -2968,6 +3065,11 @@ async function saveBotConfig(opts = {}) {
       Number.isFinite(modelGlobalSitoutSec) && modelGlobalSitoutSec > 0
         ? Math.round(modelGlobalSitoutSec)
         : 0,
+    assetAutoExcludeEnabled: document.getElementById('bot-asset-auto-exclude')?.value || 'off',
+    assetAutoExcludeMinTrades: parseFloat(document.getElementById('bot-asset-auto-exclude-min-trades')?.value || '5'),
+    assetAutoExcludeFloor: parseFloat(document.getElementById('bot-asset-auto-exclude-floor')?.value || '30'),
+    assetAutoExcludeCeiling: parseFloat(document.getElementById('bot-asset-auto-exclude-ceiling')?.value || '0'),
+    assetStatsLookback: parseFloat(document.getElementById('bot-asset-stats-lookback')?.value || '50'),
     settleEntryMinCents: parseFloat(document.getElementById('bot-settle-min')?.value || '80'),
     settleEntryMaxCents: parseFloat(document.getElementById('bot-settle-max')?.value || '94'),
     settleStopLossCents: Math.max(

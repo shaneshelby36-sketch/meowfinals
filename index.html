@@ -409,6 +409,46 @@
             <div id="bot-model-setups-list" class="model-setups-list"></div>
           </div>
 
+          <div class="model-setups" id="bot-asset-stats">
+            <h4 class="bot-panel-subhead">Per-asset stats</h4>
+            <p class="settings-hint">Win rate and P&amp;L per coin over the last <em>N</em> closed trades. Auto-exclude drops coins that fall outside the floor/ceiling band (unless pinned).</p>
+            <label>Auto-exclude
+              <select id="bot-asset-auto-exclude">
+                <option value="off">Off — manual only (default)</option>
+                <option value="on">On — auto-exclude underperforming coins each cycle</option>
+              </select>
+            </label>
+            <label>Min trades before auto-exclude checks
+              <div class="slider-row">
+                <input id="bot-asset-auto-exclude-min-trades" type="range" min="3" max="30" step="1" />
+                <span class="slider-value" id="bot-asset-auto-exclude-min-trades-value">—</span>
+              </div>
+              <span class="field-hint">Default <strong>5</strong>. Coins with fewer trades are never auto-excluded.</span>
+            </label>
+            <label>Win-rate floor % (exclude below)
+              <div class="slider-row">
+                <input id="bot-asset-auto-exclude-floor" type="range" min="0" max="60" step="1" />
+                <span class="slider-value" id="bot-asset-auto-exclude-floor-value">—</span>
+              </div>
+              <span class="field-hint">Default <strong>30%</strong>. Coin win rate must be at or above this to stay tradeable.</span>
+            </label>
+            <label>Win-rate ceiling % (exclude above — 0 = off)
+              <div class="slider-row">
+                <input id="bot-asset-auto-exclude-ceiling" type="range" min="0" max="100" step="1" />
+                <span class="slider-value" id="bot-asset-auto-exclude-ceiling-value">—</span>
+              </div>
+              <span class="field-hint">Default <strong>0</strong> (disabled). Rarely needed — can exclude runaway winners if desired.</span>
+            </label>
+            <label>Lookback (last N closed trades)
+              <div class="slider-row">
+                <input id="bot-asset-stats-lookback" type="range" min="10" max="200" step="5" />
+                <span class="slider-value" id="bot-asset-stats-lookback-value">—</span>
+              </div>
+              <span class="field-hint">Default <strong>50</strong>. How many recent closed trades count toward each asset's stats.</span>
+            </label>
+            <div id="bot-asset-stats-list" class="model-setups-list"></div>
+          </div>
+
           <h4 class="bot-panel-subhead">Entry</h4>
           <label>MODEL fade (opposite side)
             <select id="bot-model-invert">

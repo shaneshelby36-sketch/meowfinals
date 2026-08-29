@@ -197,7 +197,16 @@ function isKalshiTradeEnabled(symbol, config = null) {
 }
 
 function tradeableKalshiSymbols(config = null) {
-  return resolveAutoTradeSymbols(config);
+  const all = resolveAutoTradeSymbols(config);
+  const excluded = new Set(
+    String((config && config.assetExcludedSymbols) || '').split(/[,|\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
+  );
+  if (!excluded.size) return all;
+  // Pinned symbols are never excluded even if in assetExcludedSymbols.
+  const pinned = new Set(
+    String((config && config.assetPinnedSymbols) || '').split(/[,|\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
+  );
+  return all.filter(s => !excluded.has(s) || pinned.has(s));
 }
 
 /**
@@ -343,6 +352,59 @@ const MODEL_SETUPS = [
     modelFastRedCents: 5,
   },
 ];
+
+/** Default lookback window for per-asset rolling stats (number of recent closed trades). */
+const ASSET_STATS_LOOKBACK_DEFAULT = 30;
+/** Auto-exclude a coin when its win rate drops below this % (over min sample). */
+const ASSET_AUTO_EXCLUDE_FLOOR_DEFAULT = 45;
+/** Re-enable an excluded coin when its win rate climbs back above this %. */
+const ASSET_AUTO_EXCLUDE_CEILING_DEFAULT = 60;
+/** Minimum closed trades before auto-exclude can fire for a coin. */
+const ASSET_AUTO_EXCLUDE_MIN_TRADES_DEFAULT = 10;
+
+/**
+ * Per-asset rolling stats over the most recent `lookback` closed MODEL trades.
+ * Returns an array of { symbol, trades, wins, losses, be, pnlCents, winRatePct, excluded, pinned }.
+ */
+function computeAssetStats(trades, config = {}) {
+  const lookback = Number(config.assetStatsLookback) > 0
+    ? Math.round(Number(config.assetStatsLookback))
+    : ASSET_STATS_LOOKBACK_DEFAULT;
+  const pinnedSet = new Set(
+    String(config.assetPinnedSymbols || '').split(/[,|\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
+  );
+  const excludedSet = new Set(
+    String(config.assetExcludedSymbols || '').split(/[,|\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
+  );
+  // Take the last `lookback` closed MODEL trades.
+  const closed = (trades || [])
+    .filter(t => t && String(t.status) === 'closed' && (!t.strategy || String(t.strategy).toLowerCase() === 'model'))
+    .slice(-lookback);
+
+  const bySymbol = Object.create(null);
+  for (const t of closed) {
+    const sym = String(t.symbol || '').toUpperCase();
+    if (!sym) continue;
+    if (!bySymbol[sym]) bySymbol[sym] = { symbol: sym, trades: 0, wins: 0, losses: 0, be: 0, pnlCents: 0 };
+    const b = bySymbol[sym];
+    const p = Number(t.pnlCents);
+    if (!Number.isFinite(p)) continue;
+    b.trades += 1;
+    b.pnlCents += p;
+    if (p > 0) b.wins += 1;
+    else if (p < 0) b.losses += 1;
+    else b.be += 1;
+  }
+
+  return Object.values(bySymbol)
+    .sort((a, b) => b.trades - a.trades)
+    .map(b => ({
+      ...b,
+      winRatePct: b.trades ? +((b.wins / b.trades) * 100).toFixed(1) : null,
+      excluded: excludedSet.has(b.symbol),
+      pinned: pinnedSet.has(b.symbol),
+    }));
+}
 
 function summarizeClosedModelTrades(trades) {
   let pnlCents = 0;
@@ -3180,6 +3242,13 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelLiveLeanMarginPct',
   'modelExtremeLiveLeanExitPct',
   'modelEntryLiveLeanMarginPct',
+  'assetStatsLookback',
+  'assetAutoExcludeEnabled',
+  'assetAutoExcludeMinTrades',
+  'assetAutoExcludeFloor',
+  'assetAutoExcludeCeiling',
+  'assetPinnedSymbols',
+  'assetExcludedSymbols',
   'modelMinEntryLeanPct',
   'modelMinEntryLeanPctSOL',
   'modelMinEntryLeanPctBTC',
@@ -4406,6 +4475,13 @@ class TradingBot {
       autoTradeSymbols: DEFAULT_AUTO_TRADE_SYMBOLS.join(','),
       activeSetupId: 'core',
       modelAutoSwitchSetup: 'off',
+      assetStatsLookback: ASSET_STATS_LOOKBACK_DEFAULT,
+      assetAutoExcludeEnabled: 'off',
+      assetAutoExcludeMinTrades: ASSET_AUTO_EXCLUDE_MIN_TRADES_DEFAULT,
+      assetAutoExcludeFloor: ASSET_AUTO_EXCLUDE_FLOOR_DEFAULT,
+      assetAutoExcludeCeiling: ASSET_AUTO_EXCLUDE_CEILING_DEFAULT,
+      assetPinnedSymbols: '',
+      assetExcludedSymbols: '',
       modelShadowBooks: 'off',
       modelAutoSwitchLowAvailDollars: MODEL_AUTO_SWITCH_LOW_AVAIL_DEFAULT,
       modelAutoSwitchMinLeadDollars: MODEL_AUTO_SWITCH_MIN_LEAD_DEFAULT,
@@ -4792,6 +4868,60 @@ class TradingBot {
   _modelShadowBooksEnabled() {
     const v = String(this.config.modelShadowBooks == null ? 'off' : this.config.modelShadowBooks).toLowerCase();
     return !(v === 'off' || v === 'false' || v === '0' || v === 'no');
+  }
+
+  /**
+   * Check per-asset rolling stats and auto-exclude/re-enable coins from
+   * autoTradeSymbols based on win rate thresholds. Pinned coins are never touched.
+   */
+  _checkAssetAutoExclusions() {
+    const enabled = String(this.config.assetAutoExcludeEnabled || 'off').toLowerCase();
+    if (enabled === 'off' || enabled === 'false' || enabled === '0') return;
+    const trades = loadTradeLog();
+    const stats = computeAssetStats(trades, this.config);
+    const minTrades = Number(this.config.assetAutoExcludeMinTrades) > 0
+      ? Math.round(Number(this.config.assetAutoExcludeMinTrades))
+      : ASSET_AUTO_EXCLUDE_MIN_TRADES_DEFAULT;
+    const floor = Number.isFinite(Number(this.config.assetAutoExcludeFloor))
+      ? Number(this.config.assetAutoExcludeFloor)
+      : ASSET_AUTO_EXCLUDE_FLOOR_DEFAULT;
+    const ceiling = Number.isFinite(Number(this.config.assetAutoExcludeCeiling))
+      ? Number(this.config.assetAutoExcludeCeiling)
+      : ASSET_AUTO_EXCLUDE_CEILING_DEFAULT;
+    const pinnedSet = new Set(
+      String(this.config.assetPinnedSymbols || '').split(/[,|\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
+    );
+    const excludedSet = new Set(
+      String(this.config.assetExcludedSymbols || '').split(/[,|\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean)
+    );
+
+    let changed = false;
+    for (const s of stats) {
+      if (!s.symbol || pinnedSet.has(s.symbol)) continue;
+      if (s.trades < minTrades) continue;
+      const wr = s.winRatePct;
+      if (!Number.isFinite(wr)) continue;
+      if (!excludedSet.has(s.symbol) && wr < floor) {
+        excludedSet.add(s.symbol);
+        this._logActivity(
+          `Auto-excluded ${s.symbol}: win rate ${wr}% < ${floor}% over last ${s.trades} trades.`,
+          { symbol: s.symbol, winRate: wr, threshold: floor }
+        );
+        changed = true;
+      } else if (excludedSet.has(s.symbol) && wr >= ceiling) {
+        excludedSet.delete(s.symbol);
+        this._logActivity(
+          `Auto-re-enabled ${s.symbol}: win rate ${wr}% recovered above ${ceiling}% over last ${s.trades} trades.`,
+          { symbol: s.symbol, winRate: wr, threshold: ceiling }
+        );
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      this.config.assetExcludedSymbols = [...excludedSet].join(',');
+      this._persist();
+    }
   }
 
   /**
@@ -5630,6 +5760,7 @@ class TradingBot {
         this._snapshotSetupAvails(this._modelSetupScoreboard());
       }
       this._maybeAutoSwitchModelSetup();
+      this._checkAssetAutoExclusions();
     }
   }
 
@@ -7644,11 +7775,25 @@ class TradingBot {
       const base = Number.isFinite(prevPeak) ? prevPeak : Number.isFinite(entryPeak) ? entryPeak : heldSideBidCents;
       const nextPeak = Math.max(base, heldSideBidCents);
       if (!Number.isFinite(prevPeak) || nextPeak > prevPeak) {
+        // New peak — reset touch counter
         trade.peakHeldBidCents = nextPeak;
         trade.peakHeldBidAt = now;
+        trade.peakTouchCount = 0;
         this._persist();
-      } else if (!Number.isFinite(Number(trade.peakHeldBidAt))) {
-        trade.peakHeldBidAt = now;
+      } else {
+        if (!Number.isFinite(Number(trade.peakHeldBidAt))) {
+          trade.peakHeldBidAt = now;
+        }
+        // Count touches: bid within 1¢ of peak while armed (green ≥ armCents).
+        const _armCentsNow = modelTrailArmCents(this.config);
+        const _greenNow = Number.isFinite(Number(trade.entryPriceCents))
+          ? Math.round(heldSideBidCents - Number(trade.entryPriceCents))
+          : -1;
+        const _atPeak = Math.round(heldSideBidCents) >= Math.round(nextPeak) - 2;
+        if (_atPeak && _greenNow >= _armCentsNow) {
+          trade.peakTouchCount = (Number(trade.peakTouchCount) || 0) + 1;
+          this._persist();
+        }
       }
     }
     // For stop/TP timing use the earliest known close so we don't hold into the next session.
@@ -8373,6 +8518,17 @@ class TradingBot {
           await exitModelPreSettle('model_late_exit');
           return;
         }
+      }
+
+      // Peak-touch TP: bid has touched the high-water mark 3 times while armed
+      // without breaking through to a new high — price is rejecting the ceiling, bank it.
+      if (bidOk && armed && flatOrGreen && (Number(trade.peakTouchCount) || 0) >= 3) {
+        this.lastDecision =
+          `Peak touched ${trade.peakTouchCount}× at ${Math.round(peak)}¢ without new high on ${trade.symbol} — banking +${greenCents}¢ at bid.`;
+        await this._closePosition(trade, heldSideBidCents, 'take_profit', {
+          liveSellPriceCents: heldSideBidCents,
+        });
+        return;
       }
 
       // Target hit — bank at slider green (after open grace; no 30s wait once at target).
@@ -11631,6 +11787,7 @@ class TradingBot {
         lastSwitchAt: this._lastAutoSetupSwitchAt || null,
         note: this._lastAutoSwitchNote || null,
       },
+      assetStats: computeAssetStats(loadTradeLog(), this.config),
       settleWindowRec,
       stats: {
         totalAttempts: this.ledger.trades.length, // current period open + closed
@@ -11929,4 +12086,6 @@ module.exports = {
   EDGE_PRE_CLOSE_MINUTES_DEFAULT,
   EDGE_BREAKEVEN_AFTER_MINUTES_DEFAULT,
   MARKET_REGIME_WINDOW_MINUTES,
+  computeAssetStats,
+  ASSET_STATS_LOOKBACK_DEFAULT,
 };
