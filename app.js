@@ -1699,6 +1699,14 @@ const SLIDER_UNITS = {
   'bot-minentries': (v) => `${Math.round(v)}¢`,
   'bot-model-confidence': (v) => `${Math.round(v)}%`,
   'bot-model-min-entry-lean': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-model-min-entry-lean-sol': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-model-min-entry-lean-btc': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-model-min-entry-lean-eth': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-model-min-entry-lean-xrp': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-model-min-entry-lean-doge': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-model-min-entry-lean-bnb': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-model-min-entry-lean-near': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-model-min-entry-lean-hype': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-live-favor': (v) => (Number(v) <= 0 ? 'any lead' : `≥${Math.round(v)} pts`),
   'bot-model-min-room-floor': (v) => (Number(v) <= 0 ? 'off' : `≥${Math.round(v)}¢`),
   'bot-model-signal-dom': (v) => {
@@ -2128,6 +2136,14 @@ function wireSliderDisplays() {
     'bot-model-confidence',
     'bot-model-live-favor',
     'bot-model-min-entry-lean',
+    'bot-model-min-entry-lean-sol',
+    'bot-model-min-entry-lean-btc',
+    'bot-model-min-entry-lean-eth',
+    'bot-model-min-entry-lean-xrp',
+    'bot-model-min-entry-lean-doge',
+    'bot-model-min-entry-lean-bnb',
+    'bot-model-min-entry-lean-near',
+    'bot-model-min-entry-lean-hype',
     'bot-model-signal-dom',
     'bot-model-confirm-cross',
     'bot-model-confirm-ext',
@@ -2272,6 +2288,14 @@ function wireBotConfigAutoSave() {
     'bot-model-confidence',
     'bot-model-live-favor',
     'bot-model-min-entry-lean',
+    'bot-model-min-entry-lean-sol',
+    'bot-model-min-entry-lean-btc',
+    'bot-model-min-entry-lean-eth',
+    'bot-model-min-entry-lean-xrp',
+    'bot-model-min-entry-lean-doge',
+    'bot-model-min-entry-lean-bnb',
+    'bot-model-min-entry-lean-near',
+    'bot-model-min-entry-lean-hype',
     'bot-model-signal-dom',
     'bot-model-confirm-cross',
     'bot-model-confirm-ext',
@@ -2408,6 +2432,38 @@ async function loadBotConfigIntoForm() {
     if (modelMinEntryLean) {
       modelMinEntryLean.value =
         c.modelMinEntryLeanPct != null ? c.modelMinEntryLeanPct : 65;
+    }
+    const modelMinEntryLeanSOL = document.getElementById('bot-model-min-entry-lean-sol');
+    if (modelMinEntryLeanSOL) {
+      modelMinEntryLeanSOL.value = c.modelMinEntryLeanPctSOL != null ? c.modelMinEntryLeanPctSOL : 0;
+    }
+    const modelMinEntryLeanBTC = document.getElementById('bot-model-min-entry-lean-btc');
+    if (modelMinEntryLeanBTC) {
+      modelMinEntryLeanBTC.value = c.modelMinEntryLeanPctBTC != null ? c.modelMinEntryLeanPctBTC : 0;
+    }
+    const modelMinEntryLeanETH = document.getElementById('bot-model-min-entry-lean-eth');
+    if (modelMinEntryLeanETH) {
+      modelMinEntryLeanETH.value = c.modelMinEntryLeanPctETH != null ? c.modelMinEntryLeanPctETH : 0;
+    }
+    const modelMinEntryLeanXRP = document.getElementById('bot-model-min-entry-lean-xrp');
+    if (modelMinEntryLeanXRP) {
+      modelMinEntryLeanXRP.value = c.modelMinEntryLeanPctXrp != null ? c.modelMinEntryLeanPctXrp : 0;
+    }
+    const modelMinEntryLeanDOGE = document.getElementById('bot-model-min-entry-lean-doge');
+    if (modelMinEntryLeanDOGE) {
+      modelMinEntryLeanDOGE.value = c.modelMinEntryLeanPctDoge != null ? c.modelMinEntryLeanPctDoge : 0;
+    }
+    const modelMinEntryLeanBNB = document.getElementById('bot-model-min-entry-lean-bnb');
+    if (modelMinEntryLeanBNB) {
+      modelMinEntryLeanBNB.value = c.modelMinEntryLeanPctBnb != null ? c.modelMinEntryLeanPctBnb : 0;
+    }
+    const modelMinEntryLeanNEAR = document.getElementById('bot-model-min-entry-lean-near');
+    if (modelMinEntryLeanNEAR) {
+      modelMinEntryLeanNEAR.value = c.modelMinEntryLeanPctNear != null ? c.modelMinEntryLeanPctNear : 0;
+    }
+    const modelMinEntryLeanHYPE = document.getElementById('bot-model-min-entry-lean-hype');
+    if (modelMinEntryLeanHYPE) {
+      modelMinEntryLeanHYPE.value = c.modelMinEntryLeanPctHype != null ? c.modelMinEntryLeanPctHype : 0;
     }
     const modelSignalDom = document.getElementById('bot-model-signal-dom');
     if (modelSignalDom) {
@@ -2637,6 +2693,15 @@ async function loadBotConfigIntoForm() {
       'bot-minentries',
       'bot-model-confidence',
       'bot-model-live-favor',
+      'bot-model-min-entry-lean',
+      'bot-model-min-entry-lean-sol',
+      'bot-model-min-entry-lean-btc',
+      'bot-model-min-entry-lean-eth',
+      'bot-model-min-entry-lean-xrp',
+      'bot-model-min-entry-lean-doge',
+      'bot-model-min-entry-lean-bnb',
+      'bot-model-min-entry-lean-near',
+      'bot-model-min-entry-lean-hype',
       'bot-model-signal-dom',
       'bot-model-confirm-cross',
       'bot-model-confirm-ext',
@@ -2826,6 +2891,14 @@ async function saveBotConfig(opts = {}) {
     modelEntryLiveLeanMarginPct: parseFloat(document.getElementById('bot-model-live-favor')?.value || '2'),
     modelSoftLeanMarginPct: parseFloat(document.getElementById('bot-model-soft-lean-value')?.dataset.value || '3'),
     modelMinEntryLeanPct: parseFloat(document.getElementById('bot-model-min-entry-lean')?.value || '65'),
+    modelMinEntryLeanPctSOL: parseFloat(document.getElementById('bot-model-min-entry-lean-sol')?.value || '0'),
+    modelMinEntryLeanPctBTC: parseFloat(document.getElementById('bot-model-min-entry-lean-btc')?.value || '0'),
+    modelMinEntryLeanPctETH: parseFloat(document.getElementById('bot-model-min-entry-lean-eth')?.value || '0'),
+    modelMinEntryLeanPctXrp: parseFloat(document.getElementById('bot-model-min-entry-lean-xrp')?.value || '0'),
+    modelMinEntryLeanPctDoge: parseFloat(document.getElementById('bot-model-min-entry-lean-doge')?.value || '0'),
+    modelMinEntryLeanPctBnb: parseFloat(document.getElementById('bot-model-min-entry-lean-bnb')?.value || '0'),
+    modelMinEntryLeanPctNear: parseFloat(document.getElementById('bot-model-min-entry-lean-near')?.value || '0'),
+    modelMinEntryLeanPctHype: parseFloat(document.getElementById('bot-model-min-entry-lean-hype')?.value || '0'),
     modelSignalDominanceMin: (() => {
       const raw = parseFloat(document.getElementById('bot-model-signal-dom')?.value || '0');
       if (!Number.isFinite(raw) || raw <= 0) return 0;

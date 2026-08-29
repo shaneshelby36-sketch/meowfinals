@@ -708,6 +708,15 @@ const FORCE_EXIT_ESCALATE_MS_DEFAULT = 8_000;
 const MODEL_ENTRY_LIVE_LEAN_MARGIN_DEFAULT = 2;
 /** Entry: held-side live prob must be at least this % (0 = off). */
 const MODEL_MIN_ENTRY_LEAN_PCT_DEFAULT = 65;
+/** Per-asset entry lean overrides — 0 = fall back to global modelMinEntryLeanPct. */
+const MODEL_MIN_ENTRY_LEAN_SOL_DEFAULT = 0;
+const MODEL_MIN_ENTRY_LEAN_BTC_DEFAULT = 0;
+const MODEL_MIN_ENTRY_LEAN_ETH_DEFAULT = 0;
+const MODEL_MIN_ENTRY_LEAN_XRP_DEFAULT = 0;
+const MODEL_MIN_ENTRY_LEAN_DOGE_DEFAULT = 0;
+const MODEL_MIN_ENTRY_LEAN_BNB_DEFAULT = 0;
+const MODEL_MIN_ENTRY_LEAN_NEAR_DEFAULT = 0;
+const MODEL_MIN_ENTRY_LEAN_HYPE_DEFAULT = 0;
 /** Don't early-exit a Model hold until it's been open at least this long. */
 const MODEL_MIN_HOLD_MS_DEFAULT = 4_000;
 /** After Model BE/TP, sit out that coin this long before rebuy. */
@@ -1418,9 +1427,18 @@ function modelMinEntryLeanPct(config = {}) {
   return MODEL_MIN_ENTRY_LEAN_PCT_DEFAULT;
 }
 
+/** Per-asset lean minimum — returns the override for symbol if set, else global. */
+function modelMinEntryLeanPctForSymbol(symbol, config = {}) {
+  const sym = String(symbol || '').toUpperCase();
+  const key = `modelMinEntryLeanPct${sym.charAt(0)}${sym.slice(1).toLowerCase()}`;
+  const override = Number(config[key]);
+  if (Number.isFinite(override) && override > 0) return Math.round(Math.min(99, override));
+  return modelMinEntryLeanPct(config);
+}
+
 /** Block entries when held-side live lean is too soft (e.g. 72% NO on a 74¢ ticket). */
-function modelMinEntryLeanGate({ window, side, config = {} } = {}) {
-  const need = modelMinEntryLeanPct(config);
+function modelMinEntryLeanGate({ window, side, config = {}, symbol } = {}) {
+  const need = modelMinEntryLeanPctForSymbol(symbol, config);
   if (!(need > 0)) return { ok: true, skipped: true };
   const held = modelHeldSideProb(window, side);
   if (!Number.isFinite(held)) {
@@ -3163,6 +3181,14 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelExtremeLiveLeanExitPct',
   'modelEntryLiveLeanMarginPct',
   'modelMinEntryLeanPct',
+  'modelMinEntryLeanPctSOL',
+  'modelMinEntryLeanPctBTC',
+  'modelMinEntryLeanPctETH',
+  'modelMinEntryLeanPctXrp',
+  'modelMinEntryLeanPctDoge',
+  'modelMinEntryLeanPctBnb',
+  'modelMinEntryLeanPctNear',
+  'modelMinEntryLeanPctHype',
   'modelSoftLeanMarginPct',
   'modelSignalDominanceMin',
   'modelTrailCents',
@@ -4288,6 +4314,14 @@ class TradingBot {
       modelExtremeLiveLeanExitPct: MODEL_EXTREME_LIVE_LEAN_EXIT_PCT_DEFAULT,
       modelEntryLiveLeanMarginPct: MODEL_ENTRY_LIVE_LEAN_MARGIN_DEFAULT,
       modelMinEntryLeanPct: MODEL_MIN_ENTRY_LEAN_PCT_DEFAULT,
+      modelMinEntryLeanPctSOL: MODEL_MIN_ENTRY_LEAN_SOL_DEFAULT,
+      modelMinEntryLeanPctBTC: MODEL_MIN_ENTRY_LEAN_BTC_DEFAULT,
+      modelMinEntryLeanPctETH: MODEL_MIN_ENTRY_LEAN_ETH_DEFAULT,
+      modelMinEntryLeanPctXrp: MODEL_MIN_ENTRY_LEAN_XRP_DEFAULT,
+      modelMinEntryLeanPctDoge: MODEL_MIN_ENTRY_LEAN_DOGE_DEFAULT,
+      modelMinEntryLeanPctBnb: MODEL_MIN_ENTRY_LEAN_BNB_DEFAULT,
+      modelMinEntryLeanPctNear: MODEL_MIN_ENTRY_LEAN_NEAR_DEFAULT,
+      modelMinEntryLeanPctHype: MODEL_MIN_ENTRY_LEAN_HYPE_DEFAULT,
       modelSoftLeanMarginPct: MODEL_SOFT_LEAN_MARGIN_DEFAULT,
       modelSignalDominanceMin: MODEL_SIGNAL_DOMINANCE_MIN_DEFAULT,
       modelTrailCents: MODEL_TRAIL_CENTS_DEFAULT,
@@ -10693,7 +10727,7 @@ class TradingBot {
     }
 
     const entryHeldProb = side === 'yes' ? Number(window.probabilityUp) : Number(window.probabilityDown);
-    const leanGate = modelMinEntryLeanGate({ window, side, config: this.config });
+    const leanGate = modelMinEntryLeanGate({ window, side, config: this.config, symbol });
     if (!leanGate.ok) {
       say(`Waiting: ${symbol} ${String(side).toUpperCase()} — ${leanGate.reason}.`);
       return null;
@@ -11675,6 +11709,15 @@ module.exports = {
   modelEntryDumpRisk,
   modelMinEntryLeanPct,
   modelMinEntryLeanGate,
+  modelMinEntryLeanPctForSymbol,
+  MODEL_MIN_ENTRY_LEAN_SOL_DEFAULT,
+  MODEL_MIN_ENTRY_LEAN_BTC_DEFAULT,
+  MODEL_MIN_ENTRY_LEAN_ETH_DEFAULT,
+  MODEL_MIN_ENTRY_LEAN_XRP_DEFAULT,
+  MODEL_MIN_ENTRY_LEAN_DOGE_DEFAULT,
+  MODEL_MIN_ENTRY_LEAN_BNB_DEFAULT,
+  MODEL_MIN_ENTRY_LEAN_NEAR_DEFAULT,
+  MODEL_MIN_ENTRY_LEAN_HYPE_DEFAULT,
   MODEL_MIN_ENTRY_LEAN_PCT_DEFAULT,
   modelEngineClearlyWithUs,
   modelNearFlatCents,
