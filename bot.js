@@ -7625,16 +7625,24 @@ class TradingBot {
    */
   _sideBidCentsReal(market, side) {
     if (!market) return null;
+    // last_price is a real fill — useful backstop when both sides of the book
+    // are absent (collapsing market where bids evaporate faster than asks update).
+    const lastReal = Number.isFinite(market.last_price) && market.last_price >= 1
+      ? market.last_price
+      : null;
     if (side === 'yes') {
-      // Prefer real yes_bid; fall back to complement of no_ask (real observation).
+      // Prefer real yes_bid; fall back to complement of no_ask; then last trade.
       if (market.yes_bid_real && Number.isFinite(market.yes_bid)) return market.yes_bid;
       if (Number.isFinite(market.no_ask)) return Math.max(1, Math.min(99, 100 - market.no_ask));
+      if (lastReal != null) return lastReal;
       return null;
     }
     if (side === 'no') {
-      // Prefer real no_bid; fall back to complement of yes_ask (real observation).
+      // Prefer real no_bid; fall back to complement of yes_ask; then last trade.
       if (market.no_bid_real && Number.isFinite(market.no_bid)) return market.no_bid;
       if (Number.isFinite(market.yes_ask)) return Math.max(1, Math.min(99, 100 - market.yes_ask));
+      // last_price is a YES price — complement gives the NO equivalent.
+      if (lastReal != null) return Math.max(1, Math.min(99, 100 - lastReal));
       return null;
     }
     return null;
