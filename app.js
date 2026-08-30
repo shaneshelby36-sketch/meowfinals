@@ -1727,6 +1727,8 @@ const SLIDER_UNITS = {
   'bot-model-stagnation-sensitivity': (v) => (Number(v) <= 0 ? 'any progress' : `≥${Math.round(v)}¢`),
   'bot-model-be-chase-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-max-adverse': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
+  'bot-model-underwater-window': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
+  'bot-model-underwater-ratio': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-rapid-adverse': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
   'bot-model-prob-drift': (v) => `${Math.round(v)}pts`,
   'bot-model-live-lean-margin': (v) => `${Math.round(v)}%`,
@@ -2233,6 +2235,8 @@ function wireSliderDisplays() {
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
     'bot-model-max-adverse',
+    'bot-model-underwater-window',
+    'bot-model-underwater-ratio',
     'bot-model-rapid-adverse',
     'bot-model-prob-drift',
     'bot-model-live-lean-margin',
@@ -2391,6 +2395,8 @@ function wireBotConfigAutoSave() {
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
     'bot-model-max-adverse',
+    'bot-model-underwater-window',
+    'bot-model-underwater-ratio',
     'bot-model-rapid-adverse',
     'bot-model-prob-drift',
     'bot-model-live-lean-margin',
@@ -2617,6 +2623,14 @@ async function loadBotConfigIntoForm() {
     if (modelMaxAdverse) {
       modelMaxAdverse.value = c.modelMaxAdverseCents != null ? c.modelMaxAdverseCents : 0;
     }
+    const modelUnderwaterWindow = document.getElementById('bot-model-underwater-window');
+    if (modelUnderwaterWindow) {
+      modelUnderwaterWindow.value = c.modelUnderwaterWindowSeconds != null ? c.modelUnderwaterWindowSeconds : 90;
+    }
+    const modelUnderwaterRatio = document.getElementById('bot-model-underwater-ratio');
+    if (modelUnderwaterRatio) {
+      modelUnderwaterRatio.value = c.modelUnderwaterRatioPct != null ? c.modelUnderwaterRatioPct : 70;
+    }
     const modelRapidAdverse = document.getElementById('bot-model-rapid-adverse');
     if (modelRapidAdverse) {
       modelRapidAdverse.value =
@@ -2822,6 +2836,8 @@ async function loadBotConfigIntoForm() {
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
     'bot-model-max-adverse',
+    'bot-model-underwater-window',
+    'bot-model-underwater-ratio',
     'bot-model-rapid-adverse',
     'bot-model-prob-drift',
     'bot-model-live-lean-margin',
@@ -3040,6 +3056,8 @@ async function saveBotConfig(opts = {}) {
     ),
     modelBeChaseSeconds: parseFloat(document.getElementById('bot-model-be-chase-sec')?.value || '20'),
     modelMaxAdverseCents: parseFloat(document.getElementById('bot-model-max-adverse')?.value || '0'),
+    modelUnderwaterWindowSeconds: parseFloat(document.getElementById('bot-model-underwater-window')?.value || '90'),
+    modelUnderwaterRatioPct: parseFloat(document.getElementById('bot-model-underwater-ratio')?.value || '70'),
     modelRapidAdverseCents: parseFloat(document.getElementById('bot-model-rapid-adverse')?.value || '0'),
     modelProbDriftPts: parseFloat(document.getElementById('bot-model-prob-drift')?.value || '15'),
     modelLiveLeanMarginPct: parseFloat(document.getElementById('bot-model-live-lean-margin')?.value || '1'),

@@ -641,6 +641,20 @@
             </div>
             <span class="field-hint"><strong>Off (0)</strong>. Cut immediately if bid drops this many ¢ below entry — no lean check, no conditions. Catches fast price collapses before lean reacts. Recommended: <strong>25¢</strong>.</span>
           </label>
+          <label style="border: 2px solid #f59e0b; border-radius: 6px; padding: 8px;">⏱ UNDERWATER RATIO CUT — window (seconds)
+            <div class="slider-row">
+              <input id="bot-model-underwater-window" type="range" min="0" max="180" step="5" />
+              <span class="slider-value" id="bot-model-underwater-window-value">—</span>
+            </div>
+            <span class="field-hint">How many seconds to observe before checking the ratio. <strong>0 = off entirely</strong>. Default <strong>90s</strong>. If bid spends too much time underwater during this window, cut immediately.</span>
+          </label>
+          <label style="border: 2px solid #f59e0b; border-radius: 6px; padding: 8px;">⏱ UNDERWATER RATIO CUT — threshold (%)
+            <div class="slider-row">
+              <input id="bot-model-underwater-ratio" type="range" min="0" max="100" step="5" />
+              <span class="slider-value" id="bot-model-underwater-ratio-value">—</span>
+            </div>
+            <span class="field-hint">If this % of cycles in the window were below entry, cut unconditionally — lean irrelevant. Default <strong>70%</strong>. Lower = cuts sooner on mild dips; higher = only cuts on persistent underwater trades.</span>
+          </label>
           <label>MODEL rapid adverse (¢)
             <div class="slider-row">
               <input id="bot-model-rapid-adverse" type="range" min="0" max="15" step="1" />

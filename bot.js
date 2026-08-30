@@ -886,6 +886,10 @@ const MODEL_STAGNATION_MIN_PROGRESS_CENTS_DEFAULT = 3;
  * against → cut immediately (after open grace). Caps cliffs like 81→20. 0 = off.
  */
 const MODEL_RAPID_ADVERSE_CENTS_DEFAULT = 0;
+/** Seconds to observe before firing the underwater-ratio cut. Default 90s. 0 = off. */
+const MODEL_UNDERWATER_WINDOW_SECONDS_DEFAULT = 90;
+/** % of cycles that must be underwater to trigger the cut (0–100). Default 70. */
+const MODEL_UNDERWATER_RATIO_PCT_DEFAULT = 70;
 /** After crossing breakeven, must reach trail-arm (+3¢) within this many seconds or scratch BE. 0 = off. */
 const MODEL_BE_CHASE_SECONDS_DEFAULT = 20;
 /** Near settle: close unless losing more than this many ¢ (50 = ride only big losers). */
@@ -1940,6 +1944,20 @@ function modelRapidAdverseCents(config = {}) {
   if (Number.isFinite(n) && n <= 0) return 0;
   if (Number.isFinite(n) && n > 0) return Math.round(n);
   return MODEL_RAPID_ADVERSE_CENTS_DEFAULT;
+}
+
+function modelUnderwaterWindowSeconds(config = {}) {
+  const n = Number(config.modelUnderwaterWindowSeconds);
+  if (Number.isFinite(n) && n <= 0) return 0;
+  if (Number.isFinite(n) && n > 0) return Math.round(n);
+  return MODEL_UNDERWATER_WINDOW_SECONDS_DEFAULT;
+}
+
+function modelUnderwaterRatioPct(config = {}) {
+  const n = Number(config.modelUnderwaterRatioPct);
+  if (Number.isFinite(n) && n <= 0) return 0;
+  if (Number.isFinite(n) && n > 0) return Math.min(100, Math.round(n));
+  return MODEL_UNDERWATER_RATIO_PCT_DEFAULT;
 }
 
 /** Peak ¢ above entry — how much favorable progress the trade actually made. */
@@ -3320,6 +3338,8 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelStagnationSeconds',
   'modelStagnationMinProgressCents',
   'modelRapidAdverseCents',
+  'modelUnderwaterWindowSeconds',
+  'modelUnderwaterRatioPct',
   'modelBeChaseSeconds',
   'modelLeanDecayDropPts',
   'modelLeanDecayStallSeconds',
@@ -4454,6 +4474,8 @@ class TradingBot {
       modelStagnationSeconds: MODEL_STAGNATION_SECONDS_DEFAULT,
       modelStagnationMinProgressCents: MODEL_STAGNATION_MIN_PROGRESS_CENTS_DEFAULT,
       modelRapidAdverseCents: MODEL_RAPID_ADVERSE_CENTS_DEFAULT,
+      modelUnderwaterWindowSeconds: MODEL_UNDERWATER_WINDOW_SECONDS_DEFAULT,
+      modelUnderwaterRatioPct: MODEL_UNDERWATER_RATIO_PCT_DEFAULT,
       modelBeChaseSeconds: MODEL_BE_CHASE_SECONDS_DEFAULT,
       modelLiveLeanMarginPct: MODEL_LIVE_LEAN_MARGIN_DEFAULT,
       modelExtremeLiveLeanExitPct: MODEL_EXTREME_LIVE_LEAN_EXIT_PCT_DEFAULT,
@@ -8203,6 +8225,13 @@ class TradingBot {
       const underwater = bidOk && Number.isFinite(entry) && entry >= 1 && heldSideBidCents < entry;
       const adverseCents =
         underwater && Number.isFinite(entry) ? Math.round(entry - heldSideBidCents) : 0;
+
+      // Time-underwater tick tracking: count cycles above/below entry (skip open grace).
+      if (bidOk && Number.isFinite(entry) && !inOpenGrace) {
+        trade._ticksTotal = (trade._ticksTotal || 0) + 1;
+        if (underwater) trade._ticksUnder = (trade._ticksUnder || 0) + 1;
+      }
+
       const faded = trade.modelInverted === true;
       const againstLocked =
         picked &&
@@ -8495,6 +8524,31 @@ class TradingBot {
           `Hard adverse stop: −${adverseCents}¢ (≥${maxAdverse}¢) on ${trade.symbol} — cutting.`;
         await tryModelAgainstCut('model_against');
         return;
+      }
+
+      // ── UNDERWATER RATIO HARD CUT ─────────────────────────────────────────
+      // If bid spends ≥ ratio% of cycles below entry during the observation
+      // window (default 90s), the thesis isn't playing out — cut unconditionally.
+      // Set modelUnderwaterWindowSeconds=0 to disable entirely.
+      const uwWindowMs = modelUnderwaterWindowSeconds(this.config) * 1000;
+      const uwRatioPct = modelUnderwaterRatioPct(this.config);
+      if (
+        bidOk &&
+        !inOpenGrace &&
+        underwater &&
+        uwWindowMs > 0 &&
+        uwRatioPct > 0 &&
+        heldMs >= uwWindowMs &&
+        heldMs < uwWindowMs + 10_000 &&
+        (trade._ticksTotal || 0) >= 5
+      ) {
+        const ratio = (trade._ticksUnder || 0) / (trade._ticksTotal || 1);
+        if (ratio * 100 >= uwRatioPct) {
+          this.lastDecision =
+            `Underwater ${Math.round(ratio * 100)}% of first ${Math.round(uwWindowMs / 1000)}s on ${trade.symbol} — hard cut.`;
+          await tryModelAgainstCut('model_against');
+          return;
+        }
       }
 
       // Lean-gated dynamic floor: only fires when lean is deteriorating AND bid
@@ -12105,6 +12159,10 @@ module.exports = {
   modelPeakProgressCents,
   MODEL_STAGNATION_SECONDS_DEFAULT,
   MODEL_RAPID_ADVERSE_CENTS_DEFAULT,
+  modelUnderwaterWindowSeconds,
+  modelUnderwaterRatioPct,
+  MODEL_UNDERWATER_WINDOW_SECONDS_DEFAULT,
+  MODEL_UNDERWATER_RATIO_PCT_DEFAULT,
   modelDirectionSupportsHold,
   windowConsensusSupportsSide,
   modelCalibrationEntryGate,
