@@ -533,9 +533,12 @@ async function main() {
   await recompute();
   setInterval(recompute, COMPUTE_INTERVAL_MS);
 
-  // Settlement watchdog: every 4s, force-close any trade past its own
-  // windowCloseTime. Must NOT depend on recomputeInFlight — a hung Coinbase
-  // / Kalshi cycle was letting opens "freeze" into the next 15m session.
+  // Settlement watchdog: force-close any trade past its own windowCloseTime.
+  // Must NOT depend on recomputeInFlight — a hung Coinbase/Kalshi cycle was
+  // letting opens "freeze" into the next 15m session.
+  // At 1 open position: 1 getMarket call/cycle — well under Kalshi's 170 req/s
+  // limit even at 1s. The trade lock prevents overlapping cycles if Kalshi is slow.
+  const MANAGE_WATCHDOG_MS = 1000;
   if (bot) {
     setInterval(() => {
       bot.forceSettleOverdue(latestPrediction).catch((err) => {
@@ -548,8 +551,8 @@ async function main() {
           console.error('[bot] manage-watchdog error:', err.message);
         });
       }
-    }, 2500);
-    console.log('[startup] settle + manage watchdog every 2.5s (independent of prediction loop)');
+    }, MANAGE_WATCHDOG_MS);
+    console.log(`[startup] settle + manage watchdog every ${MANAGE_WATCHDOG_MS}ms (independent of prediction loop)`);
   }
 
   const app = express();
