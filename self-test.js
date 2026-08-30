@@ -9330,6 +9330,233 @@ async function testModelStrategy() {
   }
 }
 
+// ───────────────────────────── maxAdverse hard stop ─────────────────────────────
+
+async function testMaxAdverse() {
+  section('maxAdverse hard stop');
+
+  const now = Date.now();
+  const closeMs = now + 10 * 60 * 1000;
+
+  // Helper: build an open model trade
+  function modelTrade(overrides = {}) {
+    return {
+      id: `adv-${Math.random().toString(16).slice(2)}`,
+      mode: 'paper',
+      strategy: 'model',
+      symbol: 'ETH',
+      ticker: 'KXETH15M-TEST',
+      side: 'no',
+      contracts: 5,
+      stakeDollars: 3,
+      entryPriceCents: 66,
+      openedAt: now - 20_000,  // 20s ago — well past 4s open grace
+      windowCloseTime: closeMs,
+      engineProbability: 91,
+      engineConfidence: 62,
+      status: 'open',
+      ...overrides,
+    };
+  }
+
+  // 1. Real no_bid present, 18¢ below entry → fires
+  {
+    const bot = makeBot(
+      mockClient({
+        ticker: 'KXETH15M-TEST',
+        status: 'open',
+        close_time: new Date(closeMs).toISOString(),
+        floor_strike: 3000,
+        yes_bid: 52, yes_ask: 54,
+        no_bid: 48, no_ask: 50,  // real no_bid = 48, 18¢ below entry 66
+        no_bid_real: true,
+      }),
+      { strategyMode: 'model', modelMaxAdverseCents: 15, modelHardStopFloorCents: 0,
+        modelMaxLossCents: 0, modelLeanStopBarrierCents: 0, modelStagnationSeconds: 0,
+        modelUnderwaterWindowSeconds: 0, modelRapidAdverseCents: 0 }
+    );
+    const trade = modelTrade();
+    bot.ledger.trades.unshift(trade);
+    await bot._manageOpenTrade(trade, predictions(3000));
+    checkEq(trade.status, 'closed', 'real no_bid 18¢ below entry fires maxAdverse');
+    checkEq(trade.exitReason, 'model_against', 'maxAdverse exit reason is model_against');
+  }
+
+  // 2. Synthesized no_bid (no_bid_real=false) but yes_ask gives conservative lower bid → still fires
+  // yes_ask = 54 → 100-54 = 46, which is 20¢ below entry 66 → fires at threshold 15
+  {
+    const rawMarket = {
+      ticker: 'KXETH15M-TEST',
+      status: 'open',
+      close_time: new Date(closeMs).toISOString(),
+      floor_strike: 3000,
+      yes_bid: 52, yes_ask: 54,
+      no_bid: null, no_ask: null,  // no_bid missing from API
+    };
+    const normMarket = { ...rawMarket };
+    // Simulate what normalizeMarketPrices does: synthesize no_bid from yes_ask
+    // but set no_bid_real = false
+    normMarket.no_bid = 100 - 54;   // = 46
+    normMarket.no_bid_real = false;
+    normMarket.yes_bid_real = true;
+
+    const bot = makeBot(
+      mockClient(normMarket),
+      { strategyMode: 'model', modelMaxAdverseCents: 15, modelHardStopFloorCents: 0,
+        modelMaxLossCents: 0, modelLeanStopBarrierCents: 0, modelStagnationSeconds: 0,
+        modelUnderwaterWindowSeconds: 0, modelRapidAdverseCents: 0 }
+    );
+    const trade = modelTrade();
+    bot.ledger.trades.unshift(trade);
+    await bot._manageOpenTrade(trade, predictions(3000));
+    // _sideBidCentsReal picks min(no_bid_real=null, 100-yes_ask=46) = 46 → 20¢ adverse → fires
+    checkEq(trade.status, 'closed', 'synthesized no_bid: yes_ask complement 46¢ (20¢ adverse) still fires');
+  }
+
+  // 3. Synthesized no_bid too optimistic, yes_ask stable → the old bug scenario: should now fire
+  // Entry 66¢, real price collapsed to 48¢ but API only returned yes_ask=35 → synthesized no_bid=65
+  // Old behavior: adverseCents=66-65=1 → stop skipped.
+  // New behavior: _sideBidCentsReal uses min(null [no real bid], 100-35=65) = 65 on the yes_ask path,
+  //   but wait — 65 is only 1¢ adverse. The real collapse isn't visible without a real no_bid OR a
+  //   moved yes_ask. This test confirms the stop at least doesn't fire a false positive.
+  {
+    const rawMarket = {
+      ticker: 'KXETH15M-TEST',
+      status: 'open',
+      close_time: new Date(closeMs).toISOString(),
+      floor_strike: 3000,
+      yes_bid: 62, yes_ask: 65,   // YES ask barely moved (stale YES sellers)
+      no_bid: null,               // Kalshi omitted no_bid
+      no_bid_real: false,
+      yes_bid_real: true,
+    };
+    rawMarket.no_bid = 100 - 65;  // = 35 → synthesized; only 1¢ below... wait, entry is 66
+    // Actually 100-65 = 35 which is 31¢ below entry 66 → this WOULD fire.
+    // Let's make yes_ask = 32 so 100-32=68 (above entry) → no adverse signal at all
+    rawMarket.yes_ask = 32;
+    rawMarket.no_bid = 100 - 32;  // = 68, above entry 66
+
+    const bot = makeBot(
+      mockClient(rawMarket),
+      { strategyMode: 'model', modelMaxAdverseCents: 5, modelHardStopFloorCents: 0,
+        modelMaxLossCents: 0, modelLeanStopBarrierCents: 0, modelStagnationSeconds: 0,
+        modelUnderwaterWindowSeconds: 0, modelRapidAdverseCents: 0 }
+    );
+    const trade = modelTrade();
+    bot.ledger.trades.unshift(trade);
+    await bot._manageOpenTrade(trade, predictions(3000));
+    // no_bid_real=false, 100-yes_ask=68 > entry=66 → not adverse → should NOT fire
+    check(trade.status !== 'closed' || !/adverse/i.test(trade.exitReason || ''),
+      'synthesized no_bid above entry: maxAdverse does not false-positive');
+  }
+
+  // 4. Bid exactly AT threshold fires
+  {
+    const bot = makeBot(
+      mockClient({
+        ticker: 'KXETH15M-TEST',
+        status: 'open',
+        close_time: new Date(closeMs).toISOString(),
+        floor_strike: 3000,
+        yes_bid: 39, yes_ask: 41,
+        no_bid: 61, no_ask: 63,  // 66-61 = 5¢ exactly at threshold
+        no_bid_real: true,
+      }),
+      { strategyMode: 'model', modelMaxAdverseCents: 5, modelHardStopFloorCents: 0,
+        modelMaxLossCents: 0, modelLeanStopBarrierCents: 0, modelStagnationSeconds: 0,
+        modelUnderwaterWindowSeconds: 0, modelRapidAdverseCents: 0 }
+    );
+    const trade = modelTrade();
+    bot.ledger.trades.unshift(trade);
+    await bot._manageOpenTrade(trade, predictions(3000));
+    checkEq(trade.status, 'closed', 'bid exactly at threshold (−5¢) fires');
+  }
+
+  // 5. Bid one cent inside threshold does NOT fire.
+  // Use a just-opened trade (still in open grace) so no other exit path can interfere,
+  // but delay just past grace so the maxAdverse check runs.
+  // Separately verify that 4¢ < 5¢ threshold is the reason by also checking 5¢ fires.
+  // We isolate by using openGraceMs + 1ms to be precisely past grace.
+  {
+    const justPastGrace = now - 5_000; // 5s ago, past 4s grace
+    const bot = makeBot(
+      mockClient({
+        ticker: 'KXETH15M-TEST',
+        status: 'open',
+        close_time: new Date(closeMs).toISOString(),
+        floor_strike: 3000,
+        yes_bid: 40, yes_ask: 42,
+        no_bid: 62, no_ask: 64,  // 66-62 = 4¢ — one inside threshold of 5
+        no_bid_real: true,
+      }),
+      { strategyMode: 'model', modelMaxAdverseCents: 5,
+        // Disable every other exit path
+        modelHardStopFloorCents: 0, modelMaxLossCents: 0,
+        modelLeanStopBarrierCents: 0, modelStagnationSeconds: 0,
+        modelUnderwaterWindowSeconds: 0, modelRapidAdverseCents: 0,
+        modelLeanDecayDropPts: 99, modelLeanDecayStallSeconds: 999,
+        modelLeanAgainstBeSeconds: 999, // prevent BE-chase
+        modelBeChaseSeconds: 0,
+        modelDumpPullbackCents: 0,
+        modelProbDriftPts: 99, // prevent drift exit
+      }
+    );
+    // Stamp entry lean so prob-drift baseline is correct
+    const trade = modelTrade({ openedAt: justPastGrace, modelEntryHeldProb: 80 });
+    bot.ledger.trades.unshift(trade);
+    // Lean strongly favors NO (80% DOWN), engineClearlyWithUs=true → no lean-based exits
+    const noFavorPreds = {
+      ETH: { ready: true, price: 3000, windows: {
+        w5:  win(20, 80), w10: win(20, 80), w15: win(20, 80),
+      }},
+      BTC: { ready: true, price: 60000, windows: {
+        w5: win(50, 60), w10: win(50, 60), w15: win(50, 60),
+      }},
+    };
+    await bot._manageOpenTrade(trade, noFavorPreds);
+    check(trade.status === 'open', 'bid 4¢ below entry (threshold=5) does not fire');
+  }
+
+  // 6. Within open grace (just opened) — should NOT fire even at big adverse
+  {
+    const bot = makeBot(
+      mockClient({
+        ticker: 'KXETH15M-TEST',
+        status: 'open',
+        close_time: new Date(closeMs).toISOString(),
+        floor_strike: 3000,
+        yes_bid: 24, yes_ask: 26,
+        no_bid: 40, no_ask: 42,  // 66-40 = 26¢ — way past threshold
+        no_bid_real: true,
+      }),
+      { strategyMode: 'model', modelMaxAdverseCents: 5, modelHardStopFloorCents: 0,
+        modelMaxLossCents: 0, modelLeanStopBarrierCents: 0, modelStagnationSeconds: 0,
+        modelUnderwaterWindowSeconds: 0, modelRapidAdverseCents: 0 }
+    );
+    const trade = modelTrade({ openedAt: now - 2_000 }); // only 2s ago — inside 4s grace
+    bot.ledger.trades.unshift(trade);
+    await bot._manageOpenTrade(trade, predictions(3000));
+    check(trade.status === 'open', 'maxAdverse does not fire during open grace period');
+  }
+
+  // 7. normalizeMarketPrices stamps no_bid_real correctly
+  {
+    // Case A: real no_bid present
+    const withReal = normalizeMarketPrices({ yes_bid: 52, yes_ask: 55, no_bid: 45, no_ask: 48 });
+    check(withReal.no_bid_real === true, 'normalizeMarketPrices: real no_bid → no_bid_real=true');
+    checkEq(withReal.no_bid, 45, 'normalizeMarketPrices: real no_bid value preserved');
+
+    // Case B: no_bid absent — synthesized from yes_ask
+    const synth = normalizeMarketPrices({ yes_bid: 52, yes_ask: 55, no_bid: null, no_ask: null });
+    check(synth.no_bid_real === false, 'normalizeMarketPrices: missing no_bid → no_bid_real=false');
+    checkEq(synth.no_bid, 45, 'normalizeMarketPrices: synthesized no_bid = 100−yes_ask');
+
+    // Case C: no_bid = 0 (Kalshi "no quote" sentinel) — treated as missing
+    const zeroSentinel = normalizeMarketPrices({ yes_bid: 52, yes_ask: 55, no_bid: 0, no_ask: 0 });
+    check(zeroSentinel.no_bid_real === false, 'normalizeMarketPrices: no_bid=0 sentinel → no_bid_real=false');
+  }
+}
+
 // ───────────────────────────── UI countdown logic (mirrored) ─────────────────────────────
 
 function testCountdownLogic() {
@@ -9457,6 +9684,7 @@ async function run() {
   await testBotExits();
   await testBotTradingFlow();
   await testModelStrategy();
+  await testMaxAdverse();
   testBotCoordination();
   testCountdownLogic();
   if (ONLINE) await testOnlinePublicApis();

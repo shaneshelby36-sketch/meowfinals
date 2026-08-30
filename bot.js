@@ -7015,6 +7015,30 @@ class TradingBot {
           ` — need ≥+${minTp}¢ green (or ≥${MODEL_RICH_BANK_CENTS_DEFAULT}¢). Holding.`;
         return false;
       }
+      // Stall-bank bypasses the minTp floor, but must still be fee-positive.
+      // A +2¢ exit on a small position costs more in fees than it earns.
+      if (
+        reason === 'take_profit' &&
+        isModelTrade(trade) &&
+        opts.stallBank &&
+        !opts.forcePendingExit &&
+        Number.isFinite(entryPx) &&
+        Number.isFinite(bookedExit) &&
+        Math.round(bookedExit) < MODEL_RICH_BANK_CENTS_DEFAULT
+      ) {
+        const n = Math.max(1, Math.floor(Number(trade.contracts) || 1));
+        const entryFeeEst = this._estimateTakerFeesCents(entryPx, n);
+        const exitFeeEst  = this._estimateTakerFeesCents(bookedExit, n);
+        const grossCents  = Math.round(bookedExit - entryPx) * n;
+        const netCents    = grossCents - entryFeeEst - exitFeeEst;
+        if (netCents <= 0) {
+          const green = Math.round(bookedExit - entryPx);
+          this.lastDecision =
+            `Blocked fee-negative stall-bank on ${trade.symbol}: ` +
+            `+${green}¢ gross $${(grossCents / 100).toFixed(2)} < fees $${((entryFeeEst + exitFeeEst) / 100).toFixed(2)} — holding.`;
+          return false;
+        }
+      }
       const isLive = this._isLiveTrade(trade);
       // Official Kalshi settlement pays 0/100 — never send a live sell at those prices.
       const skipLiveSell = opts.skipLiveSell === true || reason === 'settled';
@@ -7557,37 +7581,32 @@ class TradingBot {
   }
 
   /**
-   * Returns the bid for stop-loss purposes. Unlike _sideBidCents, this uses
-   * the most conservative (lowest) available reading rather than the first
-   * available one, so a synthesized complement can't mask a real price drop.
+   * Returns the held-side bid for stop-loss purposes.
    *
-   * Priority for NO side:
-   *   1. Real no_bid from API  (direct observation — use as-is)
-   *   2. 100 − yes_ask         (yes_ask is a real observation; 100−ask is a
-   *                             valid lower-bound but can be stale when YES
-   *                             sellers aren't being hit — only use when
-   *                             it gives a LOWER bid than the synthesized no_bid)
-   *   3. null                  (no reliable data — skip the stop this cycle)
+   * When a real (API-sourced) bid is present, use it directly — it's the
+   * ground truth. When it's absent, fall back to the complement of the
+   * opposite ask (100 − yes_ask for NO side), which is still a real
+   * observation and a reasonable proxy.
    *
-   * For YES side, same logic with roles swapped.
+   * This avoids the original bug where a synthesized no_bid (100 − yes_ask
+   * with a stale yes_ask) masked a real NO bid collapse and prevented the
+   * maxAdverse stop from firing. The normal _sideBidCents path (used for
+   * everything else) still returns the synthesized bid so TP/lean tracking
+   * work as before.
    */
   _sideBidCentsReal(market, side) {
     if (!market) return null;
     if (side === 'yes') {
-      const direct = market.yes_bid_real && Number.isFinite(market.yes_bid) ? market.yes_bid : null;
-      const fromNoAsk = Number.isFinite(market.no_ask)
-        ? Math.max(1, Math.min(99, 100 - market.no_ask))
-        : null;
-      if (direct != null && fromNoAsk != null) return Math.min(direct, fromNoAsk);
-      return direct ?? fromNoAsk ?? null;
+      // Prefer real yes_bid; fall back to complement of no_ask (real observation).
+      if (market.yes_bid_real && Number.isFinite(market.yes_bid)) return market.yes_bid;
+      if (Number.isFinite(market.no_ask)) return Math.max(1, Math.min(99, 100 - market.no_ask));
+      return null;
     }
     if (side === 'no') {
-      const direct = market.no_bid_real && Number.isFinite(market.no_bid) ? market.no_bid : null;
-      const fromYesAsk = Number.isFinite(market.yes_ask)
-        ? Math.max(1, Math.min(99, 100 - market.yes_ask))
-        : null;
-      if (direct != null && fromYesAsk != null) return Math.min(direct, fromYesAsk);
-      return direct ?? fromYesAsk ?? null;
+      // Prefer real no_bid; fall back to complement of yes_ask (real observation).
+      if (market.no_bid_real && Number.isFinite(market.no_bid)) return market.no_bid;
+      if (Number.isFinite(market.yes_ask)) return Math.max(1, Math.min(99, 100 - market.yes_ask));
+      return null;
     }
     return null;
   }
