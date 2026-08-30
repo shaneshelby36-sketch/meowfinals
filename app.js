@@ -1298,6 +1298,11 @@ function buildTradeLogHtml(tradeLog, tradeLogTotal) {
       const troughNote = Number.isFinite(t.troughHeldBidCents)
         ? ` · lo ${Math.round(t.troughHeldBidCents)}¢`
         : '';
+      const beChaseNote = t.beChaseResult === 'achieved'
+        ? ` · bounce ✓`
+        : t.beChaseResult === 'expired'
+          ? ` · bounce ✗`
+          : '';
       let stopNote = '';
       let stopCopy = '';
       if (t.exitReason === 'stop_loss') {
@@ -1341,7 +1346,7 @@ function buildTradeLogHtml(tradeLog, tradeLogTotal) {
           <span class="bot-log-msg">
             <strong>${t.symbol || '?'} ${side}</strong>
             ${status} · ${entry}${t.status === 'closed' ? ` → ${exit}` : ''}
-            ${Number.isFinite(t.stakeDollars) ? ` · $${Number(t.stakeDollars).toFixed(2)}` : ''}${conf}${leanNote}${peakNote}${troughNote}${fees}${gross}${skim}
+            ${Number.isFinite(t.stakeDollars) ? ` · $${Number(t.stakeDollars).toFixed(2)}` : ''}${conf}${leanNote}${peakNote}${troughNote}${beChaseNote}${fees}${gross}${skim}
             <span class="bot-log-sub">opened ${formatTradeTime(t.openedAt)}${t.mode ? ` · ${t.mode}` : ''}</span>
             ${stopNote}
           </span>

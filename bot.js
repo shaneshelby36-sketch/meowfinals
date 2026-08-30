@@ -7027,16 +7027,18 @@ class TradingBot {
           ` — need ≥+${minTp}¢ green (or ≥${MODEL_RICH_BANK_CENTS_DEFAULT}¢). Holding.`;
         return false;
       }
-      // Stall-bank bypasses the minTp floor, but must still be fee-positive.
-      // A +2¢ exit on a small position costs more in fees than it earns.
+      // Any model take_profit below the minTp floor must be fee-positive net.
+      // Stall-bank, late-entry, and other small-green paths can all produce
+      // exits where fees exceed gross — block them all here.
       if (
         reason === 'take_profit' &&
         isModelTrade(trade) &&
-        opts.stallBank &&
         !opts.forcePendingExit &&
         Number.isFinite(entryPx) &&
         Number.isFinite(bookedExit) &&
-        Math.round(bookedExit) < MODEL_RICH_BANK_CENTS_DEFAULT
+        bookedExit > entryPx &&
+        Math.round(bookedExit) < MODEL_RICH_BANK_CENTS_DEFAULT &&
+        Math.round(bookedExit - entryPx) < modelMinTpCents(this.config)
       ) {
         const n = Math.max(1, Math.floor(Number(trade.contracts) || 1));
         const entryFeeEst = this._estimateTakerFeesCents(entryPx, n);
@@ -7046,7 +7048,7 @@ class TradingBot {
         if (netCents <= 0) {
           const green = Math.round(bookedExit - entryPx);
           this.lastDecision =
-            `Blocked fee-negative stall-bank on ${trade.symbol}: ` +
+            `Blocked fee-negative take_profit on ${trade.symbol}: ` +
             `+${green}¢ gross $${(grossCents / 100).toFixed(2)} < fees $${((entryFeeEst + exitFeeEst) / 100).toFixed(2)} — holding.`;
           return false;
         }
@@ -7349,6 +7351,7 @@ class TradingBot {
         modelExitHeldProb: trade.modelExitHeldProb,
         peakHeldBidCents: trade.peakHeldBidCents,
         troughHeldBidCents: trade.troughHeldBidCents,
+        beChaseResult: trade.beChaseResult || undefined,
       });
     this._persist();
       return true;
@@ -8788,7 +8791,11 @@ class TradingBot {
         config: this.config,
         upwardEvidence: upwardMomentum,
       });
-      if (beChase.started || beChase.reset || beChase.achieved || beChase.holdingRise) {
+      if (beChase.achieved) {
+        // Bid hit the +arm target — record that the bounce TP worked.
+        trade.beChaseResult = 'achieved';
+        this._persist();
+      } else if (beChase.started || beChase.reset || beChase.holdingRise) {
         this._persist();
       }
       if (
@@ -8799,6 +8806,7 @@ class TradingBot {
         !upwardMomentum &&
         modelDeteriorating
       ) {
+        trade.beChaseResult = 'expired';
         this.lastDecision =
           `BE chase ${beChase.needSec}s expired (peak +${beChase.peakProgress}¢, need +${beChase.needProgress}¢) + lean decaying on ${trade.symbol} — scratching.`;
         if (await tryModelBreakevenScratch()) return;
