@@ -8245,6 +8245,9 @@ class TradingBot {
       const escalated = stuckMs >= FORCE_EXIT_ESCALATE_MS_DEFAULT;
       // Stale BE force-retry while truly red can never fill (fake-BE guard).
       // Promote to model_against so we actually cut instead of looping to settlement.
+      // Exception: if lean has strongly recovered since the missed fill, clear the
+      // pending exit and fall through to normal management — the thesis is intact.
+      let beRetryClearedByLean = false;
       if (
         forceReason === 'breakeven' &&
         isModelTrade(trade) &&
@@ -8252,36 +8255,63 @@ class TradingBot {
         Number.isFinite(heldSideBidCents) &&
         !modelBreakevenExitAllowed(trade, heldSideBidCents)
       ) {
-        forceReason = 'model_against';
-        this._armPendingForceExit(trade, forceReason);
+        const assetPredForBe = predictions && predictions[trade.symbol] && predictions[trade.symbol].ready
+          ? predictions[trade.symbol]
+          : null;
+        const pickedForBe = assetPredForBe ? pickModelWindow(assetPredForBe, minutesRemaining) : null;
+        const leanRecovered =
+          pickedForBe &&
+          pickedForBe.window &&
+          modelEngineClearlyWithUs({
+            window: pickedForBe.window,
+            direction: pickedForBe.direction,
+            side: trade.side,
+            entryHeldProb: Number(trade.modelEntryHeldProb) || Number(trade.engineProbability),
+            config: this.config,
+          });
+        if (leanRecovered) {
+          // Lean is firmly back with us — abort the stale BE retry and re-evaluate fresh.
+          delete trade.pendingForceExit;
+          delete trade.pendingForceExitSince;
+          this.lastDecision =
+            `Stale BE retry cleared on ${trade.symbol} — lean recovered, re-evaluating.`;
+          this._persist();
+          beRetryClearedByLean = true;
+          // Fall through to normal model management on this cycle.
+        } else {
+          forceReason = 'model_against';
+          this._armPendingForceExit(trade, forceReason);
+        }
       }
-      // TP miss while already red → cut at bid (don't wait for +7¢ that won't come back).
-      if (
-        forceReason === 'take_profit' &&
-        isModelTrade(trade) &&
-        heldSideBidCents != null &&
-        Number.isFinite(entryPx) &&
-        heldSideBidCents < entryPx
-      ) {
-        forceReason = 'model_against';
-        this._armPendingForceExit(trade, forceReason);
+      if (!beRetryClearedByLean) {
+        // TP miss while already red → cut at bid (don't wait for +7¢ that won't come back).
+        if (
+          forceReason === 'take_profit' &&
+          isModelTrade(trade) &&
+          heldSideBidCents != null &&
+          Number.isFinite(entryPx) &&
+          heldSideBidCents < entryPx
+        ) {
+          forceReason = 'model_against';
+          this._armPendingForceExit(trade, forceReason);
+        }
+        if (
+          heldSideBidCents != null &&
+          Number.isFinite(heldSideBidCents) &&
+          heldSideBidCents >= 1 &&
+          heldSideBidCents <= 99
+        ) {
+          await this._closePosition(trade, heldSideBidCents, forceReason, {
+            liveSellPriceCents: heldSideBidCents,
+            forcePendingExit: true,
+            escalated,
+          });
+        } else {
+          this.lastDecision =
+            `Pending ${forceReason} exit on ${trade.symbol}: waiting for a tradable bid (1–99¢).`;
+        }
+        return;
       }
-      if (
-        heldSideBidCents != null &&
-        Number.isFinite(heldSideBidCents) &&
-        heldSideBidCents >= 1 &&
-        heldSideBidCents <= 99
-      ) {
-        await this._closePosition(trade, heldSideBidCents, forceReason, {
-          liveSellPriceCents: heldSideBidCents,
-          forcePendingExit: true,
-          escalated,
-        });
-      } else {
-        this.lastDecision =
-          `Pending ${forceReason} exit on ${trade.symbol}: waiting for a tradable bid (1–99¢).`;
-      }
-      return;
     }
 
     // Model: hold while direction is firm (model still with us). When lean turns
