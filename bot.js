@@ -294,6 +294,18 @@ const MODEL_SETUPS = [
     modelConfirmCrossCents: 0,
   },
   {
+    id: 'commodities',
+    label: 'Commodities (Gold / Silver / Oil)',
+    why: 'Gold, Silver, Oil — slower markets, holds to 7–6m remaining instead of 2–2.5m. Needs POLYGON_API_KEY. Run alongside crypto or solo.',
+    autoTradeSymbols: 'GOLD,SILVER,OIL',
+    modelMinConfidence: 55,
+    modelEntryLiveLeanMarginPct: 3,
+    modelBankGreenCents: 7,
+    modelMinTpCents: 7,
+    maxOpenPositions: 2,
+    modelConfirmCrossCents: 0,
+  },
+  {
     id: 'tight',
     label: 'Tight (fewer, cleaner)',
     why: 'Higher conf + one slot + faster dump cut. Fewer trades, smaller chance of stacked red.',
