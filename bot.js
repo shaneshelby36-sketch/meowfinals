@@ -8226,12 +8226,6 @@ class TradingBot {
       const adverseCents =
         underwater && Number.isFinite(entry) ? Math.round(entry - heldSideBidCents) : 0;
 
-      // Time-underwater tick tracking: count cycles above/below entry (skip open grace).
-      if (bidOk && Number.isFinite(entry) && !inOpenGrace) {
-        trade._ticksTotal = (trade._ticksTotal || 0) + 1;
-        if (underwater) trade._ticksUnder = (trade._ticksUnder || 0) + 1;
-      }
-
       const faded = trade.modelInverted === true;
       const againstLocked =
         picked &&
@@ -8303,6 +8297,12 @@ class TradingBot {
       const heldMs = Number.isFinite(openedAt) ? now - openedAt : Infinity;
       const openGraceMs = modelOpenGraceMs(this.config);
       const inOpenGrace = openGraceMs > 0 && heldMs < openGraceMs;
+
+      // Time-underwater tick tracking: count cycles above/below entry (skip open grace).
+      if (bidOk && Number.isFinite(entry) && !inOpenGrace) {
+        trade._ticksTotal = (trade._ticksTotal || 0) + 1;
+        if (underwater) trade._ticksUnder = (trade._ticksUnder || 0) + 1;
+      }
       const leanExit = faded
         ? !!weakConf
         : !!(
