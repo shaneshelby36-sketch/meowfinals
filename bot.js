@@ -7105,6 +7105,20 @@ class TradingBot {
           }
           const sellPrice = Math.max(1, Math.min(99, workingBase - attempt));
           bookedExit = sellPrice;
+          // If a take_profit retry is now chasing a bid below entry, the fill
+          // is a red exit — relabel so it doesn't book as a fake green TP.
+          const entryPxForRetry = Number(trade.entryPriceCents);
+          if (
+            reason === 'take_profit' &&
+            Number.isFinite(entryPxForRetry) &&
+            sellPrice < entryPxForRetry
+          ) {
+            reason = 'model_against';
+            console.warn(
+              `[bot] take_profit retry relabeled model_against on ${trade.ticker}: ` +
+                `sell ${sellPrice}¢ < entry ${entryPxForRetry}¢`
+            );
+          }
           if (attempt > 0) {
             console.warn(
               `[bot] ${reason} sell retry ${attempt + 1}/${maxAttempts} at ${sellPrice}¢ ` +
@@ -7332,6 +7346,8 @@ class TradingBot {
         stopPostMaxBidCents: trade.stopPostMaxBidCents,
         modelEntryHeldProb: trade.modelEntryHeldProb,
         modelExitHeldProb: trade.modelExitHeldProb,
+        peakHeldBidCents: trade.peakHeldBidCents,
+        troughHeldBidCents: trade.troughHeldBidCents,
       });
     this._persist();
       return true;
@@ -8126,6 +8142,13 @@ class TradingBot {
           trade.peakTouchCount = (Number(trade.peakTouchCount) || 0) + 1;
           this._persist();
         }
+      }
+      // Track trough (lowest bid seen while holding) — always, independent of peak.
+      const prevTrough = Number(trade.troughHeldBidCents);
+      const nextTrough = Number.isFinite(prevTrough) ? Math.min(prevTrough, heldSideBidCents) : heldSideBidCents;
+      if (!Number.isFinite(prevTrough) || nextTrough < prevTrough) {
+        trade.troughHeldBidCents = nextTrough;
+        this._persist();
       }
     }
     // For stop/TP timing use the earliest known close so we don't hold into the next session.
