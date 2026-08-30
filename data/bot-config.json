@@ -21,7 +21,7 @@
   "settleEntryMinCents": 80,
   "settleEntryMaxCents": 94,
   "settleNoEntryMinCents": 80,
-  "settleStopLossCents": 50,
+  "settleStopLossCents": 20,
   "settleMinMinutesToOpen": 0.5,
   "settleMaxMinutesToOpen": 8.5,
   "settleLateEntryMinutes": 2.5,
