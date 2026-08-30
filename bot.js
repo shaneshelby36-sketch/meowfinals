@@ -7105,17 +7105,18 @@ class TradingBot {
           }
           const sellPrice = Math.max(1, Math.min(99, workingBase - attempt));
           bookedExit = sellPrice;
-          // If a take_profit retry is now chasing a bid below entry, the fill
-          // is a red exit — relabel so it doesn't book as a fake green TP.
+          // If a take_profit or breakeven retry is now chasing a bid below entry,
+          // the fill is a red exit — relabel so it doesn't book as a fake green exit.
           const entryPxForRetry = Number(trade.entryPriceCents);
           if (
-            reason === 'take_profit' &&
+            (reason === 'take_profit' || reason === 'breakeven') &&
             Number.isFinite(entryPxForRetry) &&
             sellPrice < entryPxForRetry
           ) {
+            const prevReason = reason;
             reason = 'model_against';
             console.warn(
-              `[bot] take_profit retry relabeled model_against on ${trade.ticker}: ` +
+              `[bot] ${prevReason} retry relabeled model_against on ${trade.ticker}: ` +
                 `sell ${sellPrice}¢ < entry ${entryPxForRetry}¢`
             );
           }
