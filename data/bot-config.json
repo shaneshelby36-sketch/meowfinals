@@ -74,7 +74,7 @@
   "modelRichStopMinConfidence": 70,
   "modelStagnationSeconds": 0,
   "modelStagnationMinProgressCents": 3,
-  "modelRapidAdverseCents": 0,
+  "modelRapidAdverseCents": 10,
   "modelUnderwaterWindowSeconds": 90,
   "modelUnderwaterRatioPct": 70,
   "modelLeanStopBarrierCents": 55,
