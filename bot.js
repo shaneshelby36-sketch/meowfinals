@@ -105,7 +105,18 @@ const SERIES_BY_SYMBOL = {
   BNB: 'KXBNB15M',
   NEAR: 'KXNEAR15M',
   HYPE: 'KXHYPE15M',
+  GOLD: 'KXGOLD15M',
+  SILVER: 'KXSILVER15M',
+  OIL: 'KXOIL15M',
 };
+
+/** Commodity (non-crypto) symbols — slower moving, different late-hold defaults. */
+const COMMODITY_SYMBOLS = new Set(['GOLD', 'SILVER', 'OIL']);
+
+/** Returns true if this symbol is a commodity (Gold/Silver/Oil). */
+function isCommoditySymbol(symbol) {
+  return COMMODITY_SYMBOLS.has(String(symbol || '').toUpperCase());
+}
 
 /**
  * Pick the soonest-closing market that still has enough time left.
@@ -817,6 +828,17 @@ const MODEL_MIN_ENTRY_LEAN_DOGE_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_BNB_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_NEAR_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_HYPE_DEFAULT = 0;
+const MODEL_MIN_ENTRY_LEAN_GOLD_DEFAULT = 0;
+const MODEL_MIN_ENTRY_LEAN_SILVER_DEFAULT = 0;
+const MODEL_MIN_ENTRY_LEAN_OIL_DEFAULT = 0;
+/**
+ * Commodity late-hold: start the settle-close zone this many minutes before
+ * window end. Slower-moving assets trend more steadily, so we can wait longer
+ * before forcing an early exit. Still gated by lean (modelLateExtendOk) —
+ * only holds if lean is clearly still with us at the 7-6 minute mark.
+ */
+const MODEL_COMMODITY_LATE_BARRIER_MINUTES_DEFAULT = 7;
+const MODEL_COMMODITY_SETTLE_CLOSE_MINUTES_DEFAULT = 6;
 /** Don't early-exit a Model hold until it's been open at least this long. */
 const MODEL_MIN_HOLD_MS_DEFAULT = 4_000;
 /** After Model BE/TP, sit out that coin this long before rebuy. */
@@ -1182,19 +1204,23 @@ function modelTrailArmCents(config = {}) {
   return Math.max(2, Math.min(MODEL_TRAIL_ARM_CENTS_DEFAULT, bank));
 }
 
-function modelSettleCloseMinutes(config = {}) {
+function modelSettleCloseMinutes(config = {}, symbol = null) {
   const n = Number(config.modelSettleCloseMinutes);
   if (Number.isFinite(n) && n < 0) return MODEL_SETTLE_CLOSE_MINUTES_DEFAULT;
   if (Number.isFinite(n) && n === 0) return 0;
   if (Number.isFinite(n) && n > 0) return n;
+  // Commodities default to a later settle-close window (6m vs 2.5m).
+  if (symbol && isCommoditySymbol(symbol)) return MODEL_COMMODITY_SETTLE_CLOSE_MINUTES_DEFAULT;
   return MODEL_SETTLE_CLOSE_MINUTES_DEFAULT;
 }
 
-function modelLateBarrierMinutes(config = {}) {
+function modelLateBarrierMinutes(config = {}, symbol = null) {
   const n = Number(config.modelLateBarrierMinutes);
   if (Number.isFinite(n) && n < 0) return MODEL_LATE_BARRIER_MINUTES_DEFAULT;
   if (Number.isFinite(n) && n === 0) return 0;
   if (Number.isFinite(n) && n > 0) return n;
+  // Commodities default to a later barrier (7m vs 2m) to allow lean-gated holding.
+  if (symbol && isCommoditySymbol(symbol)) return MODEL_COMMODITY_LATE_BARRIER_MINUTES_DEFAULT;
   return MODEL_LATE_BARRIER_MINUTES_DEFAULT;
 }
 
@@ -3316,6 +3342,9 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelMinEntryLeanPctBnb',
   'modelMinEntryLeanPctNear',
   'modelMinEntryLeanPctHype',
+  'modelMinEntryLeanPctGold',
+  'modelMinEntryLeanPctSilver',
+  'modelMinEntryLeanPctOil',
   'modelSoftLeanMarginPct',
   'modelSignalDominanceMin',
   'modelTrailCents',
@@ -4489,6 +4518,9 @@ class TradingBot {
       modelMinEntryLeanPctBnb: MODEL_MIN_ENTRY_LEAN_BNB_DEFAULT,
       modelMinEntryLeanPctNear: MODEL_MIN_ENTRY_LEAN_NEAR_DEFAULT,
       modelMinEntryLeanPctHype: MODEL_MIN_ENTRY_LEAN_HYPE_DEFAULT,
+      modelMinEntryLeanPctGold: MODEL_MIN_ENTRY_LEAN_GOLD_DEFAULT,
+      modelMinEntryLeanPctSilver: MODEL_MIN_ENTRY_LEAN_SILVER_DEFAULT,
+      modelMinEntryLeanPctOil: MODEL_MIN_ENTRY_LEAN_OIL_DEFAULT,
       modelSoftLeanMarginPct: MODEL_SOFT_LEAN_MARGIN_DEFAULT,
       modelSignalDominanceMin: MODEL_SIGNAL_DOMINANCE_MIN_DEFAULT,
       modelTrailCents: MODEL_TRAIL_CENTS_DEFAULT,
@@ -7524,6 +7556,42 @@ class TradingBot {
     return null;
   }
 
+  /**
+   * Returns the bid for stop-loss purposes. Unlike _sideBidCents, this uses
+   * the most conservative (lowest) available reading rather than the first
+   * available one, so a synthesized complement can't mask a real price drop.
+   *
+   * Priority for NO side:
+   *   1. Real no_bid from API  (direct observation — use as-is)
+   *   2. 100 − yes_ask         (yes_ask is a real observation; 100−ask is a
+   *                             valid lower-bound but can be stale when YES
+   *                             sellers aren't being hit — only use when
+   *                             it gives a LOWER bid than the synthesized no_bid)
+   *   3. null                  (no reliable data — skip the stop this cycle)
+   *
+   * For YES side, same logic with roles swapped.
+   */
+  _sideBidCentsReal(market, side) {
+    if (!market) return null;
+    if (side === 'yes') {
+      const direct = market.yes_bid_real && Number.isFinite(market.yes_bid) ? market.yes_bid : null;
+      const fromNoAsk = Number.isFinite(market.no_ask)
+        ? Math.max(1, Math.min(99, 100 - market.no_ask))
+        : null;
+      if (direct != null && fromNoAsk != null) return Math.min(direct, fromNoAsk);
+      return direct ?? fromNoAsk ?? null;
+    }
+    if (side === 'no') {
+      const direct = market.no_bid_real && Number.isFinite(market.no_bid) ? market.no_bid : null;
+      const fromYesAsk = Number.isFinite(market.yes_ask)
+        ? Math.max(1, Math.min(99, 100 - market.yes_ask))
+        : null;
+      if (direct != null && fromYesAsk != null) return Math.min(direct, fromYesAsk);
+      return direct ?? fromYesAsk ?? null;
+    }
+    return null;
+  }
+
   _heldSideBidCents(trade, market) {
     return this._sideBidCents(market, trade && trade.side);
   }
@@ -8138,8 +8206,8 @@ class TradingBot {
           heldSideBidCents >= entryPx;
         const nearSettlement =
           minutesRemaining <= Math.max(
-            modelSettleCloseMinutes(this.config),
-            modelLateBarrierMinutes(this.config)
+            modelSettleCloseMinutes(this.config, trade.symbol),
+            modelLateBarrierMinutes(this.config, trade.symbol)
           );
         if (bidAboveEntry && !nearSettlement) {
           delete trade.pendingForceExit;
@@ -8518,12 +8586,20 @@ class TradingBot {
 
       // Unconditional stop: if bid drops this many ¢ below entry, cut immediately
       // regardless of lean state. Catches fast collapses before lean reacts.
+      // Use _sideBidCentsReal so a synthesized complement (100−yes_ask) can't
+      // mask a real NO bid collapse and silently prevent the stop from firing.
       const maxAdverse = modelMaxAdverseCents(this.config);
-      if (bidOk && !inOpenGrace && maxAdverse > 0 && adverseCents >= maxAdverse) {
-        this.lastDecision =
-          `Hard adverse stop: −${adverseCents}¢ (≥${maxAdverse}¢) on ${trade.symbol} — cutting.`;
-        await tryModelAgainstCut('model_against');
-        return;
+      if (!inOpenGrace && maxAdverse > 0) {
+        const realBid = this._sideBidCentsReal(market, trade.side);
+        const realAdverse = realBid != null && Number.isFinite(entry) && realBid < entry
+          ? Math.round(entry - realBid)
+          : adverseCents; // fall back to normal adverseCents if real bid unavailable
+        if (realBid != null && realAdverse >= maxAdverse) {
+          this.lastDecision =
+            `Hard adverse stop: −${realAdverse}¢ (≥${maxAdverse}¢) on ${trade.symbol} — cutting.`;
+          await tryModelAgainstCut('model_against');
+          return;
+        }
       }
 
       // ── UNDERWATER RATIO HARD CUT ─────────────────────────────────────────
@@ -8713,9 +8789,10 @@ class TradingBot {
 
       // ── Pre-settle cash-outs (avoid SETTLED 0/100 wipeouts) ─────────────
       // Defaults: force exit in last 1m; barrier at 2m; settle-close from 2.5m.
-      // High-possibility extend can ride the barrier, but never the last minute.
-      const lateBarrierMins = modelLateBarrierMinutes(this.config);
-      const settleCloseMins = modelSettleCloseMinutes(this.config);
+      // Commodities (Gold/Silver/Oil): barrier at 7m; settle-close at 6m — but
+      // only holds through the barrier when lean is still clearly in our favour.
+      const lateBarrierMins = modelLateBarrierMinutes(this.config, trade.symbol);
+      const settleCloseMins = modelSettleCloseMinutes(this.config, trade.symbol);
       const preCloseForceMins = modelPreCloseForceMinutes(this.config);
       const settleCloseThresh = Number.isFinite(Number(this.config.modelSettleCloseLossCents))
         ? Number(this.config.modelSettleCloseLossCents)
@@ -12144,7 +12221,14 @@ module.exports = {
   MODEL_MIN_ENTRY_LEAN_BNB_DEFAULT,
   MODEL_MIN_ENTRY_LEAN_NEAR_DEFAULT,
   MODEL_MIN_ENTRY_LEAN_HYPE_DEFAULT,
+  MODEL_MIN_ENTRY_LEAN_GOLD_DEFAULT,
+  MODEL_MIN_ENTRY_LEAN_SILVER_DEFAULT,
+  MODEL_MIN_ENTRY_LEAN_OIL_DEFAULT,
   MODEL_MIN_ENTRY_LEAN_PCT_DEFAULT,
+  COMMODITY_SYMBOLS,
+  isCommoditySymbol,
+  MODEL_COMMODITY_LATE_BARRIER_MINUTES_DEFAULT,
+  MODEL_COMMODITY_SETTLE_CLOSE_MINUTES_DEFAULT,
   modelEngineClearlyWithUs,
   modelNearFlatCents,
   modelBreakevenExitAllowed,

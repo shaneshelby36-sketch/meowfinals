@@ -24,6 +24,9 @@ const ASSET_LABELS = {
   HYPE: 'HYPE',
   DOGE: 'Dogecoin',
   ZEC: 'Zcash',
+  GOLD: 'Gold',
+  SILVER: 'Silver',
+  OIL: 'Oil (WTI)',
 };
 
 // Non-asset keys that can appear alongside per-symbol entries in the
@@ -487,6 +490,7 @@ function selectTab(panel, windowKey) {
 
 function formatPrice(v, symbol) {
   if (v == null) return '—';
+  // XRP: 4 decimals; Gold/Silver: 2 decimals with thousands; Oil: 2 decimals; everything else: 2.
   const decimals = symbol === 'XRP' ? 4 : 2;
   return v.toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 }
@@ -1709,6 +1713,9 @@ const SLIDER_UNITS = {
   'bot-model-min-entry-lean-bnb': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-min-entry-lean-near': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-min-entry-lean-hype': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-model-min-entry-lean-gold': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-model-min-entry-lean-silver': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-model-min-entry-lean-oil': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-live-favor': (v) => (Number(v) <= 0 ? 'any lead' : `≥${Math.round(v)} pts`),
   'bot-model-min-room-floor': (v) => (Number(v) <= 0 ? 'off' : `≥${Math.round(v)}¢`),
   'bot-model-signal-dom': (v) => {
@@ -2221,6 +2228,9 @@ function wireSliderDisplays() {
     'bot-model-min-entry-lean-bnb',
     'bot-model-min-entry-lean-near',
     'bot-model-min-entry-lean-hype',
+    'bot-model-min-entry-lean-gold',
+    'bot-model-min-entry-lean-silver',
+    'bot-model-min-entry-lean-oil',
     'bot-model-signal-dom',
     'bot-model-confirm-cross',
     'bot-model-confirm-ext',
@@ -2381,6 +2391,9 @@ function wireBotConfigAutoSave() {
     'bot-model-min-entry-lean-bnb',
     'bot-model-min-entry-lean-near',
     'bot-model-min-entry-lean-hype',
+    'bot-model-min-entry-lean-gold',
+    'bot-model-min-entry-lean-silver',
+    'bot-model-min-entry-lean-oil',
     'bot-model-signal-dom',
     'bot-model-confirm-cross',
     'bot-model-confirm-ext',
@@ -2558,6 +2571,18 @@ async function loadBotConfigIntoForm() {
     const modelMinEntryLeanHYPE = document.getElementById('bot-model-min-entry-lean-hype');
     if (modelMinEntryLeanHYPE) {
       modelMinEntryLeanHYPE.value = c.modelMinEntryLeanPctHype != null ? c.modelMinEntryLeanPctHype : 0;
+    }
+    const modelMinEntryLeanGOLD = document.getElementById('bot-model-min-entry-lean-gold');
+    if (modelMinEntryLeanGOLD) {
+      modelMinEntryLeanGOLD.value = c.modelMinEntryLeanPctGold != null ? c.modelMinEntryLeanPctGold : 0;
+    }
+    const modelMinEntryLeanSILVER = document.getElementById('bot-model-min-entry-lean-silver');
+    if (modelMinEntryLeanSILVER) {
+      modelMinEntryLeanSILVER.value = c.modelMinEntryLeanPctSilver != null ? c.modelMinEntryLeanPctSilver : 0;
+    }
+    const modelMinEntryLeanOIL = document.getElementById('bot-model-min-entry-lean-oil');
+    if (modelMinEntryLeanOIL) {
+      modelMinEntryLeanOIL.value = c.modelMinEntryLeanPctOil != null ? c.modelMinEntryLeanPctOil : 0;
     }
     const modelSignalDom = document.getElementById('bot-model-signal-dom');
     if (modelSignalDom) {
@@ -2822,6 +2847,9 @@ async function loadBotConfigIntoForm() {
       'bot-model-min-entry-lean-bnb',
       'bot-model-min-entry-lean-near',
       'bot-model-min-entry-lean-hype',
+      'bot-model-min-entry-lean-gold',
+      'bot-model-min-entry-lean-silver',
+      'bot-model-min-entry-lean-oil',
       'bot-model-signal-dom',
       'bot-model-confirm-cross',
       'bot-model-confirm-ext',
@@ -3027,6 +3055,9 @@ async function saveBotConfig(opts = {}) {
     modelMinEntryLeanPctBnb: parseFloat(document.getElementById('bot-model-min-entry-lean-bnb')?.value || '0'),
     modelMinEntryLeanPctNear: parseFloat(document.getElementById('bot-model-min-entry-lean-near')?.value || '0'),
     modelMinEntryLeanPctHype: parseFloat(document.getElementById('bot-model-min-entry-lean-hype')?.value || '0'),
+    modelMinEntryLeanPctGold: parseFloat(document.getElementById('bot-model-min-entry-lean-gold')?.value || '0'),
+    modelMinEntryLeanPctSilver: parseFloat(document.getElementById('bot-model-min-entry-lean-silver')?.value || '0'),
+    modelMinEntryLeanPctOil: parseFloat(document.getElementById('bot-model-min-entry-lean-oil')?.value || '0'),
     modelSignalDominanceMin: (() => {
       const raw = parseFloat(document.getElementById('bot-model-signal-dom')?.value || '0');
       if (!Number.isFinite(raw) || raw <= 0) return 0;

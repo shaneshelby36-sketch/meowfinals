@@ -90,6 +90,11 @@ function normalizeMarketPrices(market) {
   let no_ask = priceInCents(market.no_ask, market.no_ask_dollars);
   const last_price = priceInCents(market.last_price, market.last_price_dollars);
 
+  // Track which bids came from the real API vs. complement synthesis.
+  // Stop-loss logic must not rely on a synthesized bid as proof of price.
+  const yes_bid_real = yes_bid != null;
+  const no_bid_real = no_bid != null;
+
   // Fill missing YES from the NO book (and vice versa). Thin 15m books often
   // publish only one side; complement keeps entries from dying as "no quote".
   if (yes_bid == null && no_ask != null) yes_bid = clampQuoteCents(100 - no_ask);
@@ -119,6 +124,8 @@ function normalizeMarketPrices(market) {
     no_bid,
     no_ask,
     last_price,
+    yes_bid_real,
+    no_bid_real,
     yes_ask_size: sizeFromFp(market.yes_ask_size, market.yes_ask_size_fp),
     no_ask_size: sizeFromFp(market.no_ask_size, market.no_ask_size_fp),
     yes_bid_size: sizeFromFp(market.yes_bid_size, market.yes_bid_size_fp),

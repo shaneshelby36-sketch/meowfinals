@@ -9,6 +9,7 @@ const cors = require('cors');
 const { CandleSeries, fetchHistoricalRange } = require('./candles');
 const { OrderBook } = require('./orderBook');
 const { CoinbaseFeed } = require('./coinbaseFeed');
+const { CommodityFeed, seedCommodityCandles } = require('./commodityFeed');
 const { buildPredictions } = require('./prediction');
 const { PredictionTracker } = require('./tracker');
 const { SignalAccumulatorManager } = require('./signalAccumulator');
@@ -159,6 +160,13 @@ const PRODUCTS = (process.env.PRODUCTS || 'BTC-USD,XRP-USD,ETH-USD,SOL-USD,DOGE-
 const COMPUTE_INTERVAL_MS = parseInt(process.env.COMPUTE_INTERVAL_MS || '2500', 10);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 
+// Polygon API key for commodity feeds (Gold/Silver/Oil).
+// Set POLYGON_API_KEY in your .env or environment to enable live commodity data.
+const POLYGON_API_KEY = process.env.POLYGON_API_KEY || '';
+
+// Commodity symbols tracked via Polygon (not available on Coinbase).
+const COMMODITY_PRODUCT_SYMBOLS = ['GOLD', 'SILVER', 'OIL'];
+
 const SYMBOL_OF = {
   'BTC-USD': 'BTC',
   'XRP-USD': 'XRP',
@@ -183,6 +191,18 @@ for (const productId of PRODUCTS) {
   };
 }
 
+// Commodity state entries — share the same CandleSeries/OrderBook structure but
+// are seeded and updated via Polygon rather than Coinbase.
+for (const sym of COMMODITY_PRODUCT_SYMBOLS) {
+  state[sym] = {
+    productId: sym,
+    series: new CandleSeries(sym),
+    book: new OrderBook(sym),
+    lastTradeAt: null,
+    feedStatus: POLYGON_API_KEY ? 'connecting' : 'no_api_key',
+  };
+}
+
 // Strategy light uses live ~15m Coinbase candles (volatile/chop → edge, calm one-sided → settle).
 if (bot) {
   bot.getMarketCandles = () => {
@@ -200,7 +220,21 @@ let latestPrediction = { ready: false, message: 'Seeding historical data, please
 let lastComputeError = null;
 
 async function seedAll() {
-  await Promise.all(Object.values(state).map((s) => s.series.seed()));
+  // Seed Coinbase crypto products.
+  await Promise.all(Object.values(state)
+    .filter((s) => !COMMODITY_PRODUCT_SYMBOLS.includes(s.productId))
+    .map((s) => s.series.seed())
+  );
+  // Seed commodity candles from Polygon (if API key is set).
+  if (POLYGON_API_KEY) {
+    const candleMap = await seedCommodityCandles(COMMODITY_PRODUCT_SYMBOLS, POLYGON_API_KEY);
+    for (const sym of COMMODITY_PRODUCT_SYMBOLS) {
+      const candles = candleMap[sym];
+      if (candles && candles.length) {
+        state[sym].series.candles = candles.slice(-300);
+      }
+    }
+  }
 }
 
 function wireFeed() {
@@ -246,6 +280,42 @@ function wireFeed() {
 
   feed.connect();
   return feed;
+}
+
+/**
+ * Wire the Polygon commodity feed for Gold, Silver, and Oil.
+ * Only actually connects if POLYGON_API_KEY is set; otherwise logs once and exits.
+ */
+function wireCommodityFeed() {
+  const commFeed = new CommodityFeed(COMMODITY_PRODUCT_SYMBOLS, POLYGON_API_KEY);
+
+  commFeed.on('connected', () => {
+    console.log('[commodity-feed] connected to Polygon WebSocket');
+    for (const sym of COMMODITY_PRODUCT_SYMBOLS) {
+      if (state[sym]) state[sym].feedStatus = 'live';
+    }
+  });
+
+  commFeed.on('disconnected', () => {
+    console.warn('[commodity-feed] disconnected — will retry with backoff');
+    for (const sym of COMMODITY_PRODUCT_SYMBOLS) {
+      if (state[sym]) state[sym].feedStatus = 'reconnecting';
+    }
+  });
+
+  commFeed.on('error', (err) => {
+    console.error('[commodity-feed] error:', err.message);
+  });
+
+  commFeed.on('trade', (trade) => {
+    const s = state[trade.productId];
+    if (!s) return;
+    s.series.addTrade(trade.price, trade.size, trade.time);
+    s.lastTradeAt = trade.time;
+  });
+
+  commFeed.connect();
+  return commFeed;
 }
 
 const lastManualStrikeMeta = Object.create(null);
@@ -450,13 +520,14 @@ async function recompute() {
 }
 
 async function main() {
-  console.log('[startup] seeding historical candles from Coinbase REST API…');
+  console.log('[startup] seeding historical candles…');
   await seedAll();
   for (const [symbol, s] of Object.entries(state)) {
     console.log(`[startup] ${symbol}: seeded ${s.series.candles.length} candles`);
   }
 
   wireFeed();
+  wireCommodityFeed();
 
   // First compute as soon as we have enough seeded history; then on an interval.
   await recompute();
