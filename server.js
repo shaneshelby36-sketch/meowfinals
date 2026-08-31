@@ -247,8 +247,9 @@ async function seedAll() {
   for (const sym of COMMODITY_PRODUCT_SYMBOLS) {
     if (state[sym].series.ready(60)) continue; // already seeded via Polygon
     try {
-      const ticker = SERIES_BY_SYMBOL_LOCAL[sym];
-      const market = ticker ? await kalshiClient.getMarket(ticker) : null;
+      const seriesTicker = SERIES_BY_SYMBOL_LOCAL[sym];
+      const markets = seriesTicker ? await kalshiClient.getOpenMarkets(seriesTicker) : [];
+      const market = Array.isArray(markets) && markets.length > 0 ? markets[0] : null;
       const price = market ? Number(msp(market)) : 0;
       if (price > 0) {
         const nowMs = Date.now();
