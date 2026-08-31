@@ -8261,7 +8261,9 @@ class TradingBot {
         if (!Number.isFinite(Number(trade.peakHeldBidAt))) {
           trade.peakHeldBidAt = now;
         }
-        // Count touches: bid within 1¢ of peak while armed (green ≥ armCents).
+        // Count touches: bid within N¢ of peak while armed (green ≥ armCents).
+        // Each loop tick (1000ms) within the peak window increments the counter —
+        // use the slider to control how many ticks of stalling triggers the TP.
         const _armCentsNow = modelTrailArmCents(this.config);
         const _greenNow = Number.isFinite(Number(trade.entryPriceCents))
           ? Math.round(heldSideBidCents - Number(trade.entryPriceCents))
@@ -8713,6 +8715,25 @@ class TradingBot {
       const againstBeReady = !inOpenGrace && heldMs >= openGraceMs + againstBeDelay;
       const modelHardAgainst =
         !faded && bidOk && picked && picked.window && engineTurning;
+
+      // Flip confirmation: stamp when the hard-against signal first appears.
+      // Require it to persist for at least againstBeDelay ms before acting —
+      // a single bad prediction tick right after open grace cannot fire the exit.
+      if (modelHardAgainst) {
+        if (!Number.isFinite(Number(trade._hardAgainstSince))) {
+          trade._hardAgainstSince = now;
+          this._persist();
+        }
+      } else {
+        if (Number.isFinite(Number(trade._hardAgainstSince))) {
+          delete trade._hardAgainstSince;
+          this._persist();
+        }
+      }
+      const hardAgainstHeldMs = Number.isFinite(Number(trade._hardAgainstSince))
+        ? now - Number(trade._hardAgainstSince)
+        : 0;
+      const hardAgainstConfirmed = hardAgainstHeldMs >= againstBeDelay;
       const leanStaleScratch =
         !faded &&
         picked &&
@@ -8986,7 +9007,7 @@ class TradingBot {
         }
       }
 
-      if (modelHardAgainst && againstBeReady) {
+      if (modelHardAgainst && againstBeReady && hardAgainstConfirmed) {
         if (await exitModelAgainst()) return;
       }
 
@@ -9015,7 +9036,7 @@ class TradingBot {
       // Bid-led dump: only act when hard lean against (firm holds ignore price slides).
       const dumpPullback = modelDumpPullbackCents(this.config);
       if (!faded && bidOk && dumpPullback > 0 && pullback >= dumpPullback) {
-        if (modelHardAgainst && againstBeReady) {
+        if (modelHardAgainst && againstBeReady && hardAgainstConfirmed) {
           if (await exitModelAgainst()) return;
         } else if (isBankableGreen && heldForBank) {
           await this._closePosition(trade, heldSideBidCents, 'take_profit', {

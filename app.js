@@ -1748,6 +1748,7 @@ const SLIDER_UNITS = {
   'bot-model-underwater-window': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-underwater-ratio': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-rapid-adverse': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
+  'bot-model-open-grace-ms': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(Number(v) / 1000)}s`),
   'bot-model-prob-drift': (v) => `${Math.round(v)}pts`,
   'bot-model-live-lean-margin': (v) => `${Math.round(v)}%`,
   'bot-model-stall-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
@@ -2259,6 +2260,7 @@ function wireSliderDisplays() {
     'bot-model-underwater-window',
     'bot-model-underwater-ratio',
     'bot-model-rapid-adverse',
+    'bot-model-open-grace-ms',
     'bot-model-prob-drift',
     'bot-model-live-lean-margin',
     'bot-model-decay-drop',
@@ -2422,6 +2424,7 @@ function wireBotConfigAutoSave() {
     'bot-model-underwater-window',
     'bot-model-underwater-ratio',
     'bot-model-rapid-adverse',
+    'bot-model-open-grace-ms',
     'bot-model-prob-drift',
     'bot-model-live-lean-margin',
     'bot-model-decay-drop',
@@ -2694,8 +2697,10 @@ async function loadBotConfigIntoForm() {
     if (modelDecayFloor) {
       modelDecayFloor.value = c.modelLeanDecayFloor != null ? c.modelLeanDecayFloor : 85;
     }
+    const modelOpenGraceEl = document.getElementById('bot-model-open-grace-ms');
+    if (modelOpenGraceEl) modelOpenGraceEl.value = c.modelOpenGraceMs != null ? c.modelOpenGraceMs : 10000;
     const modelPeakTouchTp = document.getElementById('bot-model-peak-touch-tp');
-    if (modelPeakTouchTp) modelPeakTouchTp.value = c.modelPeakTouchTp != null ? c.modelPeakTouchTp : 3;
+    if (modelPeakTouchTp) modelPeakTouchTp.value = c.modelPeakTouchTp != null ? c.modelPeakTouchTp : 10;
     const modelPeakTouchWindow = document.getElementById('bot-model-peak-touch-window');
     if (modelPeakTouchWindow) modelPeakTouchWindow.value = c.modelPeakTouchWindow != null ? c.modelPeakTouchWindow : 2;
     const modelMinOpen = document.getElementById('bot-model-min-open');
@@ -2878,6 +2883,7 @@ async function loadBotConfigIntoForm() {
     'bot-model-underwater-window',
     'bot-model-underwater-ratio',
     'bot-model-rapid-adverse',
+    'bot-model-open-grace-ms',
     'bot-model-prob-drift',
     'bot-model-live-lean-margin',
     'bot-model-decay-drop',
@@ -3101,6 +3107,7 @@ async function saveBotConfig(opts = {}) {
     modelUnderwaterWindowSeconds: parseFloat(document.getElementById('bot-model-underwater-window')?.value || '90'),
     modelUnderwaterRatioPct: parseFloat(document.getElementById('bot-model-underwater-ratio')?.value || '70'),
     modelRapidAdverseCents: parseFloat(document.getElementById('bot-model-rapid-adverse')?.value || '0'),
+    modelOpenGraceMs: parseFloat(document.getElementById('bot-model-open-grace-ms')?.value || '10000'),
     modelProbDriftPts: parseFloat(document.getElementById('bot-model-prob-drift')?.value || '15'),
     modelLiveLeanMarginPct: parseFloat(document.getElementById('bot-model-live-lean-margin')?.value || '1'),
     modelLeanDecayDropPts: parseFloat(document.getElementById('bot-model-decay-drop')?.value || '14'),

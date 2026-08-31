@@ -686,6 +686,13 @@
             </div>
             <span class="field-hint"><strong>Off by default (0)</strong>. When on: true red ≥ this many ¢ <em>and</em> model decaying → cut after open grace.</span>
           </label>
+          <label style="border: 2px solid #10b981; border-radius: 6px; padding: 8px;">🎯 MODEL open grace (ms)
+            <div class="slider-row">
+              <input id="bot-model-open-grace-ms" type="range" min="1000" max="30000" step="1000" />
+              <span class="slider-value" id="bot-model-open-grace-ms-value">—</span>
+            </div>
+            <span class="field-hint">Default <strong>10s</strong>. After entry, only hard lean flips can exit during this window — soft turns, BE chases, and adverse cuts are all suppressed. Prevents instant exits when a lean collapses on the first tick after opening.</span>
+          </label>
           <label>MODEL prob drift (pts from entry)
             <div class="slider-row">
               <input id="bot-model-prob-drift" type="range" min="3" max="35" step="1" />
@@ -730,10 +737,10 @@
           </label>
           <label style="border: 2px solid #10b981; border-radius: 6px; padding: 8px;">🎯 MODEL peak-touch TP (touches needed)
             <div class="slider-row">
-              <input id="bot-model-peak-touch-tp" type="range" min="1" max="20" step="1" />
+              <input id="bot-model-peak-touch-tp" type="range" min="1" max="50" step="1" />
               <span class="slider-value" id="bot-model-peak-touch-tp-value">—</span>
             </div>
-            <span class="field-hint">Default <strong>10</strong>. TP when bid hits the peak this many times without breaking through. Lower = exits sooner; higher = holds longer. <strong>0</strong> = off.</span>
+            <span class="field-hint">Default <strong>10</strong>. TP when bid is near the peak this many ticks without breaking through. Lower = exits sooner; higher = holds longer. <strong>0</strong> = off.</span>
           </label>
           <label style="border: 2px solid #10b981; border-radius: 6px; padding: 8px;">🎯 MODEL peak touch window (¢)
             <div class="slider-row">
