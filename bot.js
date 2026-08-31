@@ -2555,6 +2555,90 @@ function checkModelGlobalPostExitCooldown({
   return { ok: true };
 }
 
+/**
+ * After a stall-bank TP (peak-touch or momentum-stall), block the OPPOSITE
+ * side from entering on the same symbol until the engine's own momentum/lean
+ * has actually confirmed that direction. A simple tick-count is not enough —
+ * we require the direction AND lean to both agree with the prospective side.
+ *
+ * Specifically:
+ *   - Only fires after a `take_profit` exit that was tagged `exitIsStallBank`.
+ *   - Only blocks the *opposite* side to the just-closed trade's side.
+ *   - Clears automatically once the live window's direction + lean both favor
+ *     the new side (i.e., `engineClearlyWithUs` for the opposite side).
+ *   - Hard cap: if no confirmation within `maxWaitMs` (default 5 minutes),
+ *     allow entry anyway — we don't want to block indefinitely.
+ *
+ * Returns `{ ok: true }` to allow entry, `{ ok: false, reason }` to block.
+ */
+function checkModelReversalCooldown({
+  trades,
+  symbol,
+  candidateSide,
+  window: modelWindow = null,
+  direction = null,
+  entryHeldProb = null,
+  config = {},
+  now = Date.now(),
+} = {}) {
+  const sym = String(symbol || '').toUpperCase();
+  const side = String(candidateSide || '');
+  if (!sym || !side) return { ok: true };
+
+  // Find the most recent closed model trade on this symbol
+  let last = null;
+  let lastAt = -Infinity;
+  for (const t of trades || []) {
+    if (!t || String(t.strategy || '').toLowerCase() !== 'model') continue;
+    if (String(t.symbol || '').toUpperCase() !== sym) continue;
+    if (String(t.status || '') !== 'closed') continue;
+    const at = Number(t.closedAt);
+    if (Number.isFinite(at) && at > lastAt) {
+      lastAt = at;
+      last = t;
+    }
+  }
+
+  // Only apply after a stall-bank take_profit exit
+  if (
+    !last ||
+    last.exitReason !== 'take_profit' ||
+    last.exitIsStallBank !== true
+  ) {
+    return { ok: true };
+  }
+
+  // Only block the opposite side (same-side re-entry uses normal cooldown)
+  const lastSide = String(last.side || '');
+  const oppositeSide = lastSide === 'yes' ? 'no' : lastSide === 'no' ? 'yes' : null;
+  if (!oppositeSide || side !== oppositeSide) return { ok: true };
+
+  // Hard cap: after maxWaitMs, allow entry regardless
+  const maxWaitMs = 5 * 60 * 1000; // 5 minutes
+  const elapsed = now - lastAt;
+  if (elapsed >= maxWaitMs) return { ok: true };
+
+  // Check if the engine clearly confirms the reversal direction already
+  if (modelWindow && direction) {
+    const reversalConfirmed = modelEngineClearlyWithUs({
+      window: modelWindow,
+      direction,
+      side,
+      entryHeldProb: Number.isFinite(Number(entryHeldProb)) ? Number(entryHeldProb) : undefined,
+      config,
+    });
+    if (reversalConfirmed) return { ok: true };
+  }
+
+  const waitSec = Math.max(1, Math.ceil((maxWaitMs - elapsed) / 1000));
+  return {
+    ok: false,
+    reason:
+      `Waiting: ${sym} stall-bank TP on ${lastSide.toUpperCase()} — holding off ` +
+      `${side.toUpperCase()} entry until reversal confirmed by engine (~${waitSec}s max).`,
+  };
+}
+
 /** Entry-tiered settle TP/stale exits (default on). Off → stop + hold to settlement only. */
 function isSettleTieredExitsEnabled(config = {}) {
   const v = config.settleTieredExits;
@@ -2792,7 +2876,7 @@ function modelKalshiFavoriteGate({ market, side, priceCents, config = {} } = {})
 
 /** Default model-entry cutoff. It must sit outside the late-exit zone with margin. */
 const MODEL_MIN_MINUTES_TO_OPEN_DEFAULT = 2.5;
-const MODEL_PEAK_TOUCH_TP_DEFAULT = 3;
+const MODEL_PEAK_TOUCH_TP_DEFAULT = 10;
 const MODEL_PEAK_TOUCH_WINDOW_DEFAULT = 2;
 /** Confidence required to allow entries below the normal min. */
 const MODEL_PERFECT_CONFIDENCE_DEFAULT = 80;
@@ -7242,6 +7326,11 @@ class TradingBot {
       trade.closedAt = Date.now();
       trade.exitPriceCents = bookedExit;
       trade.exitReason = reason;
+      // Tag stall-bank exits (peak-touch TP or momentum-stall TP) so the
+      // reversal cooldown can distinguish them from clean TP exits.
+      if (opts.stallBank === true) {
+        trade.exitIsStallBank = true;
+      }
       const exitProb = opts.exitHeldProb ?? trade._liveExitHeldProb;
       if (exitProb != null && Number.isFinite(Number(exitProb))) {
         trade.modelExitHeldProb = +Number(exitProb).toFixed(1);
@@ -7353,6 +7442,7 @@ class TradingBot {
         peakHeldBidCents: trade.peakHeldBidCents,
         troughHeldBidCents: trade.troughHeldBidCents,
         beChaseResult: trade.beChaseResult || undefined,
+        exitIsStallBank: trade.exitIsStallBank === true || undefined,
       });
     this._persist();
       return true;
@@ -8740,6 +8830,22 @@ class TradingBot {
       // Soft/50-50 no longer instant-cuts — stagnation + hard flip own mushy thesis.
       const peakProgress = modelPeakProgressCents(trade, peak);
 
+      // ── Late-barrier / commodity-extend pre-check (hoisted above stagnation) ──
+      // Commodities (Gold/Silver/Oil) use a 7m barrier + 6m settle-close instead of 2m/2.5m.
+      // We need canExtendLate here so stagnation / lean-exit don't cut a commodity position
+      // that lean says we should be holding all the way to settlement.
+      const lateBarrierMins = modelLateBarrierMinutes(this.config, trade.symbol);
+      const preCloseForceMins = modelPreCloseForceMinutes(this.config);
+      const inLateBarrier = lateBarrierMins > 0 && minutesRemaining <= lateBarrierMins;
+      const inPreCloseForce = preCloseForceMins > 0 && minutesRemaining <= preCloseForceMins;
+      const canExtendLate = !!(
+        inLateBarrier &&
+        !inPreCloseForce &&
+        picked &&
+        picked.window &&
+        modelLateExtendOk(picked.window, trade.side, this.config)
+      );
+
       const rapidAdverse = modelRapidAdverseExitReady({
         trueAdverseCents: trueAdverse,
         modelAgainst: modelDeteriorating,
@@ -8755,13 +8861,14 @@ class TradingBot {
 
       // Stagnation: held long enough with no peak progress toward TP + model decaying.
       // Time alone never exits — must also show thesis deterioration.
+      // Skip if canExtendLate — commodity in late hold with lean still good should ride to settle.
       const stagnation = modelStagnationExitReady({
         heldMs,
         peakProgressCents: peakProgress,
         modelDeteriorating,
         config: this.config,
       });
-      if (bidOk && stagnation.ready) {
+      if (bidOk && stagnation.ready && !canExtendLate) {
         this.lastDecision =
           `Stagnation ${stagnation.needSec}s with only +${stagnation.peakProgress}¢ peak + model decaying on ${trade.symbol} — exiting.`;
         if (underwater || econUnderwater) {
@@ -8893,23 +9000,14 @@ class TradingBot {
       // Defaults: force exit in last 1m; barrier at 2m; settle-close from 2.5m.
       // Commodities (Gold/Silver/Oil): barrier at 7m; settle-close at 6m — but
       // only holds through the barrier when lean is still clearly in our favour.
-      const lateBarrierMins = modelLateBarrierMinutes(this.config, trade.symbol);
+      // NOTE: lateBarrierMins / preCloseForceMins / inLateBarrier / inPreCloseForce /
+      // canExtendLate are computed above (hoisted before stagnation check).
       const settleCloseMins = modelSettleCloseMinutes(this.config, trade.symbol);
-      const preCloseForceMins = modelPreCloseForceMinutes(this.config);
       const settleCloseThresh = Number.isFinite(Number(this.config.modelSettleCloseLossCents))
         ? Number(this.config.modelSettleCloseLossCents)
         : MODEL_SETTLE_CLOSE_UNLESS_LOSS_CENTS_DEFAULT;
       const lateExitMaxLoss = modelLateExitMaxLossCents(this.config);
-      const inLateBarrier = lateBarrierMins > 0 && minutesRemaining <= lateBarrierMins;
       const inSettleClose = settleCloseMins > 0 && minutesRemaining <= settleCloseMins;
-      const inPreCloseForce = preCloseForceMins > 0 && minutesRemaining <= preCloseForceMins;
-      const canExtendLate = !!(
-        inLateBarrier &&
-        !inPreCloseForce &&
-        picked &&
-        picked.window &&
-        modelLateExtendOk(picked.window, trade.side, this.config)
-      );
 
       const exitModelPreSettle = async (forceReason) => {
         if (!bidOk) return false;
@@ -8964,8 +9062,9 @@ class TradingBot {
         }
       }
 
-      // Peak-touch TP: bid has touched the high-water mark 3 times while armed
-      // without breaking through to a new high — price is rejecting the ceiling, bank it.
+      // Peak-touch TP: bid has touched the high-water mark N times (default 10) while
+      // armed without breaking through to a new high — price is stalling at the ceiling,
+      // bank it. After exit, opposite-side entry is gated by checkModelReversalCooldown.
       const peakTouchTpNeeded = Number(this.config.modelPeakTouchTp) > 0
         ? Math.round(Number(this.config.modelPeakTouchTp))
         : MODEL_PEAK_TOUCH_TP_DEFAULT;
@@ -11331,6 +11430,24 @@ class TradingBot {
     }
 
     const entryHeldProb = side === 'yes' ? Number(window.probabilityUp) : Number(window.probabilityDown);
+
+    // After a stall-bank TP (peak-touch or momentum-stall), don't immediately
+    // flip to the opposite side — wait for the engine to confirm the reversal.
+    const reversalCd = checkModelReversalCooldown({
+      trades: this.ledger.trades,
+      symbol,
+      candidateSide: side,
+      window,
+      direction,
+      entryHeldProb,
+      config: this.config,
+      now: Date.now(),
+    });
+    if (!reversalCd.ok) {
+      say(reversalCd.reason);
+      return null;
+    }
+
     const leanGate = modelMinEntryLeanGate({ window, side, config: this.config, symbol });
     if (!leanGate.ok) {
       say(`Waiting: ${symbol} ${String(side).toUpperCase()} — ${leanGate.reason}.`);
@@ -12366,6 +12483,7 @@ module.exports = {
   MODEL_LOW_ASK_HELD_PROB_DEFAULT,
   checkModelPostExitCooldown,
   checkModelGlobalPostExitCooldown,
+  checkModelReversalCooldown,
   modelMinHoldMs,
   modelPostExitCooldownMs,
   modelGlobalPostExitCooldownMs,

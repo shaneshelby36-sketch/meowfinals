@@ -365,7 +365,7 @@
             <span class="field-hint">Exit if the held side's bid drops this many cents from your entry (e.g. entry 55¢, stop 10 → exit near 45¢). Caps a loser before a full 0¢ settlement. Paper fills at that level; live uses the real bid.</span>
           </label>
 
-          <label>Post-stop recovery (¢ bounce)
+          <label style="border: 2px solid #10b981; border-radius: 6px; padding: 8px;">🎯 Post-stop recovery (¢ bounce)
             <div class="slider-row">
               <input id="bot-stoprecovery" type="range" min="0" max="25" step="1" />
               <span class="slider-value" id="bot-stoprecovery-value">—</span>
@@ -728,16 +728,16 @@
             </div>
             <span class="field-hint">Default <strong>2.5</strong>. Block new MODEL entries in the last N minutes. If a trade opens anyway (slipped through), it will only exit at flat-or-better. <strong>0</strong> = off.</span>
           </label>
-          <label>MODEL peak-touch TP (touches needed)
+          <label style="border: 2px solid #10b981; border-radius: 6px; padding: 8px;">🎯 MODEL peak-touch TP (touches needed)
             <div class="slider-row">
-              <input id="bot-model-peak-touch-tp" type="range" min="1" max="10" step="1" />
+              <input id="bot-model-peak-touch-tp" type="range" min="1" max="20" step="1" />
               <span class="slider-value" id="bot-model-peak-touch-tp-value">—</span>
             </div>
-            <span class="field-hint">Default <strong>3</strong>. TP when bid hits the peak this many times without breaking through. Lower = exits sooner; higher = holds longer. <strong>0</strong> = off.</span>
+            <span class="field-hint">Default <strong>10</strong>. TP when bid hits the peak this many times without breaking through. Lower = exits sooner; higher = holds longer. <strong>0</strong> = off.</span>
           </label>
-          <label>MODEL peak touch window (¢)
+          <label style="border: 2px solid #10b981; border-radius: 6px; padding: 8px;">🎯 MODEL peak touch window (¢)
             <div class="slider-row">
-              <input id="bot-model-peak-touch-window" type="range" min="1" max="5" step="1" />
+              <input id="bot-model-peak-touch-window" type="range" min="1" max="20" step="1" />
               <span class="slider-value" id="bot-model-peak-touch-window-value">—</span>
             </div>
             <span class="field-hint">Default <strong>2¢</strong>. How close to the peak counts as a touch. Wider = easier to trigger on thin/wide-spread coins; tighter = stricter on liquid coins like BTC/ETH.</span>
