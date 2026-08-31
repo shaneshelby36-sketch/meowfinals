@@ -264,6 +264,7 @@ const MODEL_SETUPS = [
   {
     id: 'core',
     recommended: true,
+    shadowEnabled: true,
     label: 'Core BTC / ETH',
     why: 'BTC + ETH, one slot, max 88¢, conf 55%, stall 4s, BE chase 20s (only if lean decaying), stagnation 60s (no max-loss cliff).',
     autoTradeSymbols: 'BTC,ETH',
@@ -283,15 +284,23 @@ const MODEL_SETUPS = [
   },
   {
     id: 'btc-sol',
+    shadowEnabled: true,
     label: 'BTC + SOL only',
-    why: 'Fewest names, still enough hits. Use if BNB is chopping.',
+    why: 'BTC + SOL, same Core settings (conf 55, stall 4s, stagnation 60s, TP +11¢). Use if BNB is chopping or you want a Core-equivalent shadow on SOL.',
     autoTradeSymbols: 'BTC,SOL',
     modelMinConfidence: 55,
     modelEntryLiveLeanMarginPct: 3,
-    modelBankGreenCents: 7,
-    modelMinTpCents: 7,
-    maxOpenPositions: 2,
+    modelBankGreenCents: 11,
+    modelMinTpCents: 11,
+    modelNearTargetBankCents: 8,
+    modelMaxEntryCents: 88,
+    maxOpenPositions: 1,
+    modelLowAskMinConfidence: 0,
     modelConfirmCrossCents: 0,
+    modelMomentumStallSeconds: 4,
+    modelBeChaseSeconds: 20,
+    modelStagnationSeconds: 60,
+    modelRapidAdverseCents: 0,
   },
   {
     id: 'commodities',
@@ -4993,6 +5002,11 @@ class TradingBot {
     this._tradeLockDepth = 0;
     this._tradeLockInner = Promise.resolve();
     this._shadowBooks = loadShadowBooks();
+    // Drop any persisted shadow books for setups that are no longer shadowEnabled.
+    const _enabledShadowIds = new Set(MODEL_SETUPS.filter(s => s.shadowEnabled).map(s => s.id));
+    for (const id of Object.keys(this._shadowBooks)) {
+      if (!_enabledShadowIds.has(id)) delete this._shadowBooks[id];
+    }
     this._rebuildAllShadowLedgerSkim();
     this._inShadow = false;
     this._inCoinShadow = false;
@@ -6010,7 +6024,14 @@ class TradingBot {
       upsertCoinShadowLog(entry);
       return;
     }
-    if (this._inShadow) return;
+    // Setup shadow books: write closed trades to the coin shadow log so they
+    // appear in per-asset stats. Open/pending entries are still silently dropped.
+    if (this._inShadow) {
+      if (entry && String(entry.status) === 'closed') {
+        upsertCoinShadowLog(entry);
+      }
+      return;
+    }
     upsertTradeLog(entry);
   }
 
@@ -6184,6 +6205,8 @@ class TradingBot {
     const active = String(this.config.activeSetupId || 'core');
     for (const setup of MODEL_SETUPS) {
       if (!setup || setup.id === active) continue;
+      // Only run shadow books for setups explicitly opted in with shadowEnabled: true.
+      if (!setup.shadowEnabled) continue;
       await this._withShadowBook(
         setup,
         async () => {
