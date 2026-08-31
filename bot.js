@@ -107,7 +107,7 @@ const SERIES_BY_SYMBOL = {
   HYPE: 'KXHYPE15M',
   GOLD: 'KXGOLD15M',
   SILVER: 'KXSILVER15M',
-  OIL: 'KXOIL15M',
+  OIL: 'KXWTI15M',
 };
 
 /** Commodity (non-crypto) symbols — slower moving, different late-hold defaults. */
@@ -8730,20 +8730,20 @@ class TradingBot {
       // All TP/arm/near-target values use trade-aware variants so commodity overrides apply.
       const bankGreen = modelBankGreenCentsForTrade(trade, this.config);
       const nearTargetBank = modelNearTargetBankCentsForTrade(trade, this.config);
-      // For commodity trades with an override, isBankableGreen must also clear the
-      // commodity TP target — otherwise lean-exit / soft-turning paths bank at the
-      // global minTp floor and ignore the per-commodity setting entirely.
+      // For commodity trades with a TP override, disable isBankableGreen entirely so
+      // lean-exit / soft-turning / stagnation / pre-settle paths cannot bank below the
+      // configured target. Those paths fall through to breakeven scratch instead.
+      // Only isDecentGreen (greenCents >= commodityTp) can fire a take_profit.
       const commodityTpOverride = modelCommodityTpCents(
         String(trade.symbol || '').toUpperCase(), this.config
       );
-      const effectiveMinTp = commodityTpOverride > 0
-        ? Math.max(minTp || 0, commodityTpOverride)
-        : (minTp || 0);
       const flatOrGreen =
         bidOk && Number.isFinite(entry) && entry >= 1 && heldSideBidCents >= entry;
       const greenCents =
         flatOrGreen && Number.isFinite(entry) ? Math.round(heldSideBidCents - entry) : 0;
-      let isBankableGreen = flatOrGreen && greenCents >= Math.max(1, effectiveMinTp);
+      let isBankableGreen = commodityTpOverride > 0
+        ? false  // commodity: only isDecentGreen (full target) may take_profit
+        : flatOrGreen && greenCents >= Math.max(1, minTp || 0);
       let isDecentGreen = flatOrGreen && bankGreen > 0 && greenCents >= bankGreen;
       const exactlyFlat =
         bidOk && Number.isFinite(entry) && Math.round(heldSideBidCents) === Math.round(entry);
@@ -9361,10 +9361,12 @@ class TradingBot {
       // Peak-touch TP: bid has touched the high-water mark N times (default 10) while
       // armed without breaking through to a new high — price is stalling at the ceiling,
       // bank it. After exit, opposite-side entry is gated by checkModelReversalCooldown.
+      // Commodities with an override must still reach their target before peak-touch fires.
       const peakTouchTpNeeded = Number(this.config.modelPeakTouchTp) > 0
         ? Math.round(Number(this.config.modelPeakTouchTp))
         : MODEL_PEAK_TOUCH_TP_DEFAULT;
-      if (bidOk && armed && flatOrGreen && (Number(trade.peakTouchCount) || 0) >= peakTouchTpNeeded) {
+      if (bidOk && armed && flatOrGreen && (Number(trade.peakTouchCount) || 0) >= peakTouchTpNeeded
+          && (commodityTpOverride <= 0 || greenCents >= commodityTpOverride)) {
         this.lastDecision =
           `Peak touched ${trade.peakTouchCount}× at ${Math.round(peak)}¢ without new high on ${trade.symbol} — banking +${greenCents}¢ at bid.`;
         await this._closePosition(trade, heldSideBidCents, 'take_profit', {
@@ -9400,7 +9402,9 @@ class TradingBot {
           heldMs >= openGraceMs + againstBeDelay);
 
       // Trail armed (+3¢): bank at bid when stalled — especially near +TP target.
-      if (bidOk && stallBank.ready && stallBankHoldOk && flatOrGreen && greenCents >= 1) {
+      // Commodities with an override skip stall-bank below their target; they hold to target.
+      if (bidOk && stallBank.ready && stallBankHoldOk && flatOrGreen && greenCents >= 1
+          && (commodityTpOverride <= 0 || greenCents >= commodityTpOverride)) {
         this.lastDecision =
           stallBank.why === 'nearTarget'
             ? `Stall at +${stallBank.nearTargetBank ?? nearTargetBank}¢ near-target (peak +${stallBank.peakProg}¢, TP +${stallBank.bankGreen}¢) on ${trade.symbol} — banking +${greenCents}¢ at bid.`

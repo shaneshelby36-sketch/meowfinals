@@ -243,7 +243,7 @@ async function seedAll() {
   // indicators compute immediately (returning neutral values with no real history,
   // which is correct). Live ticks from the recompute loop will replace these over time.
   const { marketStrikePrice: msp } = require('./kalshiClient');
-  const SERIES_BY_SYMBOL_LOCAL = { GOLD: 'KXGOLD15M', SILVER: 'KXSILVER15M', OIL: 'KXOIL15M' };
+  const SERIES_BY_SYMBOL_LOCAL = { GOLD: 'KXGOLD15M', SILVER: 'KXSILVER15M', OIL: 'KXWTI15M' };
   for (const sym of COMMODITY_PRODUCT_SYMBOLS) {
     if (state[sym].series.ready(60)) continue; // already seeded via Polygon
     try {
