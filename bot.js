@@ -851,13 +851,13 @@ const MODEL_MIN_ENTRY_LEAN_NEAR_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_HYPE_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_GOLD_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_SILVER_DEFAULT = 0;
-const MODEL_MIN_ENTRY_LEAN_OIL_DEFAULT = 0;
+const MODEL_MIN_ENTRY_LEAN_OIL_DEFAULT = 54; // OIL requires 54% lean to enter (vs global 75%)
 
 // Per-commodity overrides for stake ($), max-loss stop (¢), and TP bank (¢).
 // 0 = fall back to the global setting for that parameter.
 const MODEL_COMMODITY_STAKE_DEFAULT = 0;
-const MODEL_COMMODITY_STOP_CENTS_DEFAULT = 0;
-const MODEL_COMMODITY_TP_CENTS_DEFAULT = 0;
+const MODEL_COMMODITY_STOP_CENTS_DEFAULT = 15; // ¢ below entry; 0 = use global modelMaxAdverseCents
+const MODEL_COMMODITY_TP_CENTS_DEFAULT = 30;   // ¢ green to bank; 0 = use global modelBankGreenCents
 /**
  * Commodity late-hold: start the settle-close zone this many minutes before
  * window end. Slower-moving assets trend more steadily, so we can wait longer
@@ -1657,7 +1657,8 @@ function modelCommodityStakeDollars(symbol, config = {}) {
 }
 
 /**
- * Per-commodity max-loss stop override (¢ below entry). 0 = use global modelMaxLossCents.
+ * Per-commodity max-loss stop override (¢ below entry).
+ * 0 / unset = use MODEL_COMMODITY_STOP_CENTS_DEFAULT (15¢); true global fallback = set config key to 0
  * Config keys: commodityStopCentsGold, commodityStopCentsSilver, commodityStopCentsOil
  */
 function modelCommodityStopCents(symbol, config = {}) {
@@ -1671,8 +1672,8 @@ function modelCommodityStopCents(symbol, config = {}) {
 
 /**
  * Per-commodity TP bank override (¢ green to bank).
- *   0   = use global modelBankGreenCents
- *   99  = ride to settlement (no TP at all — only lean/stop/settle exits)
+ *   0 / unset = use MODEL_COMMODITY_TP_CENTS_DEFAULT (30¢)
+ *   99 = ride to settlement (no TP at all — only lean/stop/settle exits)
  *   1–98 = bank when greenCents reaches this value
  * Config keys: commodityTpCentsGold, commodityTpCentsSilver, commodityTpCentsOil
  */
@@ -3688,6 +3689,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'commodityMinEntryCents',
   'commoditySettleCloseMinutes',
   'commodityLateBarrierMinutes',
+  'commodityMaxOpenPositions',
   'modelAutoSwitchLowAvailDollars',
   'modelAutoSwitchMinLeadDollars',
   'modelAutoSwitchCooldownMinutes',
@@ -4850,7 +4852,7 @@ class TradingBot {
       modelMinMinutesToOpen: MODEL_MIN_MINUTES_TO_OPEN_DEFAULT,
       modelPeakTouchTp: MODEL_PEAK_TOUCH_TP_DEFAULT,
       modelPeakTouchWindow: MODEL_PEAK_TOUCH_WINDOW_DEFAULT,
-      // Per-commodity overrides: 0 = use global setting.
+      // Per-commodity overrides: 0/unset = use code default (TP=30¢, stop=15¢, stake=$0=global).
       commodityStakeDollarsGold: MODEL_COMMODITY_STAKE_DEFAULT,
       commodityStakeDollarsSilver: MODEL_COMMODITY_STAKE_DEFAULT,
       commodityStakeDollarsOil: MODEL_COMMODITY_STAKE_DEFAULT,
@@ -4865,6 +4867,7 @@ class TradingBot {
       // Per-commodity cash-out window (0 = use commodity default: 6m settle-close, 7m barrier).
       commoditySettleCloseMinutes: 0,
       commodityLateBarrierMinutes: 0,
+      commodityMaxOpenPositions: 1,
       // After stop-loss: require this many ¢ of bid bounce before re-entry (0 = off).
       // Null/unset uses stopRecoveryCentsRequired() (~40% of stop, min 5¢).
       stopRecoveryCents: 6,
@@ -12039,14 +12042,27 @@ class TradingBot {
     const cryptoOpenCount = () => this.openTrades.filter(
       (t) => t && !isCommoditySymbol(t.symbol)
     ).length;
+    const commodityOpenCount = () => this.openTrades.filter(
+      (t) => t && isCommoditySymbol(t.symbol)
+    ).length;
+    const commodityMax = (() => {
+      const n = Number(this.config.commodityMaxOpenPositions);
+      return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+    })();
     const slotsFree = () =>
       Math.max(0, this._effectiveMaxCryptoPositions() - cryptoOpenCount());
-    if (slotsFree() <= 0) return;
+    if (slotsFree() <= 0 && commodityOpenCount() >= commodityMax) return;
 
-    const tryOne = async (opp) => this._openPosition(this._modelOppToOpenArgs(opp));
+    const tryOne = async (opp) => {
+      // Gate commodity entries against the commodity cap.
+      if (isCommoditySymbol(opp.symbol) && commodityOpenCount() >= commodityMax) return;
+      // Gate crypto entries against the crypto cap.
+      if (!isCommoditySymbol(opp.symbol) && slotsFree() <= 0) return;
+      return this._openPosition(this._modelOppToOpenArgs(opp));
+    };
 
     let i = 0;
-    const parallelN = Math.min(slotsFree(), ranked.length, 3);
+    const parallelN = Math.min(slotsFree() + (commodityOpenCount() < commodityMax ? 1 : 0), ranked.length, 3);
     if (parallelN >= 2) {
       const batch = ranked.slice(0, parallelN);
       const names = batch.map((o) => o.symbol).join(' + ');

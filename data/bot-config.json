@@ -117,5 +117,15 @@
   "modelAutoSwitchSetup": "off",
   "modelShadowBooks": "off",
   "skimMode": "insurance",
-  "stakingStrategy": "fixed"
+  "stakingStrategy": "fixed",
+  "commodityStakeDollarsGold": 3,
+  "commodityStakeDollarsSilver": 3,
+  "commodityStakeDollarsOil": 3,
+  "commodityStopCentsGold": 15,
+  "commodityStopCentsSilver": 15,
+  "commodityStopCentsOil": 15,
+  "commodityTpCentsGold": 30,
+  "commodityTpCentsSilver": 30,
+  "commodityTpCentsOil": 30,
+  "modelMinEntryLeanPctOil": 54
 }

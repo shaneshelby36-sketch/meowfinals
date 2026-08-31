@@ -659,6 +659,14 @@
             <span class="field-hint">Commodities: force exit unless conf/lean still strong in the last N minutes. Default <strong>7 min</strong> (vs 2m for crypto). <strong>0</strong> = use default.</span>
           </label>
 
+          <label>🎯 Commodity — max open at once
+            <div class="slider-row">
+              <input id="bot-commodity-max-open" type="range" min="1" max="3" step="1" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-max-open-value">—</span>
+            </div>
+            <span class="field-hint">Max simultaneous open commodity trades (GOLD/SILVER/OIL). Default <strong>1</strong>.</span>
+          </label>
+
           <label>MODEL signal score strength
             <div class="slider-row">
               <input id="bot-model-signal-dom" type="range" min="0" max="30" step="1" />
