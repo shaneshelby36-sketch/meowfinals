@@ -1177,7 +1177,7 @@ function renderBotDashboard(data) {
 function renderBotPerfGrid(stats) {
   const el = document.getElementById('bot-perf-grid');
   if (!el) return;
-  const rows = Array.isArray(stats) ? stats.filter(r => (r.displayTrades || 0) > 0) : [];
+  const rows = Array.isArray(stats) ? stats : [];
   if (!rows.length) { el.innerHTML = ''; return; }
   el.innerHTML = `<div class="bpg-grid">${rows.map(r => {
     const wrTone = r.winRatePct != null ? (r.winRatePct >= 55 ? 'pos' : r.winRatePct < 40 ? 'neg' : '') : '';
