@@ -3378,6 +3378,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelFastRedCents',
   'modelStagnationSeconds',
   'modelStagnationMinProgressCents',
+  'modelProbDriftPts',
   'modelRapidAdverseCents',
   'modelUnderwaterWindowSeconds',
   'modelUnderwaterRatioPct',
