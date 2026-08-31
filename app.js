@@ -1762,9 +1762,9 @@ const SLIDER_UNITS = {
   'bot-commodity-stop-gold': (v) => (Number(v) <= 0 ? 'global' : `−${Math.round(v)}¢`),
   'bot-commodity-stop-silver': (v) => (Number(v) <= 0 ? 'global' : `−${Math.round(v)}¢`),
   'bot-commodity-stop-oil': (v) => (Number(v) <= 0 ? 'global' : `−${Math.round(v)}¢`),
-  'bot-commodity-tp-gold': (v) => (Number(v) <= 0 ? 'global' : `+${Math.round(v)}¢`),
-  'bot-commodity-tp-silver': (v) => (Number(v) <= 0 ? 'global' : `+${Math.round(v)}¢`),
-  'bot-commodity-tp-oil': (v) => (Number(v) <= 0 ? 'global' : `+${Math.round(v)}¢`),
+  'bot-commodity-tp-gold': (v) => (Number(v) <= 0 ? 'global' : Number(v) >= 99 ? 'settle' : `+${Math.round(v)}¢`),
+  'bot-commodity-tp-silver': (v) => (Number(v) <= 0 ? 'global' : Number(v) >= 99 ? 'settle' : `+${Math.round(v)}¢`),
+  'bot-commodity-tp-oil': (v) => (Number(v) <= 0 ? 'global' : Number(v) >= 99 ? 'settle' : `+${Math.round(v)}¢`),
   'bot-model-live-favor': (v) => (Number(v) <= 0 ? 'any lead' : `≥${Math.round(v)} pts`),
   'bot-model-min-room-floor': (v) => (Number(v) <= 0 ? 'off' : `≥${Math.round(v)}¢`),
   'bot-model-signal-dom': (v) => {

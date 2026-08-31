@@ -1670,7 +1670,10 @@ function modelCommodityStopCents(symbol, config = {}) {
 }
 
 /**
- * Per-commodity TP bank override (¢ green to bank). 0 = use global modelBankGreenCents.
+ * Per-commodity TP bank override (¢ green to bank).
+ *   0   = use global modelBankGreenCents
+ *   99  = ride to settlement (no TP at all — only lean/stop/settle exits)
+ *   1–98 = bank when greenCents reaches this value
  * Config keys: commodityTpCentsGold, commodityTpCentsSilver, commodityTpCentsOil
  */
 function modelCommodityTpCents(symbol, config = {}) {
@@ -1678,8 +1681,14 @@ function modelCommodityTpCents(symbol, config = {}) {
   if (!['GOLD', 'SILVER', 'OIL'].includes(sym)) return 0;
   const key = `commodityTpCents${sym.charAt(0)}${sym.slice(1).toLowerCase()}`;
   const n = Number(config[key]);
+  if (Number.isFinite(n) && n === 99) return 99; // sentinel: ride to settlement
   if (Number.isFinite(n) && n > 0) return Math.round(n);
   return MODEL_COMMODITY_TP_CENTS_DEFAULT;
+}
+
+/** Returns true when the commodity TP is set to "ride to settlement" (value 99). */
+function modelCommodityRideToSettle(symbol, config = {}) {
+  return modelCommodityTpCents(symbol, config) === 99;
 }
 
 /** Block entries when held-side live lean is too soft (e.g. 72% NO on a 74¢ ticket). */
@@ -8733,10 +8742,12 @@ class TradingBot {
       // For commodity trades with a TP override, disable isBankableGreen entirely so
       // lean-exit / soft-turning / stagnation / pre-settle paths cannot bank below the
       // configured target. Those paths fall through to breakeven scratch instead.
-      // Only isDecentGreen (greenCents >= commodityTp) can fire a take_profit.
+      // When override === 99 (ride to settle), isDecentGreen is also disabled — no TP
+      // at all; only lean/stop/settle-window exits apply.
       const commodityTpOverride = modelCommodityTpCents(
         String(trade.symbol || '').toUpperCase(), this.config
       );
+      const commodityRideToSettle = commodityTpOverride === 99;
       const flatOrGreen =
         bidOk && Number.isFinite(entry) && entry >= 1 && heldSideBidCents >= entry;
       const greenCents =
@@ -8744,7 +8755,9 @@ class TradingBot {
       let isBankableGreen = commodityTpOverride > 0
         ? false  // commodity: only isDecentGreen (full target) may take_profit
         : flatOrGreen && greenCents >= Math.max(1, minTp || 0);
-      let isDecentGreen = flatOrGreen && bankGreen > 0 && greenCents >= bankGreen;
+      let isDecentGreen = commodityRideToSettle
+        ? false  // ride to settle: no TP — hold through to settlement
+        : flatOrGreen && bankGreen > 0 && greenCents >= bankGreen;
       const exactlyFlat =
         bidOk && Number.isFinite(entry) && Math.round(heldSideBidCents) === Math.round(entry);
       const nearFlat = bidOk && modelNearFlatCents(trade, heldSideBidCents);
@@ -9366,6 +9379,7 @@ class TradingBot {
         ? Math.round(Number(this.config.modelPeakTouchTp))
         : MODEL_PEAK_TOUCH_TP_DEFAULT;
       if (bidOk && armed && flatOrGreen && (Number(trade.peakTouchCount) || 0) >= peakTouchTpNeeded
+          && !commodityRideToSettle
           && (commodityTpOverride <= 0 || greenCents >= commodityTpOverride)) {
         this.lastDecision =
           `Peak touched ${trade.peakTouchCount}× at ${Math.round(peak)}¢ without new high on ${trade.symbol} — banking +${greenCents}¢ at bid.`;
@@ -9404,6 +9418,7 @@ class TradingBot {
       // Trail armed (+3¢): bank at bid when stalled — especially near +TP target.
       // Commodities with an override skip stall-bank below their target; they hold to target.
       if (bidOk && stallBank.ready && stallBankHoldOk && flatOrGreen && greenCents >= 1
+          && !commodityRideToSettle
           && (commodityTpOverride <= 0 || greenCents >= commodityTpOverride)) {
         this.lastDecision =
           stallBank.why === 'nearTarget'
