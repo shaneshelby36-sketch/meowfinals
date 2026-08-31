@@ -429,9 +429,12 @@ function buildPredictions(data, kalshiTargets = {}, accumulatorManager = null, o
   // benchmark most alts move with) rather than an arbitrary "other" symbol —
   // this scales cleanly whether we're tracking 2 symbols or 7. BTC itself
   // has no reference (correlating BTC with itself is meaningless).
+  const COMMODITY_SET = new Set(['GOLD', 'SILVER', 'OIL']);
   const correlations = {};
   for (const symbol of symbols) {
-    if (symbol === 'BTC' || !indicators['BTC'] || !indicators[symbol]) continue;
+    // Commodities don't correlate meaningfully with BTC — skip cross-reference.
+    if (symbol === 'BTC' || COMMODITY_SET.has(symbol)) continue;
+    if (!indicators['BTC'] || !indicators[symbol]) continue;
     correlations[symbol] = correlation(closesBySymbol['BTC'], closesBySymbol[symbol], 30);
   }
 
@@ -442,7 +445,9 @@ function buildPredictions(data, kalshiTargets = {}, accumulatorManager = null, o
       result[symbol] = { ready: false, price: data[symbol].series.latestClose() };
       continue;
     }
-    const other = symbol === 'BTC' ? null : 'BTC';
+    // Commodities: no BTC cross-reference; other crypto: use BTC as benchmark.
+    const isCommodity = COMMODITY_SET.has(symbol);
+    const other = (symbol === 'BTC' || isCommodity) ? null : 'BTC';
     const otherInd = other ? indicators[other] : null;
     const crossCorrelation = other ? correlations[symbol] : null;
 

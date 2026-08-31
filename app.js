@@ -1727,6 +1727,15 @@ const SLIDER_UNITS = {
   'bot-model-min-entry-lean-gold': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-min-entry-lean-silver': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-min-entry-lean-oil': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-commodity-stake-gold': (v) => (Number(v) <= 0 ? 'global' : `$${parseFloat(v).toFixed(2)}`),
+  'bot-commodity-stake-silver': (v) => (Number(v) <= 0 ? 'global' : `$${parseFloat(v).toFixed(2)}`),
+  'bot-commodity-stake-oil': (v) => (Number(v) <= 0 ? 'global' : `$${parseFloat(v).toFixed(2)}`),
+  'bot-commodity-stop-gold': (v) => (Number(v) <= 0 ? 'global' : `−${Math.round(v)}¢`),
+  'bot-commodity-stop-silver': (v) => (Number(v) <= 0 ? 'global' : `−${Math.round(v)}¢`),
+  'bot-commodity-stop-oil': (v) => (Number(v) <= 0 ? 'global' : `−${Math.round(v)}¢`),
+  'bot-commodity-tp-gold': (v) => (Number(v) <= 0 ? 'global' : `+${Math.round(v)}¢`),
+  'bot-commodity-tp-silver': (v) => (Number(v) <= 0 ? 'global' : `+${Math.round(v)}¢`),
+  'bot-commodity-tp-oil': (v) => (Number(v) <= 0 ? 'global' : `+${Math.round(v)}¢`),
   'bot-model-live-favor': (v) => (Number(v) <= 0 ? 'any lead' : `≥${Math.round(v)} pts`),
   'bot-model-min-room-floor': (v) => (Number(v) <= 0 ? 'off' : `≥${Math.round(v)}¢`),
   'bot-model-signal-dom': (v) => {
@@ -2243,6 +2252,15 @@ function wireSliderDisplays() {
     'bot-model-min-entry-lean-gold',
     'bot-model-min-entry-lean-silver',
     'bot-model-min-entry-lean-oil',
+    'bot-commodity-stake-gold',
+    'bot-commodity-stake-silver',
+    'bot-commodity-stake-oil',
+    'bot-commodity-stop-gold',
+    'bot-commodity-stop-silver',
+    'bot-commodity-stop-oil',
+    'bot-commodity-tp-gold',
+    'bot-commodity-tp-silver',
+    'bot-commodity-tp-oil',
     'bot-model-signal-dom',
     'bot-model-confirm-cross',
     'bot-model-confirm-ext',
@@ -2407,6 +2425,15 @@ function wireBotConfigAutoSave() {
     'bot-model-min-entry-lean-gold',
     'bot-model-min-entry-lean-silver',
     'bot-model-min-entry-lean-oil',
+    'bot-commodity-stake-gold',
+    'bot-commodity-stake-silver',
+    'bot-commodity-stake-oil',
+    'bot-commodity-stop-gold',
+    'bot-commodity-stop-silver',
+    'bot-commodity-stop-oil',
+    'bot-commodity-tp-gold',
+    'bot-commodity-tp-silver',
+    'bot-commodity-tp-oil',
     'bot-model-signal-dom',
     'bot-model-confirm-cross',
     'bot-model-confirm-ext',
@@ -2598,6 +2625,25 @@ async function loadBotConfigIntoForm() {
     if (modelMinEntryLeanOIL) {
       modelMinEntryLeanOIL.value = c.modelMinEntryLeanPctOil != null ? c.modelMinEntryLeanPctOil : 0;
     }
+    // Commodity stake/stop/TP overrides
+    const commodityStakeGold = document.getElementById('bot-commodity-stake-gold');
+    if (commodityStakeGold) commodityStakeGold.value = c.commodityStakeDollarsGold != null ? c.commodityStakeDollarsGold : 0;
+    const commodityStakeSilver = document.getElementById('bot-commodity-stake-silver');
+    if (commodityStakeSilver) commodityStakeSilver.value = c.commodityStakeDollarsSilver != null ? c.commodityStakeDollarsSilver : 0;
+    const commodityStakeOil = document.getElementById('bot-commodity-stake-oil');
+    if (commodityStakeOil) commodityStakeOil.value = c.commodityStakeDollarsOil != null ? c.commodityStakeDollarsOil : 0;
+    const commodityStopGold = document.getElementById('bot-commodity-stop-gold');
+    if (commodityStopGold) commodityStopGold.value = c.commodityStopCentsGold != null ? c.commodityStopCentsGold : 0;
+    const commodityStopSilver = document.getElementById('bot-commodity-stop-silver');
+    if (commodityStopSilver) commodityStopSilver.value = c.commodityStopCentsSilver != null ? c.commodityStopCentsSilver : 0;
+    const commodityStopOil = document.getElementById('bot-commodity-stop-oil');
+    if (commodityStopOil) commodityStopOil.value = c.commodityStopCentsOil != null ? c.commodityStopCentsOil : 0;
+    const commodityTpGold = document.getElementById('bot-commodity-tp-gold');
+    if (commodityTpGold) commodityTpGold.value = c.commodityTpCentsGold != null ? c.commodityTpCentsGold : 0;
+    const commodityTpSilver = document.getElementById('bot-commodity-tp-silver');
+    if (commodityTpSilver) commodityTpSilver.value = c.commodityTpCentsSilver != null ? c.commodityTpCentsSilver : 0;
+    const commodityTpOil = document.getElementById('bot-commodity-tp-oil');
+    if (commodityTpOil) commodityTpOil.value = c.commodityTpCentsOil != null ? c.commodityTpCentsOil : 0;
     const modelSignalDom = document.getElementById('bot-model-signal-dom');
     if (modelSignalDom) {
       const dom =
@@ -2866,6 +2912,15 @@ async function loadBotConfigIntoForm() {
       'bot-model-min-entry-lean-gold',
       'bot-model-min-entry-lean-silver',
       'bot-model-min-entry-lean-oil',
+      'bot-commodity-stake-gold',
+      'bot-commodity-stake-silver',
+      'bot-commodity-stake-oil',
+      'bot-commodity-stop-gold',
+      'bot-commodity-stop-silver',
+      'bot-commodity-stop-oil',
+      'bot-commodity-tp-gold',
+      'bot-commodity-tp-silver',
+      'bot-commodity-tp-oil',
       'bot-model-signal-dom',
       'bot-model-confirm-cross',
       'bot-model-confirm-ext',
@@ -3075,6 +3130,15 @@ async function saveBotConfig(opts = {}) {
     modelMinEntryLeanPctGold: parseFloat(document.getElementById('bot-model-min-entry-lean-gold')?.value || '0'),
     modelMinEntryLeanPctSilver: parseFloat(document.getElementById('bot-model-min-entry-lean-silver')?.value || '0'),
     modelMinEntryLeanPctOil: parseFloat(document.getElementById('bot-model-min-entry-lean-oil')?.value || '0'),
+    commodityStakeDollarsGold: parseFloat(document.getElementById('bot-commodity-stake-gold')?.value || '0'),
+    commodityStakeDollarsSilver: parseFloat(document.getElementById('bot-commodity-stake-silver')?.value || '0'),
+    commodityStakeDollarsOil: parseFloat(document.getElementById('bot-commodity-stake-oil')?.value || '0'),
+    commodityStopCentsGold: parseFloat(document.getElementById('bot-commodity-stop-gold')?.value || '0'),
+    commodityStopCentsSilver: parseFloat(document.getElementById('bot-commodity-stop-silver')?.value || '0'),
+    commodityStopCentsOil: parseFloat(document.getElementById('bot-commodity-stop-oil')?.value || '0'),
+    commodityTpCentsGold: parseFloat(document.getElementById('bot-commodity-tp-gold')?.value || '0'),
+    commodityTpCentsSilver: parseFloat(document.getElementById('bot-commodity-tp-silver')?.value || '0'),
+    commodityTpCentsOil: parseFloat(document.getElementById('bot-commodity-tp-oil')?.value || '0'),
     modelSignalDominanceMin: (() => {
       const raw = parseFloat(document.getElementById('bot-model-signal-dom')?.value || '0');
       if (!Number.isFinite(raw) || raw <= 0) return 0;

@@ -843,6 +843,12 @@ const MODEL_MIN_ENTRY_LEAN_HYPE_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_GOLD_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_SILVER_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_OIL_DEFAULT = 0;
+
+// Per-commodity overrides for stake ($), max-loss stop (¢), and TP bank (¢).
+// 0 = fall back to the global setting for that parameter.
+const MODEL_COMMODITY_STAKE_DEFAULT = 0;
+const MODEL_COMMODITY_STOP_CENTS_DEFAULT = 0;
+const MODEL_COMMODITY_TP_CENTS_DEFAULT = 0;
 /**
  * Commodity late-hold: start the settle-close zone this many minutes before
  * window end. Slower-moving assets trend more steadily, so we can wait longer
@@ -1195,6 +1201,20 @@ function modelBankGreenCents(config = {}) {
   if (Number.isFinite(n) && n <= 0) return 0;
   if (Number.isFinite(n) && n > 0) return Math.round(n);
   return MODEL_BANK_GREEN_CENTS_DEFAULT;
+}
+
+/**
+ * Bank-green TP threshold for a specific trade. If the trade is a commodity
+ * and a per-commodity override is configured (> 0), use that; otherwise fall
+ * back to the global modelBankGreenCents value.
+ */
+function modelBankGreenCentsForTrade(trade, config = {}) {
+  const sym = String(trade && trade.symbol || '').toUpperCase();
+  if (['GOLD', 'SILVER', 'OIL'].includes(sym)) {
+    const override = modelCommodityTpCents(sym, config);
+    if (override > 0) return override;
+  }
+  return modelBankGreenCents(config);
 }
 
 /** Stall-bank when peak reaches this green (≤ full TP). 0 = auto (TP − 3¢). */
@@ -1578,6 +1598,45 @@ function modelMinEntryLeanPctForSymbol(symbol, config = {}) {
   return modelMinEntryLeanPct(config);
 }
 
+/**
+ * Per-commodity stake override. Returns 0 when not set (caller falls back to global).
+ * Config keys: commodityStakeDollarsGold, commodityStakeDollarsSilver, commodityStakeDollarsOil
+ */
+function modelCommodityStakeDollars(symbol, config = {}) {
+  const sym = String(symbol || '').toUpperCase();
+  if (!['GOLD', 'SILVER', 'OIL'].includes(sym)) return 0;
+  const key = `commodityStakeDollars${sym.charAt(0)}${sym.slice(1).toLowerCase()}`;
+  const n = Number(config[key]);
+  if (Number.isFinite(n) && n > 0) return +n.toFixed(2);
+  return MODEL_COMMODITY_STAKE_DEFAULT;
+}
+
+/**
+ * Per-commodity max-loss stop override (¢ below entry). 0 = use global modelMaxLossCents.
+ * Config keys: commodityStopCentsGold, commodityStopCentsSilver, commodityStopCentsOil
+ */
+function modelCommodityStopCents(symbol, config = {}) {
+  const sym = String(symbol || '').toUpperCase();
+  if (!['GOLD', 'SILVER', 'OIL'].includes(sym)) return 0;
+  const key = `commodityStopCents${sym.charAt(0)}${sym.slice(1).toLowerCase()}`;
+  const n = Number(config[key]);
+  if (Number.isFinite(n) && n > 0) return Math.round(n);
+  return MODEL_COMMODITY_STOP_CENTS_DEFAULT;
+}
+
+/**
+ * Per-commodity TP bank override (¢ green to bank). 0 = use global modelBankGreenCents.
+ * Config keys: commodityTpCentsGold, commodityTpCentsSilver, commodityTpCentsOil
+ */
+function modelCommodityTpCents(symbol, config = {}) {
+  const sym = String(symbol || '').toUpperCase();
+  if (!['GOLD', 'SILVER', 'OIL'].includes(sym)) return 0;
+  const key = `commodityTpCents${sym.charAt(0)}${sym.slice(1).toLowerCase()}`;
+  const n = Number(config[key]);
+  if (Number.isFinite(n) && n > 0) return Math.round(n);
+  return MODEL_COMMODITY_TP_CENTS_DEFAULT;
+}
+
 /** Block entries when held-side live lean is too soft (e.g. 72% NO on a 74¢ ticket). */
 function modelMinEntryLeanGate({ window, side, config = {}, symbol } = {}) {
   const need = modelMinEntryLeanPctForSymbol(symbol, config);
@@ -1651,6 +1710,20 @@ function modelMaxLossCents(config = {}) {
   return MODEL_MAX_LOSS_CENTS_DEFAULT;
 }
 
+/**
+ * Max-loss stop for a specific trade. If the trade is a commodity and a
+ * per-commodity stop override is configured (> 0), use that; otherwise fall
+ * back to the global modelMaxLossCents value.
+ */
+function modelMaxLossCentsForTrade(trade, config = {}) {
+  const sym = String(trade && trade.symbol || '').toUpperCase();
+  if (['GOLD', 'SILVER', 'OIL'].includes(sym)) {
+    const override = modelCommodityStopCents(sym, config);
+    if (override > 0) return override;
+  }
+  return modelMaxLossCents(config);
+}
+
 function modelRichStopFloorCents(config = {}) {
   const n = Number(config.modelRichStopFloorCents);
   if (Number.isFinite(n) && n <= 0) return 0;
@@ -1714,7 +1787,8 @@ function modelStopFloorForEntryCents(entryCents, config = {}) {
  * to ride all the way to the hard floor (that was booking 70→61 / −9¢ on an 8¢ knob).
  */
 function modelEffectiveMaxLossCents(trade, config = {}) {
-  const base = modelMaxLossCents(config);
+  // Use per-commodity stop override when set; otherwise global max loss.
+  const base = modelMaxLossCentsForTrade(trade, config);
   if (!(base > 0)) return 0;
   const entry = Number(trade && trade.entryPriceCents);
   if (!Number.isFinite(entry)) return base;
@@ -2203,7 +2277,8 @@ function modelStallBankReady(
   const peakProg = Number(peakProgressCents);
   if (!Number.isFinite(green) || green < 1) return { ready: false };
 
-  const bankGreen = modelBankGreenCents(config);
+  // Use per-commodity TP when trade is a commodity (0 = fall back to global).
+  const bankGreen = modelBankGreenCentsForTrade(trade, config);
   const nearTargetBank = modelNearTargetBankCents(config);
   const arm = modelTrailArmCents(config);
   if (green < arm) return { ready: false };
@@ -3518,6 +3593,15 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelMinMinutesToOpen',
   'modelPeakTouchTp',
   'modelPeakTouchWindow',
+  'commodityStakeDollarsGold',
+  'commodityStakeDollarsSilver',
+  'commodityStakeDollarsOil',
+  'commodityStopCentsGold',
+  'commodityStopCentsSilver',
+  'commodityStopCentsOil',
+  'commodityTpCentsGold',
+  'commodityTpCentsSilver',
+  'commodityTpCentsOil',
   'modelAutoSwitchLowAvailDollars',
   'modelAutoSwitchMinLeadDollars',
   'modelAutoSwitchCooldownMinutes',
@@ -4680,6 +4764,16 @@ class TradingBot {
       modelMinMinutesToOpen: MODEL_MIN_MINUTES_TO_OPEN_DEFAULT,
       modelPeakTouchTp: MODEL_PEAK_TOUCH_TP_DEFAULT,
       modelPeakTouchWindow: MODEL_PEAK_TOUCH_WINDOW_DEFAULT,
+      // Per-commodity overrides: 0 = use global setting.
+      commodityStakeDollarsGold: MODEL_COMMODITY_STAKE_DEFAULT,
+      commodityStakeDollarsSilver: MODEL_COMMODITY_STAKE_DEFAULT,
+      commodityStakeDollarsOil: MODEL_COMMODITY_STAKE_DEFAULT,
+      commodityStopCentsGold: MODEL_COMMODITY_STOP_CENTS_DEFAULT,
+      commodityStopCentsSilver: MODEL_COMMODITY_STOP_CENTS_DEFAULT,
+      commodityStopCentsOil: MODEL_COMMODITY_STOP_CENTS_DEFAULT,
+      commodityTpCentsGold: MODEL_COMMODITY_TP_CENTS_DEFAULT,
+      commodityTpCentsSilver: MODEL_COMMODITY_TP_CENTS_DEFAULT,
+      commodityTpCentsOil: MODEL_COMMODITY_TP_CENTS_DEFAULT,
       // After stop-loss: require this many ¢ of bid bounce before re-entry (0 = off).
       // Null/unset uses stopRecoveryCentsRequired() (~40% of stop, min 5¢).
       stopRecoveryCents: 6,
@@ -6296,10 +6390,13 @@ class TradingBot {
     const safeBase = Number.isFinite(base) && base > 0 ? base : Number(this.config.stakeDollars) || 3;
     const p = Number(priceCents);
     if (model) {
+      // Per-commodity stake override (0 = fall back to global).
+      const commodityStake = modelCommodityStakeDollars(symbol, this.config);
+      const effectiveBase = commodityStake > 0 ? commodityStake : safeBase;
       if (modelIsHalfStakeAsk(p)) {
-        return Math.max(0.5, +(safeBase * 0.5).toFixed(2));
+        return Math.max(0.5, +(effectiveBase * 0.5).toFixed(2));
       }
-      return safeBase;
+      return effectiveBase;
     }
     if (modelUncertain) {
       return Math.max(0.5, +(safeBase * 0.5).toFixed(2));
@@ -8496,7 +8593,8 @@ class TradingBot {
         heldSideBidCents >= 1 &&
         heldSideBidCents <= 99;
       const minTp = modelMinTpCents(this.config);
-      const bankGreen = modelBankGreenCents(this.config);
+      // Use per-commodity TP override for this trade when set.
+      const bankGreen = modelBankGreenCentsForTrade(trade, this.config);
       const nearTargetBank = modelNearTargetBankCents(this.config);
       const flatOrGreen =
         bidOk && Number.isFinite(entry) && entry >= 1 && heldSideBidCents >= entry;
@@ -12553,6 +12651,7 @@ module.exports = {
   modelMinTpCents,
   modelTakeProfitMeetsFloor,
   modelBankGreenCents,
+  modelBankGreenCentsForTrade,
   modelNearTargetBankCents,
   modelTrailArmCents,
   modelSettleCloseMinutes,
@@ -12621,6 +12720,7 @@ module.exports = {
   MODEL_LEAN_FLOOR_SCALE_DEFAULT,
   MODEL_LEAN_FLOOR_BASE_ENTRY_DEFAULT,
   modelMaxLossCents,
+  modelMaxLossCentsForTrade,
   modelEffectiveMaxLossCents,
   modelHardStopFloorCents,
   modelMinRoomToFloorCents,
