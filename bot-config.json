@@ -9,6 +9,7 @@
   "modelEntryLiveLeanMarginPct": 5,
   "modelBankGreenCents": 7,
   "modelMinTpCents": 7,
+  "modelMinEntryLeanPctOil": 54,
   "commodityTpCentsGold": 30,
   "commodityTpCentsSilver": 30,
   "commodityTpCentsOil": 30,
