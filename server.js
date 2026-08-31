@@ -432,12 +432,12 @@ async function recompute() {
     // the actual underlying spot price Kalshi uses for settlement — perfect for
     // RSI/MACD/ATR on these assets. One synthetic tick per compute cycle (~1s).
     const kalshiStrikesForFeed = dashboardStrikeTargets();
-    const now = Date.now();
+    const nowMs = Date.now();
     for (const sym of COMMODITY_PRODUCT_SYMBOLS) {
       const target = kalshiStrikesForFeed[sym];
       if (target && Number.isFinite(Number(target.price)) && Number(target.price) > 0) {
-        state[sym].series.addTrade(Number(target.price), 1, now);
-        state[sym].lastTradeAt = now;
+        state[sym].series.addTrade(Number(target.price), 1, nowMs);
+        state[sym].lastTradeAt = nowMs;
       }
     }
 
