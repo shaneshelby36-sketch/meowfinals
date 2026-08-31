@@ -1229,9 +1229,28 @@ function modelNearTargetBankCents(config = {}) {
   return MODEL_NEAR_TARGET_BANK_CENTS_DEFAULT;
 }
 
+/** Trade-aware nearTargetBank — uses commodity TP override when applicable. */
+function modelNearTargetBankCentsForTrade(trade, config = {}) {
+  const bank = modelBankGreenCentsForTrade(trade, config);
+  const n = Number(config.modelNearTargetBankCents);
+  if (Number.isFinite(n) && n > 0) {
+    const v = Math.round(n);
+    return bank > 0 ? Math.min(v, bank) : v;
+  }
+  if (bank > 0) return Math.max(1, bank - 3);
+  return MODEL_NEAR_TARGET_BANK_CENTS_DEFAULT;
+}
+
 /** ¢ green before we trail and TP on a tiny stall. Caps at trail-arm default. */
 function modelTrailArmCents(config = {}) {
   const bank = modelBankGreenCents(config);
+  if (!(bank > 0)) return MODEL_TRAIL_ARM_CENTS_DEFAULT;
+  return Math.max(2, Math.min(MODEL_TRAIL_ARM_CENTS_DEFAULT, bank));
+}
+
+/** Trade-aware trail arm — uses commodity TP override when applicable. */
+function modelTrailArmCentsForTrade(trade, config = {}) {
+  const bank = modelBankGreenCentsForTrade(trade, config);
   if (!(bank > 0)) return MODEL_TRAIL_ARM_CENTS_DEFAULT;
   return Math.max(2, Math.min(MODEL_TRAIL_ARM_CENTS_DEFAULT, bank));
 }
@@ -1283,13 +1302,14 @@ function modelLateExitMaxLossCents(config = {}) {
  * begins. Keep a 30-second buffer so an entry cannot be opened and then
  * immediately closed by the next management pass.
  */
-function modelEntryCutoffMinutes(config = {}) {
+function modelEntryCutoffMinutes(config = {}, symbol = null) {
   const configured = Number(config.modelMinMinutesToOpen);
   const requested =
     Number.isFinite(configured) && configured > 0
       ? configured
       : MODEL_MIN_MINUTES_TO_OPEN_DEFAULT;
-  return Math.max(requested, modelSettleCloseMinutes(config) + 0.5);
+  // Use the symbol-aware settle-close so commodities use their own window (not the global crypto slider).
+  return Math.max(requested, modelSettleCloseMinutes(config, symbol) + 0.5);
 }
 
 function modelLateExtendMinConfidence(config = {}) {
@@ -2285,10 +2305,10 @@ function modelStallBankReady(
   const peakProg = Number(peakProgressCents);
   if (!Number.isFinite(green) || green < 1) return { ready: false };
 
-  // Use per-commodity TP when trade is a commodity (0 = fall back to global).
+  // All three use trade-aware variants so commodity TP overrides cascade correctly.
   const bankGreen = modelBankGreenCentsForTrade(trade, config);
-  const nearTargetBank = modelNearTargetBankCents(config);
-  const arm = modelTrailArmCents(config);
+  const nearTargetBank = modelNearTargetBankCentsForTrade(trade, config);
+  const arm = modelTrailArmCentsForTrade(trade, config);
   if (green < arm) return { ready: false };
 
   // If the lean is still clearly firm and favoring, let it ride to full TP —
@@ -8640,9 +8660,9 @@ class TradingBot {
         heldSideBidCents >= 1 &&
         heldSideBidCents <= 99;
       const minTp = modelMinTpCents(this.config);
-      // Use per-commodity TP override for this trade when set.
+      // All TP/arm/near-target values use trade-aware variants so commodity overrides apply.
       const bankGreen = modelBankGreenCentsForTrade(trade, this.config);
-      const nearTargetBank = modelNearTargetBankCents(this.config);
+      const nearTargetBank = modelNearTargetBankCentsForTrade(trade, this.config);
       const flatOrGreen =
         bidOk && Number.isFinite(entry) && entry >= 1 && heldSideBidCents >= entry;
       const greenCents =
@@ -8790,7 +8810,7 @@ class TradingBot {
       const momentumStalled =
         (stallPullback > 0 && pullback >= stallPullback) ||
         (stallMs > 0 && peakAgeMs >= stallMs);
-      const armCents = modelTrailArmCents(this.config);
+      const armCents = modelTrailArmCentsForTrade(trade, this.config);
       const armed = flatOrGreen && greenCents >= armCents;
       const priceStalled = momentumStalled;
       const upwardMomentum = modelUpwardMomentumEvidence(trade, {
@@ -11507,7 +11527,7 @@ class TradingBot {
     }
 
     const minutesRemaining = Math.max(0.1, (closeTime - now) / 60000);
-    const minMinutesToOpen = modelEntryCutoffMinutes(this.config);
+    const minMinutesToOpen = modelEntryCutoffMinutes(this.config, symbol);
     if (minMinutesToOpen > 0 && minutesRemaining < minMinutesToOpen) {
       say(
         `Waiting: ${symbol} model — only ${minutesRemaining.toFixed(1)} min left (no new entries in last ${minMinutesToOpen}m).`
@@ -12711,7 +12731,9 @@ module.exports = {
   modelBankGreenCents,
   modelBankGreenCentsForTrade,
   modelNearTargetBankCents,
+  modelNearTargetBankCentsForTrade,
   modelTrailArmCents,
+  modelTrailArmCentsForTrade,
   modelSettleCloseMinutes,
   modelLateBarrierMinutes,
   modelPreCloseForceMinutes,
