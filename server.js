@@ -232,8 +232,13 @@ async function seedAll() {
       const candles = candleMap[sym];
       if (candles && candles.length) {
         state[sym].series.candles = candles.slice(-300);
+        console.log(`[commodity-feed] seeded ${sym}: ${state[sym].series.candles.length} candles (ready=${state[sym].series.ready(100)})`);
+      } else {
+        console.warn(`[commodity-feed] seed returned 0 candles for ${sym} — will rely on live feed to build history`);
       }
     }
+  } else {
+    console.warn('[commodity-feed] POLYGON_API_KEY not set — commodity candles will not be seeded');
   }
 }
 

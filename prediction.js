@@ -38,8 +38,8 @@ function logistic(x, k = LEAN_LOGISTIC_K) {
  * Gathers every raw indicator reading for one product's candle/orderbook state.
  * Returns null if there isn't enough history yet to compute reliably.
  */
-function gatherIndicators(series, book) {
-  if (!series.ready(210)) return null;
+function gatherIndicators(series, book, minCandles = 210) {
+  if (!series.ready(minCandles)) return null;
   const closes = series.closes();
   const volumes = series.volumes();
   const candles = series.candles;
@@ -415,9 +415,11 @@ function buildWindowPrediction(windowDef, ind, otherInd, crossCorrelation, targe
 function buildPredictions(data, kalshiTargets = {}, accumulatorManager = null, options = {}) {
   const now = Date.now();
   const calibration = options && options.calibration ? options.calibration : null;
+  const COMMODITY_MIN_CANDLES = 60; // Polygon free tier may return fewer bars; RSI/MACD/ATR work from 60+
   const indicators = {};
   for (const symbol of Object.keys(data)) {
-    indicators[symbol] = gatherIndicators(data[symbol].series, data[symbol].book);
+    const isCom = ['GOLD', 'SILVER', 'OIL'].includes(symbol);
+    indicators[symbol] = gatherIndicators(data[symbol].series, data[symbol].book, isCom ? COMMODITY_MIN_CANDLES : 210);
   }
 
   const closesBySymbol = {};

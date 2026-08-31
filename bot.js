@@ -866,7 +866,7 @@ const MODEL_GLOBAL_POST_EXIT_COOLDOWN_MS_DEFAULT = 20_000;
 /** After MODEL lean/dip stop (red), longer sit-out — stops knife-catch churn. */
 const MODEL_POST_LEAN_STOP_COOLDOWN_MS_DEFAULT = 120_000;
 /** After open grace: when model is not firm, wait this long then BE/cut (avoid ask→bid flicker). */
-const MODEL_LEAN_AGAINST_BE_MS_DEFAULT = 2_000;
+const MODEL_LEAN_AGAINST_BE_MS_DEFAULT = 5_000;
 /** First N ms after open: only hard lean-turning exits (ignore soft + ask/bid haircut). */
 const MODEL_OPEN_GRACE_MS_DEFAULT = 4_000;
 /** Lean-exit / momentum TP floor — no micro-banks under this. */
