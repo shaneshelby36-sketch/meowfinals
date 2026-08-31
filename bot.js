@@ -6542,13 +6542,14 @@ class TradingBot {
     if (isSettleStrategyMode(this.config) && this._hasTouched90Open()) {
       return Math.max(cap, 3);
     }
-    // Commodities (Gold/Silver/Oil) get an extra slot on top of maxOpenPositions
-    // so a max-1 crypto setup can still run one commodity trade in parallel.
-    const hasCommodityOpen = this.openTrades.some(
+    // Commodities get extra slots on top of maxOpenPositions so a max-1 crypto
+    // setup can still run commodity trades in parallel. Max 2 commodity slots
+    // (e.g. GOLD+OIL or SILVER+OIL — GOLD+SILVER is blocked elsewhere).
+    const commodityOpenCount = this.openTrades.filter(
       (t) => t && isCommoditySymbol(t.symbol)
-    );
-    const commodityCandidate = hasCommodityOpen ? 0 : 1; // only adds if no commodity open yet
-    return cap + commodityCandidate;
+    ).length;
+    const commoditySlots = Math.max(0, 2 - commodityOpenCount); // remaining free commodity slots
+    return cap + commoditySlots;
   }
 
   /** How many non-commodity open slots remain (used to gate crypto entries). */
@@ -11564,11 +11565,14 @@ class TradingBot {
       return null;
     }
 
-    // Max one commodity open at a time — GOLD/SILVER/OIL share a single slot.
-    if (isCommoditySymbol(symbol)) {
-      const openCommodity = this.openTrades.find((t) => t && isCommoditySymbol(t.symbol));
-      if (openCommodity) {
-        say(`Waiting: already holding an open commodity position (${openCommodity.symbol}) — max one commodity at a time.`);
+    // GOLD and SILVER are mutually exclusive — only one precious metal at a time.
+    // OIL can run alongside either GOLD or SILVER.
+    if (symbol === 'GOLD' || symbol === 'SILVER') {
+      const conflicting = this.openTrades.find(
+        (t) => t && (t.symbol === 'GOLD' || t.symbol === 'SILVER') && t.symbol !== symbol
+      );
+      if (conflicting) {
+        say(`Waiting: GOLD and SILVER cannot be open at the same time (holding ${conflicting.symbol}).`);
         return null;
       }
     }
@@ -12038,31 +12042,34 @@ class TradingBot {
       this.lastDecision = globalCd.reason;
       return;
     }
-    // For crypto, count only against the crypto cap (commodity slot is separate).
+    // For crypto, count only against the crypto cap (commodity slots are separate).
     const cryptoOpenCount = () => this.openTrades.filter(
       (t) => t && !isCommoditySymbol(t.symbol)
     ).length;
     const commodityOpenCount = () => this.openTrades.filter(
       (t) => t && isCommoditySymbol(t.symbol)
     ).length;
-    const commodityMax = (() => {
-      const n = Number(this.config.commodityMaxOpenPositions);
-      return Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
-    })();
+    // GOLD and SILVER are mutually exclusive — block entry if the other is open.
+    const preciousMetalBlocked = (sym) => {
+      if (sym !== 'GOLD' && sym !== 'SILVER') return false;
+      return this.openTrades.some(
+        (t) => t && (t.symbol === 'GOLD' || t.symbol === 'SILVER') && t.symbol !== sym
+      );
+    };
     const slotsFree = () =>
       Math.max(0, this._effectiveMaxCryptoPositions() - cryptoOpenCount());
-    if (slotsFree() <= 0 && commodityOpenCount() >= commodityMax) return;
+    if (slotsFree() <= 0 && commodityOpenCount() >= 2) return;
 
     const tryOne = async (opp) => {
-      // Gate commodity entries against the commodity cap.
-      if (isCommoditySymbol(opp.symbol) && commodityOpenCount() >= commodityMax) return;
+      // Block GOLD if SILVER is open, and vice versa.
+      if (preciousMetalBlocked(opp.symbol)) return;
       // Gate crypto entries against the crypto cap.
       if (!isCommoditySymbol(opp.symbol) && slotsFree() <= 0) return;
       return this._openPosition(this._modelOppToOpenArgs(opp));
     };
 
     let i = 0;
-    const parallelN = Math.min(slotsFree() + (commodityOpenCount() < commodityMax ? 1 : 0), ranked.length, 3);
+    const parallelN = Math.min(slotsFree() + (commodityOpenCount() < 2 ? 1 : 0), ranked.length, 3);
     if (parallelN >= 2) {
       const batch = ranked.slice(0, parallelN);
       const names = batch.map((o) => o.symbol).join(' + ');
