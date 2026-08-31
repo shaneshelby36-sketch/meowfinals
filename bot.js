@@ -1237,30 +1237,30 @@ function modelTrailArmCents(config = {}) {
 }
 
 function modelSettleCloseMinutes(config = {}, symbol = null) {
-  const n = Number(config.modelSettleCloseMinutes);
-  if (Number.isFinite(n) && n < 0) return MODEL_SETTLE_CLOSE_MINUTES_DEFAULT;
-  if (Number.isFinite(n) && n === 0) return 0;
-  if (Number.isFinite(n) && n > 0) return n;
-  // Per-commodity override via slider (0 = use commodity default).
+  // Commodities are fully isolated from the global slider — only their own override applies.
   if (symbol && isCommoditySymbol(symbol)) {
     const ov = Number(config.commoditySettleCloseMinutes);
     if (Number.isFinite(ov) && ov > 0) return ov;
     return MODEL_COMMODITY_SETTLE_CLOSE_MINUTES_DEFAULT;
   }
+  const n = Number(config.modelSettleCloseMinutes);
+  if (Number.isFinite(n) && n < 0) return MODEL_SETTLE_CLOSE_MINUTES_DEFAULT;
+  if (Number.isFinite(n) && n === 0) return 0;
+  if (Number.isFinite(n) && n > 0) return n;
   return MODEL_SETTLE_CLOSE_MINUTES_DEFAULT;
 }
 
 function modelLateBarrierMinutes(config = {}, symbol = null) {
-  const n = Number(config.modelLateBarrierMinutes);
-  if (Number.isFinite(n) && n < 0) return MODEL_LATE_BARRIER_MINUTES_DEFAULT;
-  if (Number.isFinite(n) && n === 0) return 0;
-  if (Number.isFinite(n) && n > 0) return n;
-  // Per-commodity override via slider (0 = use commodity default).
+  // Commodities are fully isolated from the global slider — only their own override applies.
   if (symbol && isCommoditySymbol(symbol)) {
     const ov = Number(config.commodityLateBarrierMinutes);
     if (Number.isFinite(ov) && ov > 0) return ov;
     return MODEL_COMMODITY_LATE_BARRIER_MINUTES_DEFAULT;
   }
+  const n = Number(config.modelLateBarrierMinutes);
+  if (Number.isFinite(n) && n < 0) return MODEL_LATE_BARRIER_MINUTES_DEFAULT;
+  if (Number.isFinite(n) && n === 0) return 0;
+  if (Number.isFinite(n) && n > 0) return n;
   return MODEL_LATE_BARRIER_MINUTES_DEFAULT;
 }
 
@@ -2607,20 +2607,29 @@ function checkModelPostExitCooldown({
 /**
  * After ANY model close (TP/BE/cut/…), pause ALL new entries briefly so we don't
  * hop ETH→BTC in the same regime the same second.
+ * Commodities are isolated — a GOLD close does not block BTC/ETH entries and
+ * a crypto close does not block GOLD/SILVER/OIL entries.
  */
 function checkModelGlobalPostExitCooldown({
   trades,
   cooldownMs,
   now = Date.now(),
+  candidateSymbol = null,
 } = {}) {
   const cd = Number(cooldownMs);
   if (!Number.isFinite(cd) || cd <= 0) return { ok: true };
+  const candidateIsCommodity = candidateSymbol ? isCommoditySymbol(candidateSymbol) : null;
   let best = null;
   let bestAt = -Infinity;
   for (const t of trades || []) {
     if (!t || String(t.strategy || '').toLowerCase() !== 'model') continue;
     if (t.status && String(t.status) !== 'closed') continue;
     if (!isModelPostExitCooldownReason(t.exitReason)) continue;
+    // Don't let commodity closes block crypto entries or vice versa.
+    if (candidateIsCommodity !== null) {
+      const tradeIsCommodity = isCommoditySymbol(t.symbol);
+      if (candidateIsCommodity !== tradeIsCommodity) continue;
+    }
     const at = Number(t.closedAt);
     const score = Number.isFinite(at) ? at : -Infinity;
     if (score >= bestAt) {
@@ -9077,20 +9086,25 @@ class TradingBot {
 
       // BE chase: crossed bid≥entry → N seconds to reach +3¢ or scratch.
       // Never scratches while the model is still firm — that was the "easy BE".
-      const beChase = modelBeChaseExitReady(trade, {
-        nearFlat,
-        flatOrGreen,
-        peakProgressCents: peakProgress,
-        now,
-        config: this.config,
-        upwardEvidence: upwardMomentum,
-      });
-      if (beChase.achieved) {
-        // Bid hit the +arm target — record that the bounce TP worked.
-        trade.beChaseResult = 'achieved';
-        this._persist();
-      } else if (beChase.started || beChase.reset || beChase.holdingRise) {
-        this._persist();
+      // Commodities skip BE chase entirely — they hold on lean, not a bounce timer.
+      const beChase = isCommoditySymbol(trade.symbol)
+        ? { ready: false, skipped: true }
+        : modelBeChaseExitReady(trade, {
+            nearFlat,
+            flatOrGreen,
+            peakProgressCents: peakProgress,
+            now,
+            config: this.config,
+            upwardEvidence: upwardMomentum,
+          });
+      if (!beChase.skipped) {
+        if (beChase.achieved) {
+          // Bid hit the +arm target — record that the bounce TP worked.
+          trade.beChaseResult = 'achieved';
+          this._persist();
+        } else if (beChase.started || beChase.reset || beChase.holdingRise) {
+          this._persist();
+        }
       }
       if (
         bidOk &&
@@ -11434,6 +11448,7 @@ class TradingBot {
       trades: this.ledger.trades,
       cooldownMs: modelGlobalPostExitCooldownMs(this.config),
       now: Date.now(),
+      candidateSymbol: symbol,
     });
     if (!globalCd.ok) {
       say(globalCd.reason);
@@ -11888,6 +11903,7 @@ class TradingBot {
       trades: this.ledger.trades,
       cooldownMs: modelGlobalPostExitCooldownMs(this.config),
       now: Date.now(),
+      candidateSymbol: ranked && ranked[0] ? ranked[0].symbol : null,
     });
     if (!globalCd.ok) {
       this.lastDecision = globalCd.reason;
