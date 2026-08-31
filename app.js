@@ -1078,6 +1078,7 @@ async function refreshBotStatus() {
     renderModelSetups(data.modelSetups, data.modelShadowBooks);
     renderAssetStats(data.assetStats, data.config);
     renderModelAutoSwitchNote(data.modelAutoSwitch);
+    renderBotPerfGrid(data.assetStats);
     renderBotDashboard(data);
   } catch (err) {
     modeLine.textContent = 'Could not reach the engine to check bot status.';
@@ -1166,6 +1167,33 @@ function renderBotDashboard(data) {
   renderModelSetups(data.modelSetups, data.modelShadowBooks);
   renderAssetStats(data.assetStats, data.config);
   renderModelAutoSwitchNote(data.modelAutoSwitch);
+  renderBotPerfGrid(data.assetStats);
+}
+
+/**
+ * Compact 2-column win-rate grid shown on the main bot dashboard card.
+ * Renders all assets with at least 1 trade; shows win%, P&L, W/L count.
+ */
+function renderBotPerfGrid(stats) {
+  const el = document.getElementById('bot-perf-grid');
+  if (!el) return;
+  const rows = Array.isArray(stats) ? stats.filter(r => (r.displayTrades || 0) > 0) : [];
+  if (!rows.length) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="bpg-grid">${rows.map(r => {
+    const wrTone = r.winRatePct != null ? (r.winRatePct >= 55 ? 'pos' : r.winRatePct < 40 ? 'neg' : '') : '';
+    const pnlDollars = (r.pnlCents / 100).toFixed(2);
+    const pnlTone = r.pnlCents > 0 ? 'pos' : r.pnlCents < 0 ? 'neg' : '';
+    const liveTag = r.active ? '<span class="bpg-live">· live</span>' : '';
+    const n = r.displayTrades || 0;
+    const w = r.displayWins || 0;
+    const l = r.displayLosses || 0;
+    return `<div class="bpg-cell${r.active ? ' bpg-active' : ''}${r.excluded ? ' bpg-excluded' : ''}">
+      <span class="bpg-sym">${escapeHtml(r.symbol)}${liveTag}</span>
+      <span class="bpg-wr ${wrTone}">${r.winRatePct != null ? r.winRatePct + '%' : '—'}</span>
+      <span class="bpg-pnl ${r.isShadowOnly ? '' : pnlTone}">${r.isShadowOnly ? '—' : (r.pnlCents >= 0 ? '+' : '') + '$' + pnlDollars}</span>
+      <span class="bpg-n">${n}t · ${w}W/${l}L</span>
+    </div>`;
+  }).join('')}</div>`;
 }
 
 async function setBotRunning(running) {

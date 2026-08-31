@@ -1213,6 +1213,35 @@ body[data-view-mode="bot"] .asset-picker {
 .asset-stat-wr.pos, .asset-stat-pnl.pos { color: var(--up); }
 .asset-stat-wr.neg, .asset-stat-pnl.neg { color: var(--down); }
 .asset-stat-row.active-coin { border-color: var(--text-dim); }
+
+/* ── Bot performance grid (main dashboard card) ─────────────────────── */
+#bot-perf-grid { margin-bottom: 10px; }
+.bpg-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+.bpg-cell {
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 0.79rem;
+  font-variant-numeric: tabular-nums;
+  background: var(--panel);
+}
+.bpg-cell.bpg-active  { border-color: var(--text-dim); }
+.bpg-cell.bpg-excluded { opacity: 0.45; }
+.bpg-sym  { font-weight: 600; white-space: nowrap; }
+.bpg-live { font-weight: 400; color: var(--text-dim); font-size: 0.72rem; margin-left: 3px; }
+.bpg-wr   { text-align: right; min-width: 32px; }
+.bpg-pnl  { text-align: right; min-width: 46px; }
+.bpg-n    { color: var(--text-dim); white-space: nowrap; }
+.bpg-wr.pos, .bpg-pnl.pos { color: var(--up); }
+.bpg-wr.neg, .bpg-pnl.neg { color: var(--down); }
 .asset-stat-shadow-tag {
   display: inline-block;
   font-size: 0.7rem;
