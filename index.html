@@ -567,7 +567,15 @@
           </label>
 
           <h4 class="bot-panel-subhead" style="border-top:2px solid #10b981;padding-top:8px;margin-top:12px;color:#10b981;">🎯 Commodity overrides (Gold / Silver / Oil)</h4>
-          <p class="field-hint" style="margin-top:0;">All three sliders default to <strong>0 = use global</strong>. Set above 0 to override that commodity independently.</p>
+          <p class="field-hint" style="margin-top:0;">All sliders default to <strong>0 = use global</strong>. Set above 0 to override commodities independently.</p>
+
+          <label>🎯 Commodity — min entry (¢)
+            <div class="slider-row">
+              <input id="bot-commodity-min-entry" type="range" min="0" max="85" step="1" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-min-entry-value">—</span>
+            </div>
+            <span class="field-hint">Min ask price for GOLD/SILVER/OIL entries. <strong>0</strong> = use global MODEL min entry.</span>
+          </label>
 
           <label>🎯 GOLD — stake ($)
             <div class="slider-row">

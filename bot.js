@@ -2421,7 +2421,7 @@ function modelEntryRoomToFloorGate(priceCents, config = {}) {
   };
 }
 
-function modelPriceAllowed(priceCents, window, config = {}) {
+function modelPriceAllowed(priceCents, window, config = {}, symbol = null) {
   const price = Number(priceCents);
   if (!Number.isFinite(price) || price < 1 || price > 99) {
     return { ok: false, reason: 'invalid price' };
@@ -2434,9 +2434,15 @@ function modelPriceAllowed(priceCents, window, config = {}) {
   if (maxEntry > 0 && price > maxEntry) {
     return { ok: false, reason: `above model max entry ${maxEntry}¢` };
   }
-  const minEntry = Number.isFinite(Number(config.modelMinEntryCents))
-    ? Number(config.modelMinEntryCents)
-    : MODEL_MIN_ENTRY_DEFAULT_CENTS;
+  // Per-commodity min entry override (0 = fall back to global modelMinEntryCents).
+  const commodityMin = symbol && isCommoditySymbol(symbol)
+    ? Number(config.commodityMinEntryCents)
+    : NaN;
+  const minEntry = Number.isFinite(commodityMin) && commodityMin > 0
+    ? commodityMin
+    : Number.isFinite(Number(config.modelMinEntryCents))
+      ? Number(config.modelMinEntryCents)
+      : MODEL_MIN_ENTRY_DEFAULT_CENTS;
   if (!(minEntry > 0) || price >= minEntry) return { ok: true };
 
   const perfectFloor = Number.isFinite(Number(config.modelPerfectMinEntryCents))
@@ -3610,6 +3616,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'commodityTpCentsGold',
   'commodityTpCentsSilver',
   'commodityTpCentsOil',
+  'commodityMinEntryCents',
   'commoditySettleCloseMinutes',
   'commodityLateBarrierMinutes',
   'modelAutoSwitchLowAvailDollars',
@@ -4784,6 +4791,8 @@ class TradingBot {
       commodityTpCentsGold: MODEL_COMMODITY_TP_CENTS_DEFAULT,
       commodityTpCentsSilver: MODEL_COMMODITY_TP_CENTS_DEFAULT,
       commodityTpCentsOil: MODEL_COMMODITY_TP_CENTS_DEFAULT,
+      // Per-commodity entry floor (0 = use global modelMinEntryCents).
+      commodityMinEntryCents: 0,
       // Per-commodity cash-out window (0 = use commodity default: 6m settle-close, 7m barrier).
       commoditySettleCloseMinutes: 0,
       commodityLateBarrierMinutes: 0,
@@ -11689,7 +11698,7 @@ class TradingBot {
       return null;
     }
 
-    const priceGate = modelPriceAllowed(priceCents, window, this.config);
+    const priceGate = modelPriceAllowed(priceCents, window, this.config, symbol);
     if (!priceGate.ok) {
       say(`Waiting: ${symbol} ${side.toUpperCase()} is ${priceCents}¢ — ${priceGate.reason}.`);
       return null;
