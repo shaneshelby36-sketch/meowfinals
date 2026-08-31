@@ -427,6 +427,20 @@ async function recompute() {
   if (recomputeInFlight) return; // guard against overlapping runs if a cycle takes longer than the interval
   recomputeInFlight = true;
   try {
+    // Feed live Kalshi strike prices into commodity candle series so they build
+    // up history without needing Polygon. The strike (e.g. $2650 for GOLD) is
+    // the actual underlying spot price Kalshi uses for settlement — perfect for
+    // RSI/MACD/ATR on these assets. One synthetic tick per compute cycle (~1s).
+    const kalshiStrikesForFeed = dashboardStrikeTargets();
+    const now = Date.now();
+    for (const sym of COMMODITY_PRODUCT_SYMBOLS) {
+      const target = kalshiStrikesForFeed[sym];
+      if (target && Number.isFinite(Number(target.price)) && Number(target.price) > 0) {
+        state[sym].series.addTrade(Number(target.price), 1, now);
+        state[sym].lastTradeAt = now;
+      }
+    }
+
     const active = activeEngineSymbols();
     const input = {};
     for (const symbol of active) {
