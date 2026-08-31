@@ -1769,6 +1769,8 @@ const SLIDER_UNITS = {
   'bot-model-peak-touch-window': (v) => `${Math.round(v)}¢`,
   'bot-model-settle-close': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
   'bot-model-late-barrier': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
+  'bot-commodity-settle-close': (v) => (Number(v) <= 0 ? 'default (6m)' : `${(+v).toFixed(1)} min`),
+  'bot-commodity-late-barrier': (v) => (Number(v) <= 0 ? 'default (7m)' : `${(+v).toFixed(1)} min`),
   'bot-model-preclose-force': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(2)} min`),
   'bot-model-late-exit-max-loss': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
   'bot-model-lean-floor-drop': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
@@ -2289,6 +2291,8 @@ function wireSliderDisplays() {
     'bot-model-peak-touch-window',
     'bot-model-settle-close',
     'bot-model-late-barrier',
+    'bot-commodity-settle-close',
+    'bot-commodity-late-barrier',
     'bot-model-preclose-force',
     'bot-model-late-exit-max-loss',
     'bot-model-lean-floor-drop',
@@ -2462,6 +2466,8 @@ function wireBotConfigAutoSave() {
     'bot-model-peak-touch-window',
     'bot-model-settle-close',
     'bot-model-late-barrier',
+    'bot-commodity-settle-close',
+    'bot-commodity-late-barrier',
     'bot-model-preclose-force',
     'bot-model-late-exit-max-loss',
     'bot-model-lean-floor-drop',
@@ -2763,6 +2769,10 @@ async function loadBotConfigIntoForm() {
       modelLateBarrier.value =
         c.modelLateBarrierMinutes != null ? c.modelLateBarrierMinutes : 2;
     }
+    const commoditySettleClose = document.getElementById('bot-commodity-settle-close');
+    if (commoditySettleClose) commoditySettleClose.value = c.commoditySettleCloseMinutes != null ? c.commoditySettleCloseMinutes : 0;
+    const commodityLateBarrier = document.getElementById('bot-commodity-late-barrier');
+    if (commodityLateBarrier) commodityLateBarrier.value = c.commodityLateBarrierMinutes != null ? c.commodityLateBarrierMinutes : 0;
     const modelPreCloseForce = document.getElementById('bot-model-preclose-force');
     if (modelPreCloseForce) {
       modelPreCloseForce.value =
@@ -2949,6 +2959,8 @@ async function loadBotConfigIntoForm() {
       'bot-model-peak-touch-window',
       'bot-model-settle-close',
       'bot-model-late-barrier',
+      'bot-commodity-settle-close',
+      'bot-commodity-late-barrier',
       'bot-model-preclose-force',
       'bot-model-late-exit-max-loss',
       'bot-model-lean-floor-drop',
@@ -3182,6 +3194,8 @@ async function saveBotConfig(opts = {}) {
     modelPeakTouchWindow: parseFloat(document.getElementById('bot-model-peak-touch-window')?.value || '2'),
     modelSettleCloseMinutes: parseFloat(document.getElementById('bot-model-settle-close')?.value || '2.5'),
     modelLateBarrierMinutes: parseFloat(document.getElementById('bot-model-late-barrier')?.value || '2'),
+    commoditySettleCloseMinutes: parseFloat(document.getElementById('bot-commodity-settle-close')?.value || '0'),
+    commodityLateBarrierMinutes: parseFloat(document.getElementById('bot-commodity-late-barrier')?.value || '0'),
     modelPreCloseForceMinutes: parseFloat(
       document.getElementById('bot-model-preclose-force')?.value || '1'
     ),

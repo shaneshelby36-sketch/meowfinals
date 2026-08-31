@@ -1241,8 +1241,12 @@ function modelSettleCloseMinutes(config = {}, symbol = null) {
   if (Number.isFinite(n) && n < 0) return MODEL_SETTLE_CLOSE_MINUTES_DEFAULT;
   if (Number.isFinite(n) && n === 0) return 0;
   if (Number.isFinite(n) && n > 0) return n;
-  // Commodities default to a later settle-close window (6m vs 2.5m).
-  if (symbol && isCommoditySymbol(symbol)) return MODEL_COMMODITY_SETTLE_CLOSE_MINUTES_DEFAULT;
+  // Per-commodity override via slider (0 = use commodity default).
+  if (symbol && isCommoditySymbol(symbol)) {
+    const ov = Number(config.commoditySettleCloseMinutes);
+    if (Number.isFinite(ov) && ov > 0) return ov;
+    return MODEL_COMMODITY_SETTLE_CLOSE_MINUTES_DEFAULT;
+  }
   return MODEL_SETTLE_CLOSE_MINUTES_DEFAULT;
 }
 
@@ -1251,8 +1255,12 @@ function modelLateBarrierMinutes(config = {}, symbol = null) {
   if (Number.isFinite(n) && n < 0) return MODEL_LATE_BARRIER_MINUTES_DEFAULT;
   if (Number.isFinite(n) && n === 0) return 0;
   if (Number.isFinite(n) && n > 0) return n;
-  // Commodities default to a later barrier (7m vs 2m) to allow lean-gated holding.
-  if (symbol && isCommoditySymbol(symbol)) return MODEL_COMMODITY_LATE_BARRIER_MINUTES_DEFAULT;
+  // Per-commodity override via slider (0 = use commodity default).
+  if (symbol && isCommoditySymbol(symbol)) {
+    const ov = Number(config.commodityLateBarrierMinutes);
+    if (Number.isFinite(ov) && ov > 0) return ov;
+    return MODEL_COMMODITY_LATE_BARRIER_MINUTES_DEFAULT;
+  }
   return MODEL_LATE_BARRIER_MINUTES_DEFAULT;
 }
 
@@ -3602,6 +3610,8 @@ const EDITABLE_NUMERIC_FIELDS = [
   'commodityTpCentsGold',
   'commodityTpCentsSilver',
   'commodityTpCentsOil',
+  'commoditySettleCloseMinutes',
+  'commodityLateBarrierMinutes',
   'modelAutoSwitchLowAvailDollars',
   'modelAutoSwitchMinLeadDollars',
   'modelAutoSwitchCooldownMinutes',
@@ -4774,6 +4784,9 @@ class TradingBot {
       commodityTpCentsGold: MODEL_COMMODITY_TP_CENTS_DEFAULT,
       commodityTpCentsSilver: MODEL_COMMODITY_TP_CENTS_DEFAULT,
       commodityTpCentsOil: MODEL_COMMODITY_TP_CENTS_DEFAULT,
+      // Per-commodity cash-out window (0 = use commodity default: 6m settle-close, 7m barrier).
+      commoditySettleCloseMinutes: 0,
+      commodityLateBarrierMinutes: 0,
       // After stop-loss: require this many ¢ of bid bounce before re-entry (0 = off).
       // Null/unset uses stopRecoveryCentsRequired() (~40% of stop, min 5¢).
       stopRecoveryCents: 6,
@@ -6423,6 +6436,22 @@ class TradingBot {
    * Otherwise respect maxOpenPositions.
    */
   _effectiveMaxOpenPositions() {
+    const base = Number(this.config.maxOpenPositions);
+    const cap = Number.isFinite(base) && base >= 1 ? Math.floor(base) : 2;
+    if (isSettleStrategyMode(this.config) && this._hasTouched90Open()) {
+      return Math.max(cap, 3);
+    }
+    // Commodities (Gold/Silver/Oil) get an extra slot on top of maxOpenPositions
+    // so a max-1 crypto setup can still run one commodity trade in parallel.
+    const hasCommodityOpen = this.openTrades.some(
+      (t) => t && isCommoditySymbol(t.symbol)
+    );
+    const commodityCandidate = hasCommodityOpen ? 0 : 1; // only adds if no commodity open yet
+    return cap + commodityCandidate;
+  }
+
+  /** How many non-commodity open slots remain (used to gate crypto entries). */
+  _effectiveMaxCryptoPositions() {
     const base = Number(this.config.maxOpenPositions);
     const cap = Number.isFinite(base) && base >= 1 ? Math.floor(base) : 2;
     if (isSettleStrategyMode(this.config) && this._hasTouched90Open()) {
@@ -11855,8 +11884,12 @@ class TradingBot {
       this.lastDecision = globalCd.reason;
       return;
     }
+    // For crypto, count only against the crypto cap (commodity slot is separate).
+    const cryptoOpenCount = () => this.openTrades.filter(
+      (t) => t && !isCommoditySymbol(t.symbol)
+    ).length;
     const slotsFree = () =>
-      Math.max(0, this._effectiveMaxOpenPositions() - this.openTrades.length);
+      Math.max(0, this._effectiveMaxCryptoPositions() - cryptoOpenCount());
     if (slotsFree() <= 0) return;
 
     const tryOne = async (opp) => this._openPosition(this._modelOppToOpenArgs(opp));

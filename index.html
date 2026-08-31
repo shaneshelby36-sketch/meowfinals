@@ -635,6 +635,21 @@
             <span class="field-hint">OIL bank-green TP threshold (¢). <strong>0</strong> = use global modelBankGreenCents.</span>
           </label>
 
+          <label>🎯 Commodity — cash out before settle (min left)
+            <div class="slider-row">
+              <input id="bot-commodity-settle-close" type="range" min="0" max="14" step="0.5" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-settle-close-value">—</span>
+            </div>
+            <span class="field-hint">Commodities: bank flat/green or cut in the last N minutes. Default <strong>6 min</strong> (vs 2.5m for crypto). <strong>0</strong> = use default.</span>
+          </label>
+          <label>🎯 Commodity — late barrier (min left)
+            <div class="slider-row">
+              <input id="bot-commodity-late-barrier" type="range" min="0" max="14" step="0.5" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-late-barrier-value">—</span>
+            </div>
+            <span class="field-hint">Commodities: force exit unless conf/lean still strong in the last N minutes. Default <strong>7 min</strong> (vs 2m for crypto). <strong>0</strong> = use default.</span>
+          </label>
+
           <label>MODEL signal score strength
             <div class="slider-row">
               <input id="bot-model-signal-dom" type="range" min="0" max="30" step="1" />
