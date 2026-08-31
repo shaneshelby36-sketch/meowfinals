@@ -1183,7 +1183,7 @@ function renderBotPerfGrid(stats) {
     const wrTone = r.winRatePct != null ? (r.winRatePct >= 55 ? 'pos' : r.winRatePct < 40 ? 'neg' : '') : '';
     const pnlDollars = (r.pnlCents / 100).toFixed(2);
     const pnlTone = r.pnlCents > 0 ? 'pos' : r.pnlCents < 0 ? 'neg' : '';
-    const liveTag = r.active ? '<span class="bpg-live">· live</span>' : '';
+    const liveTag = r.active ? '<span class="bpg-live">· live</span>' : r.isShadowOnly ? '<span class="bpg-live">· paper</span>' : '';
     const n = r.displayTrades || 0;
     const w = r.displayWins || 0;
     const l = r.displayLosses || 0;
@@ -2050,8 +2050,8 @@ function renderAssetStats(stats, config) {
     const wrTone = r.winRatePct != null ? (r.winRatePct >= 55 ? 'pos' : r.winRatePct < 40 ? 'neg' : '') : '';
     const pnlDollars = (r.pnlCents / 100).toFixed(2);
     const pnlTone = r.pnlCents > 0 ? 'pos' : r.pnlCents < 0 ? 'neg' : '';
-    const shadowTag = r.isShadowOnly ? ' <span class="asset-stat-shadow-tag">shadow</span>' : '';
-    const activeTag = r.active ? ' · live' : '';
+    const shadowTag = '';
+    const activeTag = r.active ? ' · live' : r.isShadowOnly ? ' · paper' : '';
     const pinnedLabel = r.pinned ? ' · pinned' : '';
     const excludedLabel = r.excluded ? ' · excl' : '';
     const pinBtn = r.pinned

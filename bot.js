@@ -6286,7 +6286,9 @@ class TradingBot {
     this._inCoinShadow = true;
     this._inShadow = true; // prevent any live order paths
     try {
-      // Swap in the coin shadow config + ledger
+      // Swap in the coin shadow config + ledger.
+      // openTrades is a getter on this.ledger, so swapping the ledger
+      // automatically makes this.openTrades reflect the shadow book's trades.
       this.config = {
         ...this.config,
         symbol: 'AUTO',
