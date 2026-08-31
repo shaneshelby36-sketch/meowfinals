@@ -8707,11 +8707,20 @@ class TradingBot {
       // All TP/arm/near-target values use trade-aware variants so commodity overrides apply.
       const bankGreen = modelBankGreenCentsForTrade(trade, this.config);
       const nearTargetBank = modelNearTargetBankCentsForTrade(trade, this.config);
+      // For commodity trades with an override, isBankableGreen must also clear the
+      // commodity TP target — otherwise lean-exit / soft-turning paths bank at the
+      // global minTp floor and ignore the per-commodity setting entirely.
+      const commodityTpOverride = modelCommodityTpCents(
+        String(trade.symbol || '').toUpperCase(), this.config
+      );
+      const effectiveMinTp = commodityTpOverride > 0
+        ? Math.max(minTp || 0, commodityTpOverride)
+        : (minTp || 0);
       const flatOrGreen =
         bidOk && Number.isFinite(entry) && entry >= 1 && heldSideBidCents >= entry;
       const greenCents =
         flatOrGreen && Number.isFinite(entry) ? Math.round(heldSideBidCents - entry) : 0;
-      let isBankableGreen = flatOrGreen && greenCents >= Math.max(1, minTp || 0);
+      let isBankableGreen = flatOrGreen && greenCents >= Math.max(1, effectiveMinTp);
       let isDecentGreen = flatOrGreen && bankGreen > 0 && greenCents >= bankGreen;
       const exactlyFlat =
         bidOk && Number.isFinite(entry) && Math.round(heldSideBidCents) === Math.round(entry);
