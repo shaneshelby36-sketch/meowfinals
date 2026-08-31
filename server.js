@@ -232,13 +232,40 @@ async function seedAll() {
       const candles = candleMap[sym];
       if (candles && candles.length) {
         state[sym].series.candles = candles.slice(-300);
-        console.log(`[commodity-feed] seeded ${sym}: ${state[sym].series.candles.length} candles (ready=${state[sym].series.ready(100)})`);
+        console.log(`[commodity-feed] seeded ${sym}: ${state[sym].series.candles.length} candles (ready=${state[sym].series.ready(60)})`);
       } else {
         console.warn(`[commodity-feed] seed returned 0 candles for ${sym} — will rely on live feed to build history`);
       }
     }
-  } else {
-    console.warn('[commodity-feed] POLYGON_API_KEY not set — commodity candles will not be seeded');
+  }
+  // Backfill any commodity that still has < 60 candles by fetching the current
+  // Kalshi strike price and synthesising 60 flat 1-minute candles. This lets
+  // indicators compute immediately (returning neutral values with no real history,
+  // which is correct). Live ticks from the recompute loop will replace these over time.
+  const { marketStrikePrice: msp } = require('./kalshiClient');
+  const SERIES_BY_SYMBOL_LOCAL = { GOLD: 'KXGOLD15M', SILVER: 'KXSILVER15M', OIL: 'KXOIL15M' };
+  for (const sym of COMMODITY_PRODUCT_SYMBOLS) {
+    if (state[sym].series.ready(60)) continue; // already seeded via Polygon
+    try {
+      const ticker = SERIES_BY_SYMBOL_LOCAL[sym];
+      const market = ticker ? await kalshiClient.getMarket(ticker) : null;
+      const price = market ? Number(msp(market)) : 0;
+      if (price > 0) {
+        const nowMs = Date.now();
+        const CANDLE_MS = 60 * 1000;
+        const bucketNow = Math.floor(nowMs / CANDLE_MS) * CANDLE_MS;
+        const syntheticCandles = [];
+        for (let i = 59; i >= 0; i--) {
+          syntheticCandles.push({ time: bucketNow - i * CANDLE_MS, open: price, high: price, low: price, close: price, volume: 0 });
+        }
+        state[sym].series.candles = syntheticCandles;
+        console.log(`[commodity-feed] backfilled ${sym} with 60 synthetic candles at $${price}`);
+      } else {
+        console.warn(`[commodity-feed] could not get Kalshi strike for ${sym} — still seeding from live ticks`);
+      }
+    } catch (err) {
+      console.warn(`[commodity-feed] backfill failed for ${sym}:`, err.message);
+    }
   }
 }
 
