@@ -10864,7 +10864,7 @@ class TradingBot {
       this.lastDecision = this._liveMarketWaitReason(symbol, seriesTicker);
       return null;
     }
-    market = (await this._hydrateMarketQuote(market, 3500)) || normalizeMarketPrices(market);
+    market = (await this._hydrateMarketQuote(market, 1500)) || normalizeMarketPrices(market);
     this._noteEngineStrike(symbol, market);
     if (this._hasOpenOnTicker(market.ticker)) {
       this.lastDecision = `Waiting: already holding an open position on ${market.ticker}.`;
@@ -11320,7 +11320,7 @@ class TradingBot {
       say(this._liveMarketWaitReason(symbol, seriesTicker));
       return null;
     }
-    market = (await this._hydrateMarketQuote(market, 3500)) || normalizeMarketPrices(market);
+    market = (await this._hydrateMarketQuote(market, 1500)) || normalizeMarketPrices(market);
     this._noteEngineStrike(symbol, market);
     if (this._hasOpenOnTicker(market.ticker)) {
       say(`Waiting: already holding an open position on ${market.ticker}.`);
@@ -11809,7 +11809,7 @@ class TradingBot {
       say(this._liveMarketWaitReason(symbol, seriesTicker));
       return null;
     }
-    market = (await this._hydrateMarketQuote(market, 3500)) || normalizeMarketPrices(market);
+    market = (await this._hydrateMarketQuote(market, 1500)) || normalizeMarketPrices(market);
     this._noteEngineStrike(symbol, market);
     if (this._hasOpenOnTicker(market.ticker)) {
       say(`Waiting: already holding an open position on ${market.ticker}.`);
