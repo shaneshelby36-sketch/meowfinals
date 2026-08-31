@@ -2575,6 +2575,7 @@ function checkModelReversalCooldown({
   trades,
   symbol,
   candidateSide,
+  priceCents = null,
   window: modelWindow = null,
   direction = null,
   entryHeldProb = null,
@@ -2608,35 +2609,63 @@ function checkModelReversalCooldown({
     return { ok: true };
   }
 
-  // Only block the opposite side (same-side re-entry uses normal cooldown)
   const lastSide = String(last.side || '');
   const oppositeSide = lastSide === 'yes' ? 'no' : lastSide === 'no' ? 'yes' : null;
-  if (!oppositeSide || side !== oppositeSide) return { ok: true };
 
-  // Hard cap: after maxWaitMs, allow entry regardless
+  // Hard cap: after maxWaitMs, allow entry regardless (applies to both branches)
   const maxWaitMs = 5 * 60 * 1000; // 5 minutes
   const elapsed = now - lastAt;
   if (elapsed >= maxWaitMs) return { ok: true };
 
-  // Check if the engine clearly confirms the reversal direction already
-  if (modelWindow && direction) {
-    const reversalConfirmed = modelEngineClearlyWithUs({
+  // Helper: ask the engine whether it clearly favors this entry
+  const engineConfirms = () => {
+    if (!modelWindow || !direction) return false;
+    return modelEngineClearlyWithUs({
       window: modelWindow,
       direction,
       side,
       entryHeldProb: Number.isFinite(Number(entryHeldProb)) ? Number(entryHeldProb) : undefined,
       config,
     });
-    if (reversalConfirmed) return { ok: true };
+  };
+
+  const waitSec = () => Math.max(1, Math.ceil((maxWaitMs - elapsed) / 1000));
+
+  if (oppositeSide && side === oppositeSide) {
+    // ── Opposite-side block ──────────────────────────────────────────────────
+    // Don't flip to the other side until the engine confirms a genuine reversal.
+    if (engineConfirms()) return { ok: true };
+    return {
+      ok: false,
+      reason:
+        `Waiting: ${sym} stall-bank TP on ${lastSide.toUpperCase()} — holding off ` +
+        `${side.toUpperCase()} entry until reversal confirmed by engine (~${waitSec()}s max).`,
+    };
   }
 
-  const waitSec = Math.max(1, Math.ceil((maxWaitMs - elapsed) / 1000));
-  return {
-    ok: false,
-    reason:
-      `Waiting: ${sym} stall-bank TP on ${lastSide.toUpperCase()} — holding off ` +
-      `${side.toUpperCase()} entry until reversal confirmed by engine (~${waitSec}s max).`,
-  };
+  if (side === lastSide) {
+    // ── Same-direction pullback block ────────────────────────────────────────
+    // The market pulled back below the stall-bank TP price while the model
+    // still signals the same direction. Don't buy the dip blindly — require
+    // the engine to confirm the move is actually resuming first.
+    const tpPrice = Number(last.exitPriceCents);
+    const askPrice = Number(priceCents);
+    if (
+      Number.isFinite(tpPrice) &&
+      Number.isFinite(askPrice) &&
+      askPrice < tpPrice
+    ) {
+      if (engineConfirms()) return { ok: true };
+      return {
+        ok: false,
+        reason:
+          `Waiting: ${sym} stall-bank TP was ${Math.round(tpPrice)}¢; new ${side.toUpperCase()} ask ` +
+          `${Math.round(askPrice)}¢ is below that — require engine confirmation before re-entry (~${waitSec()}s max).`,
+      };
+    }
+  }
+
+  return { ok: true };
 }
 
 /** Entry-tiered settle TP/stale exits (default on). Off → stop + hold to settlement only. */
@@ -11437,6 +11466,7 @@ class TradingBot {
       trades: this.ledger.trades,
       symbol,
       candidateSide: side,
+      priceCents,
       window,
       direction,
       entryHeldProb,
