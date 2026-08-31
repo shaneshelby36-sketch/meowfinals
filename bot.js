@@ -1183,6 +1183,8 @@ function modelMinTpCents(config = {}) {
 /**
  * Model TAKE_PROFIT floor: never bank a scratch under minTp (default +7¢).
  * Rich near-certain bids (≥96¢) are always allowed.
+ * For commodity trades with a per-commodity TP override, that override is the
+ * effective floor instead of the global modelMinTpCents.
  */
 function modelTakeProfitMeetsFloor(trade, exitPriceCents, config = {}) {
   const entry = Number(trade && trade.entryPriceCents);
@@ -1190,6 +1192,12 @@ function modelTakeProfitMeetsFloor(trade, exitPriceCents, config = {}) {
   if (!Number.isFinite(entry) || entry < 1 || !Number.isFinite(exit)) return false;
   if (exit < entry) return false;
   if (Math.round(exit) >= MODEL_RICH_BANK_CENTS_DEFAULT) return true;
+  // For commodity trades, prefer the per-commodity TP override as the floor.
+  const sym = String(trade && trade.symbol || '').toUpperCase();
+  if (['GOLD', 'SILVER', 'OIL'].includes(sym)) {
+    const commodityTp = modelCommodityTpCents(sym, config);
+    if (commodityTp > 0) return Math.round(exit - entry) >= commodityTp;
+  }
   const minTp = modelMinTpCents(config);
   if (!(minTp > 0)) return exit > entry;
   return Math.round(exit - entry) >= minTp;
@@ -1692,6 +1700,20 @@ function modelMaxAdverseCents(config = {}) {
   if (Number.isFinite(n) && n <= 0) return 0;
   if (Number.isFinite(n) && n > 0) return Math.round(n);
   return MODEL_MAX_ADVERSE_CENTS_DEFAULT;
+}
+
+/**
+ * Trade-aware max-adverse stop. For commodity model trades, the per-commodity
+ * stop override (commodityStopCentsGold/Silver/Oil) is used when set (> 0);
+ * otherwise falls back to the global modelMaxAdverseCents value.
+ */
+function modelMaxAdverseCentsForTrade(trade, config = {}) {
+  const sym = String(trade && trade.symbol || '').toUpperCase();
+  if (['GOLD', 'SILVER', 'OIL'].includes(sym)) {
+    const override = modelCommodityStopCents(sym, config);
+    if (override > 0) return override;
+  }
+  return modelMaxAdverseCents(config);
 }
 
 /** Hard cliff (¢ below entry) — always exit, lean irrelevant. 0 = off. */
@@ -5971,11 +5993,15 @@ class TradingBot {
     }
   }
 
-  _armPendingForceExit(trade, reason) {
+  _armPendingForceExit(trade, reason, triggerBidCents = null) {
     if (!trade) return;
     trade.pendingForceExit = reason;
     if (!Number.isFinite(Number(trade.pendingForceExitSince))) {
       trade.pendingForceExitSince = Date.now();
+    }
+    // Stamp the bid price that triggered the exit so retries can check if it's still valid.
+    if (reason === 'take_profit' && Number.isFinite(triggerBidCents) && triggerBidCents > 0) {
+      trade.pendingTpTriggerBid = triggerBidCents;
     }
   }
 
@@ -8628,6 +8654,24 @@ class TradingBot {
           forceReason = 'model_against';
           this._armPendingForceExit(trade, forceReason);
         }
+        // TP miss while still green but bid has fallen below the TP floor — drop the
+        // pending exit and fall through to normal management. Don't force-sell at a
+        // fee-negative price just because an IOC missed at the peak.
+        if (
+          forceReason === 'take_profit' &&
+          isModelTrade(trade) &&
+          heldSideBidCents != null &&
+          Number.isFinite(entryPx) &&
+          heldSideBidCents >= entryPx &&
+          !modelTakeProfitMeetsFloor(trade, heldSideBidCents, this.config)
+        ) {
+          delete trade.pendingForceExit;
+          delete trade.pendingForceExitSince;
+          this._persist();
+          this.lastDecision =
+            `Pending TP retry cleared on ${trade.symbol} — bid ${Math.round(heldSideBidCents)}¢ no longer meets TP floor, re-evaluating.`;
+          return; // let normal management handle it next cycle
+        }
         if (
           heldSideBidCents != null &&
           Number.isFinite(heldSideBidCents) &&
@@ -8990,7 +9034,7 @@ class TradingBot {
       // regardless of lean state. Catches fast collapses before lean reacts.
       // Use _sideBidCentsReal so a synthesized complement (100−yes_ask) can't
       // mask a real NO bid collapse and silently prevent the stop from firing.
-      const maxAdverse = modelMaxAdverseCents(this.config);
+      const maxAdverse = modelMaxAdverseCentsForTrade(trade, this.config);
       if (!inOpenGrace && maxAdverse > 0) {
         const realBid = this._sideBidCentsReal(market, trade.side);
         const realAdverse = realBid != null && Number.isFinite(entry) && realBid < entry
@@ -11464,6 +11508,15 @@ class TradingBot {
       return null;
     }
 
+    // Max one commodity open at a time — GOLD/SILVER/OIL share a single slot.
+    if (isCommoditySymbol(symbol)) {
+      const openCommodity = this.openTrades.find((t) => t && isCommoditySymbol(t.symbol));
+      if (openCommodity) {
+        say(`Waiting: already holding an open commodity position (${openCommodity.symbol}) — max one commodity at a time.`);
+        return null;
+      }
+    }
+
     const globalCd = checkModelGlobalPostExitCooldown({
       trades: this.ledger.trades,
       cooldownMs: modelGlobalPostExitCooldownMs(this.config),
@@ -12794,6 +12847,7 @@ module.exports = {
   modelSoftLeanMarginPct,
   modelTrailCents,
   modelMaxAdverseCents,
+  modelMaxAdverseCentsForTrade,
   modelHardAdverseCents,
   modelLeanGatedFloorCents,
   MODEL_LEAN_FLOOR_BASE_DROP_DEFAULT,
