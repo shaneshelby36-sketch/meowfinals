@@ -853,11 +853,12 @@ const MODEL_MIN_ENTRY_LEAN_GOLD_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_SILVER_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_OIL_DEFAULT = 54; // OIL requires 54% lean to enter (vs global 75%)
 
-// Per-commodity overrides for stake ($), max-loss stop (¢), and TP bank (¢).
+// Per-commodity overrides for stake ($), max-loss stop (¢), TP bank (¢), and trail stop (¢).
 // 0 = fall back to the global setting for that parameter.
 const MODEL_COMMODITY_STAKE_DEFAULT = 0;
 const MODEL_COMMODITY_STOP_CENTS_DEFAULT = 15; // ¢ below entry; 0 = use global modelMaxAdverseCents
 const MODEL_COMMODITY_TP_CENTS_DEFAULT = 30;   // ¢ green to bank; 0 = use global modelBankGreenCents
+const MODEL_COMMODITY_TRAIL_CENTS_DEFAULT = 0; // ¢ pullback from peak to trail-stop; 0 = use global modelTrailCents
 /**
  * Commodity late-hold: start the settle-close zone this many minutes before
  * window end. Slower-moving assets trend more steadily, so we can wait longer
@@ -1690,6 +1691,33 @@ function modelCommodityTpCents(symbol, config = {}) {
 /** Returns true when the commodity TP is set to "ride to settlement" (value 99). */
 function modelCommodityRideToSettle(symbol, config = {}) {
   return modelCommodityTpCents(symbol, config) === 99;
+}
+
+/**
+ * Per-commodity trail-stop pullback (¢ from peak before trail stop fires).
+ * 0 = use global modelTrailCents.
+ * Config keys: commodityTrailCentsGold, commodityTrailCentsSilver, commodityTrailCentsOil
+ */
+function modelCommodityTrailCents(symbol, config = {}) {
+  const sym = String(symbol || '').toUpperCase();
+  if (!['GOLD', 'SILVER', 'OIL'].includes(sym)) return 0;
+  const key = `commodityTrailCents${sym.charAt(0)}${sym.slice(1).toLowerCase()}`;
+  const n = Number(config[key]);
+  if (Number.isFinite(n) && n > 0) return Math.round(n);
+  return MODEL_COMMODITY_TRAIL_CENTS_DEFAULT;
+}
+
+/**
+ * Trade-aware trail-stop pullback: uses commodity override when applicable,
+ * otherwise falls back to the global modelTrailCents value.
+ */
+function modelTrailCentsForTrade(trade, config = {}) {
+  const sym = String(trade && trade.symbol || '').toUpperCase();
+  if (['GOLD', 'SILVER', 'OIL'].includes(sym)) {
+    const override = modelCommodityTrailCents(sym, config);
+    if (override > 0) return override;
+  }
+  return modelTrailCents(config);
 }
 
 /** Block entries when held-side live lean is too soft (e.g. 72% NO on a 74¢ ticket). */
@@ -3072,7 +3100,10 @@ const MODEL_PERFECT_CONFIDENCE_DEFAULT = 80;
 const MODEL_PERFECT_LEAN_DEFAULT = 15;
 /** Model confidence floor default. */
 const MODEL_MIN_CONFIDENCE_DEFAULT = 55;
-/** Trail off peak — unused by simplified Model exits (kept for config compat). */
+/**
+ * Trail stop: once armed (≥ trailArm¢ green), stop floor ratchets to peak − trailCents.
+ * 0 = off (default). Commodity override: commodityTrailCentsGold/Silver/Oil.
+ */
 const MODEL_TRAIL_CENTS_DEFAULT = 0;
 /** Soft lean margin — 52/48 counts as mushy for stagnation (was 2). */
 const MODEL_SOFT_LEAN_MARGIN_DEFAULT = 3;
@@ -3686,6 +3717,9 @@ const EDITABLE_NUMERIC_FIELDS = [
   'commodityTpCentsGold',
   'commodityTpCentsSilver',
   'commodityTpCentsOil',
+  'commodityTrailCentsGold',
+  'commodityTrailCentsSilver',
+  'commodityTrailCentsOil',
   'commodityMinEntryCents',
   'commoditySettleCloseMinutes',
   'commodityLateBarrierMinutes',
@@ -4862,6 +4896,10 @@ class TradingBot {
       commodityTpCentsGold: MODEL_COMMODITY_TP_CENTS_DEFAULT,
       commodityTpCentsSilver: MODEL_COMMODITY_TP_CENTS_DEFAULT,
       commodityTpCentsOil: MODEL_COMMODITY_TP_CENTS_DEFAULT,
+      // Per-commodity trail stop (¢ pullback from peak; 0 = use global modelTrailCents).
+      commodityTrailCentsGold: MODEL_COMMODITY_TRAIL_CENTS_DEFAULT,
+      commodityTrailCentsSilver: MODEL_COMMODITY_TRAIL_CENTS_DEFAULT,
+      commodityTrailCentsOil: MODEL_COMMODITY_TRAIL_CENTS_DEFAULT,
       // Per-commodity entry floor (0 = use global modelMinEntryCents).
       commodityMinEntryCents: 0,
       // Per-commodity cash-out window (0 = use commodity default: 6m settle-close, 7m barrier).
@@ -9099,6 +9137,28 @@ class TradingBot {
         }
       }
 
+      // ── RATCHETING TRAIL STOP ──────────────────────────────────────────────
+      // Once armed (green ≥ armCents), the stop floor ratchets to peak − trailCents.
+      // If price gives back more than trailCents from its peak, cut immediately.
+      // Only active when modelTrailCents (or commodityTrailCents) > 0 AND peak ≥ entry + trailCents
+      // (ensures the floor is always at or above entry — never worse than entry stop).
+      const trailCents = modelTrailCentsForTrade(trade, this.config);
+      if (!inOpenGrace && trailCents > 0 && armed && Number.isFinite(peak) && peak > entry) {
+        const trailFloor = Math.round(peak - trailCents);
+        // Only fire if trail floor is at or above entry (never punishes a flat entry with an extra loss)
+        if (trailFloor >= entry) {
+          const realBid = this._sideBidCentsReal(market, trade.side);
+          const checkBid = (realBid != null && Number.isFinite(realBid)) ? realBid : heldSideBidCents;
+          if (checkBid < trailFloor) {
+            this.lastDecision =
+              `Trail stop: bid ${Math.round(checkBid)}¢ < trail floor ${trailFloor}¢ ` +
+              `(peak ${Math.round(peak)}¢ − ${trailCents}¢) on ${trade.symbol} — cutting.`;
+            await tryModelAgainstCut('model_against');
+            return;
+          }
+        }
+      }
+
       // ── UNDERWATER RATIO HARD CUT ─────────────────────────────────────────
       // If bid spends ≥ ratio% of cycles below entry during the observation
       // window (default 90s), the thesis isn't playing out — cut unconditionally.
@@ -12922,6 +12982,9 @@ module.exports = {
   modelEntryLiveLeanMarginPct,
   modelSoftLeanMarginPct,
   modelTrailCents,
+  modelTrailCentsForTrade,
+  modelCommodityTrailCents,
+  MODEL_COMMODITY_TRAIL_CENTS_DEFAULT,
   modelMaxAdverseCents,
   modelMaxAdverseCentsForTrade,
   modelHardAdverseCents,

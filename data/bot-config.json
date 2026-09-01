@@ -127,5 +127,8 @@
   "commodityTpCentsGold": 30,
   "commodityTpCentsSilver": 30,
   "commodityTpCentsOil": 30,
+  "commodityTrailCentsGold": 0,
+  "commodityTrailCentsSilver": 0,
+  "commodityTrailCentsOil": 0,
   "modelMinEntryLeanPctOil": 54
 }

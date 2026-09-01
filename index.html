@@ -644,6 +644,28 @@
             <span class="field-hint">OIL TP target (¢ green). <strong>0</strong> = use global. <strong>99</strong> = ride to settlement (no TP).</span>
           </label>
 
+          <label>🛤️ GOLD — trail stop (¢ from peak)
+            <div class="slider-row">
+              <input id="bot-commodity-trail-gold" type="range" min="0" max="30" step="1" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-trail-gold-value">—</span>
+            </div>
+            <span class="field-hint">Once +trailArm¢ green, exit if bid drops this far from peak. <strong>0</strong> = use global modelTrailCents.</span>
+          </label>
+          <label>🛤️ SILVER — trail stop (¢ from peak)
+            <div class="slider-row">
+              <input id="bot-commodity-trail-silver" type="range" min="0" max="30" step="1" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-trail-silver-value">—</span>
+            </div>
+            <span class="field-hint">Once +trailArm¢ green, exit if bid drops this far from peak. <strong>0</strong> = use global modelTrailCents.</span>
+          </label>
+          <label>🛤️ OIL — trail stop (¢ from peak)
+            <div class="slider-row">
+              <input id="bot-commodity-trail-oil" type="range" min="0" max="30" step="1" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-trail-oil-value">—</span>
+            </div>
+            <span class="field-hint">Once +trailArm¢ green, exit if bid drops this far from peak. <strong>0</strong> = use global modelTrailCents.</span>
+          </label>
+
           <label>🎯 Commodity — cash out before settle (min left)
             <div class="slider-row">
               <input id="bot-commodity-settle-close" type="range" min="0" max="14" step="0.5" style="border:2px solid #10b981;" />
