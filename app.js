@@ -1000,6 +1000,8 @@ function initExitSoundUi() {
   });
 }
 
+let _lastSeenAppVersion = null;
+
 async function refreshBotStatus() {
   const { engineUrl } = loadSettings();
   const modeLine = document.getElementById('bot-mode-line');
@@ -1010,6 +1012,12 @@ async function refreshBotStatus() {
     if (healthRes.ok) {
       const health = await healthRes.json();
       setAppVersion(health.version);
+      // Auto-reload when the server deploys a new version — no more Ctrl+F5.
+      if (_lastSeenAppVersion && health.version && health.version !== _lastSeenAppVersion) {
+        window.location.reload();
+        return;
+      }
+      if (health.version) _lastSeenAppVersion = health.version;
       if (persistLine) {
         if (health.dataDirEphemeral) {
           persistLine.hidden = false;
