@@ -8868,7 +8868,9 @@ class TradingBot {
       const nearTargetBank = modelNearTargetBankCentsForTrade(trade, this.config);
       // For commodity trades with a TP override, disable isBankableGreen entirely so
       // lean-exit / soft-turning / stagnation / pre-settle paths cannot bank below the
-      // configured target. Those paths fall through to breakeven scratch instead.
+      // configured target. All action paths check (isBankableGreen || isDecentGreen) so
+      // a commodity that has reached its TP target still books take_profit even when
+      // the lean-decay or other intermediate exits fire first.
       // When override === 99 (ride to settle), isDecentGreen is also disabled — no TP
       // at all; only lean/stop/settle-window exits apply.
       const commodityTpOverride = modelCommodityTpCents(
@@ -8990,7 +8992,7 @@ class TradingBot {
       const isLateEntry = minMinutesToOpen > 0 && minutesAtOpen < minMinutesToOpen;
       if (bidOk && isLateEntry && !inOpenGrace) {
         if (flatOrGreen || nearFlat) {
-          if (isBankableGreen && heldForBank) {
+          if ((isBankableGreen || isDecentGreen) && heldForBank) {
             await this._closePosition(trade, heldSideBidCents, 'take_profit', {
               liveSellPriceCents: heldSideBidCents,
             });
@@ -9176,7 +9178,7 @@ class TradingBot {
 
       const exitModelAgainst = async () => {
         if (flatOrGreen || nearFlat) {
-          if (isBankableGreen && heldForBank) {
+          if ((isBankableGreen || isDecentGreen) && heldForBank) {
             await this._closePosition(trade, heldSideBidCents, 'take_profit', {
               liveSellPriceCents: heldSideBidCents,
             });
@@ -9331,7 +9333,7 @@ class TradingBot {
           `Stagnation ${stagnation.needSec}s with only +${stagnation.peakProgress}¢ peak + model decaying on ${trade.symbol} — exiting.`;
         if (underwater || econUnderwater) {
           await tryModelAgainstCut('model_stagnation');
-        } else if (isBankableGreen && heldForBank) {
+        } else if ((isBankableGreen || isDecentGreen) && heldForBank) {
           await this._closePosition(trade, heldSideBidCents, 'take_profit', {
             liveSellPriceCents: heldSideBidCents,
           });
@@ -9408,7 +9410,7 @@ class TradingBot {
             await tryModelAgainstCut();
             return;
           }
-          if (isBankableGreen && heldForBank) {
+          if ((isBankableGreen || isDecentGreen) && heldForBank) {
             await this._closePosition(trade, heldSideBidCents, 'take_profit', {
               liveSellPriceCents: heldSideBidCents,
             });
@@ -9437,7 +9439,7 @@ class TradingBot {
         (flatOrGreen || nearFlat) &&
         !upwardMomentum
       ) {
-        if (isBankableGreen && heldForBank) {
+        if ((isBankableGreen || isDecentGreen) && heldForBank) {
           await this._closePosition(trade, heldSideBidCents, 'take_profit', {
             liveSellPriceCents: heldSideBidCents,
           });
@@ -9454,7 +9456,7 @@ class TradingBot {
       if (!faded && bidOk && dumpPullback > 0 && pullback >= dumpPullback) {
         if (modelHardAgainst && againstBeReady && hardAgainstConfirmed) {
           if (await exitModelAgainst()) return;
-        } else if (isBankableGreen && heldForBank) {
+        } else if ((isBankableGreen || isDecentGreen) && heldForBank) {
           await this._closePosition(trade, heldSideBidCents, 'take_profit', {
             liveSellPriceCents: heldSideBidCents,
           });
@@ -9478,7 +9480,7 @@ class TradingBot {
       const exitModelPreSettle = async (forceReason) => {
         if (!bidOk) return false;
         if (flatOrGreen || nearFlat) {
-          if (isBankableGreen && heldForBank) {
+          if ((isBankableGreen || isDecentGreen) && heldForBank) {
             await this._closePosition(trade, heldSideBidCents, 'take_profit', {
               liveSellPriceCents: heldSideBidCents,
             });
@@ -9616,7 +9618,7 @@ class TradingBot {
 
       // Weak-conf lean-exit leftover: only real bankable green (never micro TP / soft BE).
       // Soft mush + flat → hold for stagnation, not instant breakeven.
-      if (bidOk && leanExit && heldLongEnough && isBankableGreen && heldForBank) {
+      if (bidOk && leanExit && heldLongEnough && (isBankableGreen || isDecentGreen) && heldForBank) {
         await this._closePosition(trade, heldSideBidCents, 'take_profit', {
           liveSellPriceCents: heldSideBidCents,
         });
