@@ -1785,6 +1785,7 @@ const SLIDER_UNITS = {
   'bot-model-stagnation-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-stagnation-sensitivity': (v) => (Number(v) <= 0 ? 'any progress' : `≥${Math.round(v)}¢`),
   'bot-model-be-chase-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
+  'bot-model-trail-cents': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢ from peak`),
   'bot-model-max-adverse': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
   'bot-model-underwater-window': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-underwater-ratio': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
@@ -2312,6 +2313,7 @@ function wireSliderDisplays() {
     'bot-model-stagnation-sec',
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
+    'bot-model-trail-cents',
     'bot-model-max-adverse',
     'bot-model-underwater-window',
     'bot-model-underwater-ratio',
@@ -2491,6 +2493,7 @@ function wireBotConfigAutoSave() {
     'bot-model-stagnation-sec',
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
+    'bot-model-trail-cents',
     'bot-model-max-adverse',
     'bot-model-underwater-window',
     'bot-model-underwater-ratio',
@@ -2758,6 +2761,8 @@ async function loadBotConfigIntoForm() {
       modelBeChaseSec.value =
         c.modelBeChaseSeconds != null ? c.modelBeChaseSeconds : 20;
     }
+    const modelTrailCentsEl = document.getElementById('bot-model-trail-cents');
+    if (modelTrailCentsEl) modelTrailCentsEl.value = c.modelTrailCents != null ? c.modelTrailCents : 0;
     const modelMaxAdverse = document.getElementById('bot-model-max-adverse');
     if (modelMaxAdverse) {
       modelMaxAdverse.value = c.modelMaxAdverseCents != null ? c.modelMaxAdverseCents : 0;
@@ -2996,6 +3001,7 @@ async function loadBotConfigIntoForm() {
     'bot-model-stagnation-sec',
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
+    'bot-model-trail-cents',
     'bot-model-max-adverse',
     'bot-model-underwater-window',
     'bot-model-underwater-ratio',
@@ -3235,6 +3241,7 @@ async function saveBotConfig(opts = {}) {
       document.getElementById('bot-model-stagnation-sensitivity')?.value || '3'
     ),
     modelBeChaseSeconds: parseFloat(document.getElementById('bot-model-be-chase-sec')?.value || '20'),
+    modelTrailCents: parseFloat(document.getElementById('bot-model-trail-cents')?.value || '0'),
     modelMaxAdverseCents: parseFloat(document.getElementById('bot-model-max-adverse')?.value || '0'),
     modelUnderwaterWindowSeconds: parseFloat(document.getElementById('bot-model-underwater-window')?.value || '90'),
     modelUnderwaterRatioPct: parseFloat(document.getElementById('bot-model-underwater-ratio')?.value || '70'),

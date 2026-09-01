@@ -782,6 +782,13 @@
             </div>
             <span class="field-hint">After bid reaches entry, this many seconds to hit trail arm (<strong>+3¢</strong>) or scratch breakeven. Only fires if the model is also decaying — a firm lean will not BE. Default <strong>20s</strong> (was 8s). <strong>0</strong> = off.</span>
           </label>
+          <label style="border: 2px solid #10b981; border-radius: 6px; padding: 8px;">🛤️ MODEL trail stop (¢ from peak)
+            <div class="slider-row">
+              <input id="bot-model-trail-cents" type="range" min="0" max="30" step="1" />
+              <span class="slider-value" id="bot-model-trail-cents-value">—</span>
+            </div>
+            <span class="field-hint">Once +3¢ green (trail arm), exit if bid pulls back this many ¢ from its peak. Floor ratchets up as peak rises — never moves down. <strong>0 = off</strong>. Recommended: <strong>8¢</strong>.</span>
+          </label>
           <label>MODEL hard stop (¢ below entry)
             <div class="slider-row">
               <input id="bot-model-max-adverse" type="range" min="0" max="50" step="1" />
