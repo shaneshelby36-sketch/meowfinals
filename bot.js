@@ -2526,9 +2526,15 @@ function modelPriceAllowed(priceCents, window, config = {}, symbol = null) {
   }
   const roomGate = modelEntryRoomToFloorGate(price, config);
   if (!roomGate.ok) return roomGate;
-  const maxEntry = Number.isFinite(Number(config.modelMaxEntryCents))
-    ? Number(config.modelMaxEntryCents)
-    : MODEL_MAX_ENTRY_DEFAULT_CENTS;
+  // Per-commodity max entry override (0 = fall back to global modelMaxEntryCents).
+  const commodityMaxRaw = symbol && isCommoditySymbol(symbol)
+    ? Number(config.commodityMaxEntryCents)
+    : NaN;
+  const maxEntry = Number.isFinite(commodityMaxRaw) && commodityMaxRaw > 0
+    ? commodityMaxRaw
+    : Number.isFinite(Number(config.modelMaxEntryCents))
+      ? Number(config.modelMaxEntryCents)
+      : MODEL_MAX_ENTRY_DEFAULT_CENTS;
   if (maxEntry > 0 && price > maxEntry) {
     return { ok: false, reason: `above model max entry ${maxEntry}¢` };
   }
@@ -3730,6 +3736,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'commodityTrailCentsSilver',
   'commodityTrailCentsOil',
   'commodityMinEntryCents',
+  'commodityMaxEntryCents',
   'commoditySettleCloseMinutes',
   'commodityLateBarrierMinutes',
   'commodityMaxOpenPositions',
@@ -4911,6 +4918,7 @@ class TradingBot {
       commodityTrailCentsOil: MODEL_COMMODITY_TRAIL_CENTS_DEFAULT,
       // Per-commodity entry floor (0 = use global modelMinEntryCents).
       commodityMinEntryCents: 0,
+      commodityMaxEntryCents: 0,
       // Per-commodity cash-out window (0 = use commodity default: 6m settle-close, 7m barrier).
       commoditySettleCloseMinutes: 0,
       commodityLateBarrierMinutes: 0,
@@ -11458,6 +11466,10 @@ class TradingBot {
   _checkModelConfirmGate({ ticker, symbol, side, priceCents, closeTime }) {
     const confirm = modelConfirmCrossCents(this.config);
     if (!(confirm > 0)) return { ok: true, skipped: true };
+
+    // Commodities don't oscillate around 50¢ the way crypto does — the cross
+    // gate is meaningless for GOLD/SILVER/OIL and would just block entries.
+    if (isCommoditySymbol(symbol)) return { ok: true, skipped: true };
 
     // Don't enforce until THIS coin has done a MODEL buy → sell this run.
     if (!this._hasCompletedModelRoundTrip(symbol)) {
