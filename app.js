@@ -2579,6 +2579,12 @@ function wireBotConfigAutoSave() {
   if (settleTieredEl) settleTieredEl.addEventListener('change', syncSettleExitTableEnabled);
 }
 
+function updateSettingsJson(config) {
+  const pre = document.getElementById('bot-settings-json');
+  if (!pre) return;
+  pre.textContent = JSON.stringify(config, null, 2);
+}
+
 async function loadBotConfigIntoForm() {
   const { engineUrl } = loadSettings();
   botFormHydrating = true;
@@ -2587,6 +2593,7 @@ async function loadBotConfigIntoForm() {
     if (!res.ok) return;
     const data = await res.json();
     const c = data.config;
+    updateSettingsJson(c);
     renderSettleExitTable(data.settleExitTiers);
     renderSettleExitTableNote(c);
     document.getElementById('bot-symbol').value = c.symbol;
@@ -3366,6 +3373,7 @@ async function saveBotConfig(opts = {}) {
       return;
     }
     const saved = await res.json().catch(() => ({}));
+    if (saved.config) updateSettingsJson(saved.config);
     if (saved.settleExitTiers) renderSettleExitTable(saved.settleExitTiers);
     syncSettleExitTableEnabled();
     const skimText = formatSkimLabel(saved.config || payload);
