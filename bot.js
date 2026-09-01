@@ -244,13 +244,22 @@ function symbolsNeedingKalshiTargets({ config = null, openTrades = [] } = {}) {
 /**
  * Symbols the prediction engine should compute each cycle.
  * Same as Kalshi-target set, plus BTC when any alt is active (cross-check
- * reference — not a Kalshi poll by itself).
+ * reference — not a Kalshi poll by itself), plus all inactive crypto coins
+ * that run coin shadow books (so their predictions are ready when the shadow
+ * book evaluates them). Commodities are excluded — they use their own feed.
  */
 function symbolsNeedingEngineCompute({ config = null, openTrades = [] } = {}) {
   const base = symbolsNeedingKalshiTargets({ config, openTrades });
   const set = new Set(base);
   if ([...set].some((s) => s !== 'BTC') && SERIES_BY_SYMBOL.BTC) {
     set.add('BTC');
+  }
+  // Inactive crypto coins need engine compute so coin shadow books can evaluate them.
+  const active = new Set(resolveAutoTradeSymbols(config));
+  for (const sym of Object.keys(SERIES_BY_SYMBOL)) {
+    if (!active.has(sym) && !COMMODITY_SYMBOLS.has(sym)) {
+      set.add(sym);
+    }
   }
   return Object.keys(SERIES_BY_SYMBOL).filter((s) => set.has(s));
 }
@@ -12125,32 +12134,37 @@ class TradingBot {
       Math.max(0, this._effectiveMaxCryptoPositions() - cryptoOpenCount());
     if (slotsFree() <= 0 && commodityOpenCount() >= 2) return;
 
-    const tryOne = async (opp) => {
-      // Block GOLD if SILVER is open, and vice versa.
-      if (preciousMetalBlocked(opp.symbol)) return;
-      // Gate crypto entries against the crypto cap.
-      if (!isCommoditySymbol(opp.symbol) && slotsFree() <= 0) return;
-      return this._openPosition(this._modelOppToOpenArgs(opp));
-    };
+    // Commodities must always be opened serially — the GOLD/SILVER mutual-exclusion
+    // check reads this.openTrades, so parallel Promise.all would race and open both
+    // before either appears in openTrades. Split ranked into crypto (parallel-ok)
+    // and commodity (always serial).
+    const cryptoOpps = ranked.filter(o => !isCommoditySymbol(o.symbol));
+    const commodityOpps = ranked.filter(o => isCommoditySymbol(o.symbol));
 
-    let i = 0;
-    const parallelN = Math.min(slotsFree() + (commodityOpenCount() < 2 ? 1 : 0), ranked.length, 3);
-    if (parallelN >= 2) {
-      const batch = ranked.slice(0, parallelN);
+    // Parallel crypto batch (same behaviour as before).
+    const cryptoSlots = slotsFree();
+    if (cryptoSlots >= 2 && cryptoOpps.length >= 2) {
+      const batch = cryptoOpps.slice(0, Math.min(cryptoSlots, cryptoOpps.length, 3));
       const names = batch.map((o) => o.symbol).join(' + ');
       this.lastDecision = `MODEL multi-entry: trying ${names} together.`;
-      this._logActivity(this.lastDecision, {
-        kind: 'open',
-        symbol: names,
-        strategy: 'model',
-      });
-      await Promise.all(batch.map((opp) => tryOne(opp)));
-      i = parallelN;
+      this._logActivity(this.lastDecision, { kind: 'open', symbol: names, strategy: 'model' });
+      await Promise.all(batch.map((opp) => {
+        if (slotsFree() <= 0) return;
+        return this._openPosition(this._modelOppToOpenArgs(opp));
+      }));
+    } else {
+      for (const opp of cryptoOpps) {
+        if (slotsFree() <= 0) break;
+        await this._openPosition(this._modelOppToOpenArgs(opp));
+      }
     }
 
-    while (i < ranked.length && slotsFree() > 0) {
-      await tryOne(ranked[i]);
-      i += 1;
+    // Commodities always serial — each open is visible to the next check.
+    for (const opp of commodityOpps) {
+      // Re-check after each open so a newly-opened GOLD blocks SILVER, etc.
+      if (preciousMetalBlocked(opp.symbol)) continue;
+      if (commodityOpenCount() >= 2) break;
+      await this._openPosition(this._modelOppToOpenArgs(opp));
     }
   }
 
