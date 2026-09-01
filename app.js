@@ -3744,6 +3744,24 @@ function wireBotUI() {
     refreshBotStatus();
     loadBotConfigIntoForm();
   });
+  document.getElementById('bot-settings-copy').addEventListener('click', async () => {
+    const feedback = document.getElementById('bot-settings-feedback');
+    const btn = document.getElementById('bot-settings-copy');
+    const { engineUrl } = loadSettings();
+    try {
+      const res = await fetch(`${engineUrl}/api/bot/config`, { cache: 'no-store' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const text = JSON.stringify(data.config, null, 2);
+      await navigator.clipboard.writeText(text);
+      const orig = btn.textContent;
+      btn.textContent = '✓ Copied!';
+      if (feedback) { feedback.textContent = '✓ Settings copied to clipboard.'; feedback.style.color = 'var(--up)'; }
+      setTimeout(() => { btn.textContent = orig; }, 2000);
+    } catch (err) {
+      if (feedback) { feedback.textContent = `Could not copy: ${err.message}`; feedback.style.color = 'var(--down)'; }
+    }
+  });
   document.getElementById('bot-settings-save').addEventListener('click', () => saveBotConfig());
   const dailyLossStep = (delta) => {
     const el = document.getElementById('bot-daily-loss-value');
