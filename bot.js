@@ -6292,7 +6292,12 @@ class TradingBot {
     if (this._inShadow || this._inCoinShadow) return;
     if (!isModelStrategyMode(this.config)) return;
     const active = new Set(resolveAutoTradeSymbols(this.config));
-    const inactive = Object.keys(SERIES_BY_SYMBOL).filter(sym => !active.has(sym));
+    // Commodities are managed live (with their own TP/stop/lean rules) — never
+    // paper-shadow them as "inactive crypto". Only true crypto symbols get a
+    // coin shadow book.
+    const inactive = Object.keys(SERIES_BY_SYMBOL).filter(
+      sym => !active.has(sym) && !isCommoditySymbol(sym)
+    );
     if (!inactive.length) return;
 
     // Warm the market cache for all inactive coins while NOT in shadow mode,
