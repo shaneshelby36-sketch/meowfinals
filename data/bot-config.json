@@ -62,7 +62,7 @@
   "modelMinEntryLeanPct": 75,
   "modelSoftLeanMarginPct": 2,
   "modelSignalDominanceMin": 0,
-  "modelTrailCents": 0,
+  "modelTrailCents": 8,
   "modelMaxAdverseCents": 15,
   "modelHardAdverseCents": 15,
   "modelMaxLossCents": 15,
