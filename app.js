@@ -1785,6 +1785,9 @@ const SLIDER_UNITS = {
   'bot-model-stagnation-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-stagnation-sensitivity': (v) => (Number(v) <= 0 ? 'any progress' : `≥${Math.round(v)}¢`),
   'bot-model-be-chase-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
+  'bot-model-no-progress-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
+  'bot-model-no-progress-pct': (v) => `${Math.round(v)}%`,
+  'bot-model-no-progress-arm': (v) => `+${Math.round(v)}¢`,
   'bot-model-trail-cents': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢ from peak`),
   'bot-model-max-adverse': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
   'bot-model-underwater-window': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
@@ -2313,6 +2316,9 @@ function wireSliderDisplays() {
     'bot-model-stagnation-sec',
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
+    'bot-model-no-progress-sec',
+    'bot-model-no-progress-pct',
+    'bot-model-no-progress-arm',
     'bot-model-trail-cents',
     'bot-model-max-adverse',
     'bot-model-underwater-window',
@@ -2493,6 +2499,9 @@ function wireBotConfigAutoSave() {
     'bot-model-stagnation-sec',
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
+    'bot-model-no-progress-sec',
+    'bot-model-no-progress-pct',
+    'bot-model-no-progress-arm',
     'bot-model-trail-cents',
     'bot-model-max-adverse',
     'bot-model-underwater-window',
@@ -2761,6 +2770,12 @@ async function loadBotConfigIntoForm() {
       modelBeChaseSec.value =
         c.modelBeChaseSeconds != null ? c.modelBeChaseSeconds : 20;
     }
+    const modelNoProgressSec = document.getElementById('bot-model-no-progress-sec');
+    if (modelNoProgressSec) modelNoProgressSec.value = c.modelNoProgressTightenSeconds != null ? c.modelNoProgressTightenSeconds : 0;
+    const modelNoProgressPct = document.getElementById('bot-model-no-progress-pct');
+    if (modelNoProgressPct) modelNoProgressPct.value = c.modelNoProgressTightenPct != null ? c.modelNoProgressTightenPct : 80;
+    const modelNoProgressArm = document.getElementById('bot-model-no-progress-arm');
+    if (modelNoProgressArm) modelNoProgressArm.value = c.modelNoProgressTightenArmCents != null ? c.modelNoProgressTightenArmCents : 15;
     const modelTrailCentsEl = document.getElementById('bot-model-trail-cents');
     if (modelTrailCentsEl) modelTrailCentsEl.value = c.modelTrailCents != null ? c.modelTrailCents : 0;
     const modelMaxAdverse = document.getElementById('bot-model-max-adverse');
@@ -3001,6 +3016,9 @@ async function loadBotConfigIntoForm() {
     'bot-model-stagnation-sec',
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
+    'bot-model-no-progress-sec',
+    'bot-model-no-progress-pct',
+    'bot-model-no-progress-arm',
     'bot-model-trail-cents',
     'bot-model-max-adverse',
     'bot-model-underwater-window',
@@ -3241,6 +3259,9 @@ async function saveBotConfig(opts = {}) {
       document.getElementById('bot-model-stagnation-sensitivity')?.value || '3'
     ),
     modelBeChaseSeconds: parseFloat(document.getElementById('bot-model-be-chase-sec')?.value || '20'),
+    modelNoProgressTightenSeconds: parseFloat(document.getElementById('bot-model-no-progress-sec')?.value || '0'),
+    modelNoProgressTightenPct: parseFloat(document.getElementById('bot-model-no-progress-pct')?.value || '80'),
+    modelNoProgressTightenArmCents: parseFloat(document.getElementById('bot-model-no-progress-arm')?.value || '15'),
     modelTrailCents: parseFloat(document.getElementById('bot-model-trail-cents')?.value || '0'),
     modelMaxAdverseCents: parseFloat(document.getElementById('bot-model-max-adverse')?.value || '0'),
     modelUnderwaterWindowSeconds: parseFloat(document.getElementById('bot-model-underwater-window')?.value || '90'),

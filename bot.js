@@ -941,6 +941,16 @@ const MODEL_STAGNATION_SECONDS_DEFAULT = 60;
 /** Peak must reach at least this many ¢ above entry to count as progress (matches trail arm). */
 const MODEL_STAGNATION_MIN_PROGRESS_CENTS_DEFAULT = 3;
 /**
+ * No-progress stop tighten: if trail arm has never been reached after this many seconds,
+ * shrink the effective max-adverse stop to modelNoProgressTightenPct% of its original value.
+ * 0 = off (default). Recommended: 240s (4 min).
+ */
+const MODEL_NO_PROGRESS_TIGHTEN_SECONDS_DEFAULT = 0;
+/** How much of the original stop to keep once no-progress tighten fires (0–100%). Default 80. */
+const MODEL_NO_PROGRESS_TIGHTEN_PCT_DEFAULT = 80;
+/** Minimum ¢ green that counts as "real progress" for the no-progress tighten check. Default 15. */
+const MODEL_NO_PROGRESS_TIGHTEN_ARM_CENTS_DEFAULT = 15;
+/**
  * Rapid adverse: true ¢ below entry (beyond spread haircut) at/above this + model
  * against → cut immediately (after open grace). Caps cliffs like 81→20. 0 = off.
  */
@@ -2155,6 +2165,51 @@ function modelStagnationMinProgressCents(config = {}) {
   if (Number.isFinite(n) && n > 0) return Math.round(n);
   // Default tracks trail arm: if peak never hit stall-bank green, no meaningful progress.
   return modelTrailArmCents(config);
+}
+
+function modelNoProgressTightenSeconds(config = {}) {
+  const n = Number(config.modelNoProgressTightenSeconds);
+  if (Number.isFinite(n) && n <= 0) return 0;
+  if (Number.isFinite(n) && n > 0) return Math.round(n);
+  return MODEL_NO_PROGRESS_TIGHTEN_SECONDS_DEFAULT;
+}
+
+function modelNoProgressTightenPct(config = {}) {
+  const n = Number(config.modelNoProgressTightenPct);
+  if (Number.isFinite(n) && n > 0 && n <= 100) return Math.round(n);
+  return MODEL_NO_PROGRESS_TIGHTEN_PCT_DEFAULT;
+}
+
+function modelNoProgressTightenArmCents(config = {}) {
+  const n = Number(config.modelNoProgressTightenArmCents);
+  if (Number.isFinite(n) && n > 0) return Math.round(n);
+  return MODEL_NO_PROGRESS_TIGHTEN_ARM_CENTS_DEFAULT;
+}
+
+/**
+ * Effective max-adverse stop for a trade, accounting for the no-progress tighten.
+ * If the trade's peak has never reached modelNoProgressTightenArmCents (default 15¢)
+ * above entry AND it has been held longer than the tighten window, shrink the stop
+ * to tightenPct% of its original value.
+ */
+function modelEffectiveMaxAdverse(trade, config = {}) {
+  const base = modelMaxAdverseCentsForTrade(trade, config);
+  if (!(base > 0)) return base;
+  const tightenSec = modelNoProgressTightenSeconds(config);
+  if (!(tightenSec > 0)) return base;
+  const openedAt = Number(trade && trade.openedAt);
+  const heldMs = Number.isFinite(openedAt) ? Date.now() - openedAt : 0;
+  if (heldMs < tightenSec * 1000) return base;
+  // Only tighten if peak has never reached the meaningful progress threshold.
+  const progressNeeded = modelNoProgressTightenArmCents(config);
+  const entry = Number(trade && trade.entryPriceCents);
+  const peak = Number(trade && trade.peakHeldBidCents);
+  const peakProgress = Number.isFinite(entry) && Number.isFinite(peak)
+    ? Math.max(0, Math.round(peak - entry))
+    : 0;
+  if (peakProgress >= progressNeeded) return base; // had real progress — no tighten
+  const pct = modelNoProgressTightenPct(config);
+  return Math.max(1, Math.round(base * pct / 100));
 }
 
 function modelRapidAdverseCents(config = {}) {
@@ -3701,6 +3756,9 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelUnderwaterWindowSeconds',
   'modelUnderwaterRatioPct',
   'modelBeChaseSeconds',
+  'modelNoProgressTightenSeconds',
+  'modelNoProgressTightenPct',
+  'modelNoProgressTightenArmCents',
   'modelLeanDecayDropPts',
   'modelLeanDecayStallSeconds',
   'modelLeanDecayFloor',
@@ -4854,6 +4912,9 @@ class TradingBot {
       modelUnderwaterWindowSeconds: MODEL_UNDERWATER_WINDOW_SECONDS_DEFAULT,
       modelUnderwaterRatioPct: MODEL_UNDERWATER_RATIO_PCT_DEFAULT,
       modelBeChaseSeconds: MODEL_BE_CHASE_SECONDS_DEFAULT,
+      modelNoProgressTightenSeconds: MODEL_NO_PROGRESS_TIGHTEN_SECONDS_DEFAULT,
+      modelNoProgressTightenPct: MODEL_NO_PROGRESS_TIGHTEN_PCT_DEFAULT,
+      modelNoProgressTightenArmCents: MODEL_NO_PROGRESS_TIGHTEN_ARM_CENTS_DEFAULT,
       modelLiveLeanMarginPct: MODEL_LIVE_LEAN_MARGIN_DEFAULT,
       modelExtremeLiveLeanExitPct: MODEL_EXTREME_LIVE_LEAN_EXIT_PCT_DEFAULT,
       modelEntryLiveLeanMarginPct: MODEL_ENTRY_LIVE_LEAN_MARGIN_DEFAULT,
@@ -9145,15 +9206,20 @@ class TradingBot {
       // regardless of lean state. Catches fast collapses before lean reacts.
       // Use _sideBidCentsReal so a synthesized complement (100−yes_ask) can't
       // mask a real NO bid collapse and silently prevent the stop from firing.
-      const maxAdverse = modelMaxAdverseCentsForTrade(trade, this.config);
+      // Use effective max-adverse which applies the no-progress tighten after N seconds
+      // if the trail arm has never been reached.
+      const maxAdverse = modelEffectiveMaxAdverse(trade, this.config);
+      const baseMaxAdverse = modelMaxAdverseCentsForTrade(trade, this.config);
       if (!inOpenGrace && maxAdverse > 0) {
         const realBid = this._sideBidCentsReal(market, trade.side);
         const realAdverse = realBid != null && Number.isFinite(entry) && realBid < entry
           ? Math.round(entry - realBid)
           : adverseCents; // fall back to normal adverseCents if real bid unavailable
         if (realBid != null && realAdverse >= maxAdverse) {
-          this.lastDecision =
-            `Hard adverse stop: −${realAdverse}¢ (≥${maxAdverse}¢) on ${trade.symbol} — cutting.`;
+          const tightened = maxAdverse < baseMaxAdverse;
+          this.lastDecision = tightened
+            ? `No-progress stop tighten: −${realAdverse}¢ (≥${maxAdverse}¢, tightened from ${baseMaxAdverse}¢) on ${trade.symbol} — cutting.`
+            : `Hard adverse stop: −${realAdverse}¢ (≥${maxAdverse}¢) on ${trade.symbol} — cutting.`;
           await tryModelAgainstCut('model_against');
           return;
         }
@@ -9324,7 +9390,10 @@ class TradingBot {
       }
 
       // Strong lean rotting (99/1 → 85/15): cut if no recovery — smaller loss beats cliff.
-      if (bidOk && picked && picked.window && !faded) {
+      // Commodities with a TP override hold to their target — minor lean dips are noise
+      // on slower-moving markets. Only fire decay cut once they've hit their TP target.
+      const commodityHolding = commodityTpOverride > 0 && !commodityRideToSettle && greenCents < commodityTpOverride;
+      if (bidOk && picked && picked.window && !faded && !commodityHolding) {
         const decay = modelLeanDecayCutState(trade, picked.window, trade.side, now, this.config);
         if (decay.inDecayZone && decay.cutReady) {
           const up = Number(picked.window.probabilityUp);
@@ -13018,6 +13087,13 @@ module.exports = {
   MODEL_COMMODITY_TRAIL_CENTS_DEFAULT,
   modelMaxAdverseCents,
   modelMaxAdverseCentsForTrade,
+  modelEffectiveMaxAdverse,
+  modelNoProgressTightenSeconds,
+  modelNoProgressTightenPct,
+  MODEL_NO_PROGRESS_TIGHTEN_SECONDS_DEFAULT,
+  MODEL_NO_PROGRESS_TIGHTEN_PCT_DEFAULT,
+  modelNoProgressTightenArmCents,
+  MODEL_NO_PROGRESS_TIGHTEN_ARM_CENTS_DEFAULT,
   modelHardAdverseCents,
   modelLeanGatedFloorCents,
   MODEL_LEAN_FLOOR_BASE_DROP_DEFAULT,

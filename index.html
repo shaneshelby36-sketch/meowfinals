@@ -782,6 +782,27 @@
             </div>
             <span class="field-hint">After bid reaches entry, this many seconds to hit trail arm (<strong>+3¢</strong>) or scratch breakeven. Only fires if the model is also decaying — a firm lean will not BE. Default <strong>20s</strong> (was 8s). <strong>0</strong> = off.</span>
           </label>
+          <label style="border: 2px solid #f59e0b; border-radius: 6px; padding: 8px;">⏱ No-progress stop tighten — window (seconds)
+            <div class="slider-row">
+              <input id="bot-model-no-progress-sec" type="range" min="0" max="600" step="30" />
+              <span class="slider-value" id="bot-model-no-progress-sec-value">—</span>
+            </div>
+            <span class="field-hint">If trail arm (+3¢ green) has never been reached after this many seconds, tighten the stop loss. <strong>0 = off</strong>. Recommended: <strong>240s (4 min)</strong>.</span>
+          </label>
+          <label style="border: 2px solid #f59e0b; border-radius: 6px; padding: 8px;">⏱ No-progress stop tighten — keep % of stop
+            <div class="slider-row">
+              <input id="bot-model-no-progress-pct" type="range" min="10" max="100" step="5" />
+              <span class="slider-value" id="bot-model-no-progress-pct-value">—</span>
+            </div>
+            <span class="field-hint">After the window expires with no progress, keep this % of the original stop. <strong>80%</strong> means 15¢ stop → 12¢. Lower = tighter cut.</span>
+          </label>
+          <label style="border: 2px solid #f59e0b; border-radius: 6px; padding: 8px;">⏱ No-progress stop tighten — real progress threshold (¢)
+            <div class="slider-row">
+              <input id="bot-model-no-progress-arm" type="range" min="3" max="30" step="1" />
+              <span class="slider-value" id="bot-model-no-progress-arm-value">—</span>
+            </div>
+            <span class="field-hint">How many ¢ green counts as "real progress". If peak never hit this, the stop tightens after the window. Default <strong>15¢</strong>.</span>
+          </label>
           <label style="border: 2px solid #10b981; border-radius: 6px; padding: 8px;">🛤️ MODEL trail stop (¢ from peak)
             <div class="slider-row">
               <input id="bot-model-trail-cents" type="range" min="0" max="30" step="1" />
