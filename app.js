@@ -3660,15 +3660,15 @@ function renderBacktestResults(data, dayLabel) {
       const warn = (cur, win, label, higherIsBetter = false) => {
         if (cur == null || win == null || cur === win) return;
         const improved = higherIsBetter ? win > cur : win < cur;
-        const arrow = improved ? '▼' : '▲';
+        const arrow = improved ? '\u25bc' : '\u25b2';
         const cls = improved ? 'chip-positive' : 'chip-negative';
-        const suffix = label.includes('conf') ? '%' : '¢';
+        const suffix = label.includes('conf') ? '%' : '\u00a2';
         const note = Math.abs(win - cur) >= 15
-          ? ' — large change, likely the main driver'
+          ? ' \u2014 large change, likely the main driver'
           : Math.abs(win - cur) >= 8
-          ? ' — meaningful change'
+          ? ' \u2014 meaningful change'
           : '';
-        changes.push(`<div class="backtest-row"><span>${label}</span><span><span class="${cls}">${arrow} ${cur}${suffix} → ${win}${suffix}</span>${note}</span></div>`);
+        changes.push(`<div class="backtest-row"><span>${label}</span><span><span class="${cls}">${arrow} ${cur}${suffix} \u2192 ${win}${suffix}</span>${note}</span></div>`);
       };
       warn(s.modelMinConfidence,    bs.modelMinConfidence,    'Confidence floor',     true);
       warn(s.modelMaxAdverseCents,  bs.modelMaxAdverseCents,  'Hard stop (crypto)',   false);
@@ -3688,10 +3688,10 @@ function renderBacktestResults(data, dayLabel) {
       const warn = (cur, win, label, higherIsBetter = false) => {
         if (cur == null || win == null || cur === win) return;
         const improved = higherIsBetter ? win > cur : win < cur;
-        const arrow = improved ? '▼' : '▲';
+        const arrow = improved ? '\u25bc' : '\u25b2';
         const cls = improved ? 'chip-positive' : 'chip-negative';
-        const note = Math.abs(win - cur) >= 10 ? ' — large change' : '';
-        changes.push(`<div class="backtest-row"><span>${label}</span><span><span class="${cls}">${arrow} ${cur} → ${win}</span>${note}</span></div>`);
+        const note = Math.abs(win - cur) >= 10 ? ' \u2014 large change' : '';
+        changes.push(`<div class="backtest-row"><span>${label}</span><span><span class="${cls}">${arrow} ${cur} \u2192 ${win}</span>${note}</span></div>`);
       };
       warn(s.minConfidence,   bs.minConfidence,   'Confidence floor', true);
       warn(s.edgeThresholdPct,bs.edgeThresholdPct,'Edge threshold',   true);
