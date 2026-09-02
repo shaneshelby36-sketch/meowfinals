@@ -3696,9 +3696,7 @@ function renderBacktestResults(data, dayLabel) {
       <div class="capital-row"><span>Stop-loss exits</span><span>${t.stopLossExits ?? 0}</span></div>
       <div class="capital-row"><span>Take-profit exits</span><span>${t.takeProfitExits ?? 0}</span></div>
       <div class="capital-row"><span>Breakeven exits</span><span>${t.breakevenExits ?? 0}</span></div>
-      ${isModel && (t.modelAgainstExits || t.modelLateExits) ? `
-      <div class="capital-row"><span>Model-against cuts</span><span>${t.modelAgainstExits ?? 0}</span></div>
-      <div class="capital-row"><span>Late/settle exits</span><span>${t.modelLateExits ?? 0}</span></div>` : ''}
+      ${isModel ? '<div class="capital-row"><span>Model-against cuts</span><span>' + (t.modelAgainstExits ?? 0) + '</span></div><div class="capital-row"><span>Late/settle exits</span><span>' + (t.modelLateExits ?? 0) + '</span></div>' : ''}
       <div class="capital-divider"></div>
       <div class="capital-row capital-reserved"><span>Personal Wallet <em>(locked — never spent)</em></span><span class="${(t.reservedProfitCents || 0) > 0 ? 'chip-positive' : ''}">${formatMoneyFromCents(t.reservedProfitCents)}</span></div>
       <div class="capital-row capital-reserved"><span>Insurance Fund</span><span class="${(t.insuranceCents || 0) > 0 ? 'chip-positive' : ''}">${formatMoneyFromCents(t.insuranceCents || 0)}</span></div>
