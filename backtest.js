@@ -13,6 +13,51 @@ const {
   applyProfitBuckets,
   settleExitPlan,
   settleEntryBand,
+  // model strategy helpers
+  isCommoditySymbol,
+  modelBankGreenCentsForTrade,
+  modelNearTargetBankCentsForTrade,
+  modelTrailArmCentsForTrade,
+  modelTrailCentsForTrade,
+  modelCommodityTpCents,
+  modelMaxAdverseCentsForTrade,
+  modelEffectiveMaxLossCents,
+  modelHardAdverseCents,
+  modelLeanGatedFloorCents,
+  modelStopFloorForEntryCents,
+  modelSettleCloseMinutes,
+  modelLateBarrierMinutes,
+  modelPreCloseForceMinutes,
+  modelLateExitMaxLossCents,
+  modelLateExtendMinConfidence,
+  modelMinTpCents,
+  modelMomentumStallMs,
+  modelMomentumPullbackCents,
+  modelStagnationSeconds,
+  modelStagnationMinProgressCents,
+  modelRapidAdverseCents,
+  modelBeChaseSeconds,
+  modelLeanDecayDropPts,
+  modelLeanDecayFloor,
+  modelLeanDecayCutState,
+  modelHeldSideProb,
+  modelLiveLeanAgainstHeld,
+  modelLiveLeanStillFavors,
+  modelLiveProbNotWithUs,
+  modelEngineHardAgainst,
+  modelEngineTurningAgainst,
+  modelEngineClearlyWithUs,
+  modelLiveLeanMarginPct,
+  modelSoftLeanMarginPct,
+  modelEntryLiveLeanMarginPct,
+  modelMinEntryLeanPctForSymbol,
+  modelLateExtendOk,
+  modelMinHoldMs,
+  modelOpenGraceMs,
+  modelPeakProgressCents,
+  MODEL_MIN_CONFIDENCE_DEFAULT,
+  MODEL_MAX_ENTRY_DEFAULT_CENTS,
+  MODEL_MIN_ENTRY_DEFAULT_CENTS,
 } = require('./bot');
 
 const LOOKBACK_MIN = 210;
@@ -75,7 +120,9 @@ function normalizeSettings(raw = {}) {
       : 100,
     // No historical Kalshi book — assume even-money (50¢) so edge is vs a coin flip.
     assumedEntryCents: Number.isFinite(Number(raw.assumedEntryCents)) ? Number(raw.assumedEntryCents) : 50,
-    strategyMode: String(raw.strategyMode || '').toLowerCase() === 'settle' ? 'settle' : 'edge',
+    strategyMode: ['settle', 'model'].includes(String(raw.strategyMode || '').toLowerCase())
+      ? String(raw.strategyMode).toLowerCase()
+      : 'edge',
     settleStopLossCents: Number.isFinite(Number(raw.settleStopLossCents))
       ? Number(raw.settleStopLossCents)
       : 8,
@@ -152,6 +199,124 @@ function estimateSettleMarkCents(side, entrySpot, currentSpot, entryCents) {
   const signed = side === 'yes' ? pct : -pct;
   const delta = Math.round((signed / 0.0015) * 8);
   return clamp(entry + delta, 1, 99);
+}
+
+/**
+ * Model-mode mark: same 2% move = 50¢ swing as edge mode, but anchored at
+ * entryCents instead of 50¢. Commodities use a tighter sensitivity (0.8% per
+ * 50¢) because gold/silver/oil move smaller percentages per 15m window.
+ */
+function estimateModelMarkCents(side, entrySpot, currentSpot, entryCents, symbol) {
+  const entry = clamp(Math.round(Number(entryCents) || 65), 1, 99);
+  if (!Number.isFinite(entrySpot) || !Number.isFinite(currentSpot) || entrySpot <= 0) return entry;
+  const pct = (currentSpot - entrySpot) / entrySpot;
+  const signed = side === 'yes' ? pct : -pct;
+  // Commodities are quoted in USD/oz or USD/barrel — their % swings per 15m are
+  // smaller than crypto. We use 0.8% per 50¢ so the sim isn't too aggressive.
+  const sensitivity = isCommoditySymbol(symbol) ? 0.008 : 0.02;
+  const delta = Math.round((signed / sensitivity) * 50);
+  return clamp(entry + delta, 1, 99);
+}
+
+/**
+ * Synthesize a lean probability for the model backtest.
+ * We don't have real Kalshi order book history, so we derive lean from the
+ * spot price move relative to entry.  When price has moved strongly in our
+ * favour the held-side probability is high; when it moves against us it falls.
+ * This mirrors the general direction of real lean without the exact values.
+ *
+ * Returns an object shaped like a real prediction window:
+ *   { probabilityUp, probabilityDown, confidence }
+ * so all the existing model helper functions work unchanged.
+ */
+function synthesizeLeanWindow(side, entrySpot, currentSpot, entryConf, symbol) {
+  const pct = (currentSpot - entrySpot) / entrySpot;
+  const signed = side === 'yes' ? pct : -pct;
+  const sensitivity = isCommoditySymbol(symbol) ? 0.008 : 0.02;
+  // Map signed % move to lean: entry lean starts at entryConf, drifts with price.
+  // +sensitivity → +20pts; −sensitivity → −20pts (roughly).
+  const driftPts = Math.round((signed / sensitivity) * 20);
+  const heldProb = clamp((entryConf || 75) + driftPts, 45, 99);
+  const oppProb = 100 - heldProb;
+  const probabilityUp = side === 'yes' ? heldProb : oppProb;
+  const probabilityDown = side === 'yes' ? oppProb : heldProb;
+  // Confidence tracks how far price has moved from entry — stronger move = higher conf.
+  const movePts = Math.abs(driftPts);
+  const confidence = clamp((entryConf || 75) + Math.round(movePts * 0.4), 50, 99);
+  return { probabilityUp, probabilityDown, confidence };
+}
+
+/**
+ * Normalise all model-strategy settings from a raw config object.
+ * Returns a settings object consumed by the model simulation branch.
+ */
+function normalizeModelSettings(raw = {}) {
+  const n = (k, def) => {
+    const v = Number(raw[k]);
+    return Number.isFinite(v) ? v : def;
+  };
+  return {
+    // entry gates
+    modelMinConfidence:   n('modelMinConfidence',   MODEL_MIN_CONFIDENCE_DEFAULT),
+    modelMinEntryCents:   n('modelMinEntryCents',   MODEL_MIN_ENTRY_DEFAULT_CENTS),
+    modelMaxEntryCents:   n('modelMaxEntryCents',   MODEL_MAX_ENTRY_DEFAULT_CENTS),
+    modelMinEntryLeanPct: n('modelMinEntryLeanPct', 74),
+    modelMinEntryLeanPctGold:   n('modelMinEntryLeanPctGold',   55),
+    modelMinEntryLeanPctSilver: n('modelMinEntryLeanPctSilver', 55),
+    modelMinEntryLeanPctOil:    n('modelMinEntryLeanPctOil',    54),
+    modelMinEntryLeanPctBTC:    n('modelMinEntryLeanPctBTC',    0),
+    modelMinEntryLeanPctETH:    n('modelMinEntryLeanPctETH',    0),
+    modelMinEntryLeanPctSOL:    n('modelMinEntryLeanPctSOL',    0),
+    modelMinEntryLeanPctBnb:    n('modelMinEntryLeanPctBnb',    0),
+    modelEntryLiveLeanMarginPct: n('modelEntryLiveLeanMarginPct', 3),
+    // stops
+    modelMaxAdverseCents:   n('modelMaxAdverseCents',   15),
+    modelMaxLossCents:      n('modelMaxLossCents',      15),
+    modelHardAdverseCents:  n('modelHardAdverseCents',  0),
+    modelHardStopFloorCents: n('modelHardStopFloorCents', 55),
+    modelRichStopFloorCents: n('modelRichStopFloorCents', 0),
+    modelRichStopEntryMinCents: n('modelRichStopEntryMinCents', 80),
+    modelLeanFloorBaseDrop:  n('modelLeanFloorBaseDrop',  0),
+    modelLeanFloorScale:     n('modelLeanFloorScale',     0.2),
+    modelLeanFloorBaseEntry: n('modelLeanFloorBaseEntry', 65),
+    modelMinRoomToFloorCents: n('modelMinRoomToFloorCents', 3),
+    // TP / bank
+    modelBankGreenCents:       n('modelBankGreenCents',       15),
+    modelMinTpCents:           n('modelMinTpCents',           15),
+    modelNearTargetBankCents:  n('modelNearTargetBankCents',  8),
+    modelTrailCents:           n('modelTrailCents',           0),
+    // commodity overrides
+    commodityTpCentsGold:    n('commodityTpCentsGold',    25),
+    commodityTpCentsSilver:  n('commodityTpCentsSilver',  25),
+    commodityTpCentsOil:     n('commodityTpCentsOil',     20),
+    commodityStopCentsGold:  n('commodityStopCentsGold',  15),
+    commodityStopCentsSilver:n('commodityStopCentsSilver',15),
+    commodityStopCentsOil:   n('commodityStopCentsOil',   15),
+    commodityTrailCentsGold:   n('commodityTrailCentsGold',   15),
+    commodityTrailCentsSilver: n('commodityTrailCentsSilver', 15),
+    commodityTrailCentsOil:    n('commodityTrailCentsOil',    12),
+    // lean / signal
+    modelLiveLeanMarginPct:   n('modelLiveLeanMarginPct',   3),
+    modelSoftLeanMarginPct:   n('modelSoftLeanMarginPct',   1),
+    modelLeanDecayDropPts:    n('modelLeanDecayDropPts',    10),
+    // timing
+    modelSettleCloseMinutes:       n('modelSettleCloseMinutes',       2.5),
+    modelLateBarrierMinutes:       n('modelLateBarrierMinutes',       2),
+    modelPreCloseForceMinutes:     n('modelPreCloseForceMinutes',     0.25),
+    modelLateExtendMinConfidence:  n('modelLateExtendMinConfidence',  75),
+    commoditySettleCloseMinutes:   n('commoditySettleCloseMinutes',   3.5),
+    commodityLateBarrierMinutes:   n('commodityLateBarrierMinutes',   7),
+    modelMinMinutesToOpen:         n('modelMinMinutesToOpen',         3.5),
+    modelOpenGraceMs:              n('modelOpenGraceMs',              4000),
+    modelMinHoldSeconds:           n('modelMinHoldSeconds',           4),
+    // stagnation
+    modelStagnationSeconds:            n('modelStagnationSeconds',            60),
+    modelStagnationMinProgressCents:   n('modelStagnationMinProgressCents',   8),
+    modelRapidAdverseCents:            n('modelRapidAdverseCents',            0),
+    modelBeChaseSeconds:               n('modelBeChaseSeconds',               20),
+    modelMomentumStallSeconds:         n('modelMomentumStallSeconds',         4),
+    modelMomentumPullbackCents:        n('modelMomentumPullbackCents',        2),
+  };
 }
 
 function buildCandleIndex(candles) {
@@ -316,10 +481,15 @@ function backtestWithSettings(
     : [focusSymbol && indexes[focusSymbol] ? focusSymbol : symbols.find((s) => s !== 'BTC') || symbols[0]].filter(Boolean);
 
   const settleMode = settings.strategyMode === 'settle';
+  const modelMode  = settings.strategyMode === 'model';
+  // For model mode, pull in the full model settings on top of base settings.
+  const ms = modelMode ? normalizeModelSettings(rawSettings) : null;
   const startingCents = Math.round(settings.paperStartingBalanceDollars * 100);
   const defaultEntryCents = settleMode
     ? clamp(Math.round((settings.settleEntryMinCents + settings.settleEntryMaxCents) / 2), 1, 99)
-    : clamp(Math.round(settings.assumedEntryCents), 1, 99);
+    : modelMode
+      ? clamp(Math.round((ms.modelMinEntryCents + ms.modelMaxEntryCents) / 2), 1, 99)
+      : clamp(Math.round(settings.assumedEntryCents), 1, 99);
   // Minimum cash to open at least one contract at a typical entry.
   const minTradeCostCents = Math.max(
     defaultEntryCents,
@@ -383,7 +553,283 @@ function backtestWithSettings(
       let reason = null;
       const minsLeft = Math.max(0, (trade.closeTime - minute) / 60000);
 
-      if (settleMode) {
+      if (modelMode) {
+        // ── MODEL strategy simulation ─────────────────────────────────────
+        // Synthesize a lean window from the spot price movement so all real
+        // model exit helpers (lean decay, hard-against, extend-late, etc.)
+        // work exactly as in the live bot — just with a proxy lean instead
+        // of a real Kalshi order book.
+        const mark = estimateModelMarkCents(
+          trade.side, trade.entrySpot, spot, trade.entryPriceCents, trade.symbol
+        );
+        const leanWindow = synthesizeLeanWindow(
+          trade.side, trade.entrySpot, spot, trade.engineConfidence, trade.symbol
+        );
+        const entry  = trade.entryPriceCents;
+        const heldMs = minute - trade.openedAt;
+        const openGrace = ms.modelOpenGraceMs;
+        const inOpenGrace = heldMs < openGrace;
+        const minHoldMs = (ms.modelMinHoldSeconds || 4) * 1000;
+        const heldLongEnough = heldMs >= minHoldMs;
+
+        // Track peak bid
+        if (!Number.isFinite(trade.peakHeldBidCents) || mark > trade.peakHeldBidCents) {
+          trade.peakHeldBidCents = mark;
+          trade.peakHeldBidAt   = minute;
+        }
+        const peak       = trade.peakHeldBidCents;
+        const greenCents = mark > entry ? Math.round(mark - entry) : 0;
+        const flatOrGreen = mark >= entry;
+        const underwater  = mark < entry;
+        const adverseCents = underwater ? Math.round(entry - mark) : 0;
+
+        // Spread-adjusted "true" adverse (entry was ask, mark is bid)
+        const entrySpread = trade.entrySpread || 0;
+        const trueAdverse = underwater ? Math.max(0, adverseCents - entrySpread) : 0;
+        const econUnderwater = trueAdverse > 0;
+
+        // Peak progress above entry
+        const peakProgress = peak > entry ? Math.round(peak - entry) : 0;
+
+        // Trail arm / TP targets (trade-aware, commodity-overrides apply)
+        const bankGreen      = modelBankGreenCentsForTrade(trade, ms);
+        const nearTargetBank = modelNearTargetBankCentsForTrade(trade, ms);
+        const armCents       = modelTrailArmCentsForTrade(trade, ms);
+        const armed          = flatOrGreen && greenCents >= armCents;
+        const isDecentGreen  = flatOrGreen && bankGreen > 0 && greenCents >= bankGreen;
+
+        // Commodity TP override (99 = ride to settle)
+        const commodityTpOverride  = modelCommodityTpCents(String(trade.symbol || '').toUpperCase(), ms);
+        const commodityRideToSettle = commodityTpOverride === 99;
+
+        // Late barrier / settle-close / pre-close (commodity-aware)
+        const lateBarrierMins  = modelLateBarrierMinutes(ms, trade.symbol);
+        const settleCloseMins  = modelSettleCloseMinutes(ms, trade.symbol);
+        const preCloseForceMins = modelPreCloseForceMinutes(ms);
+        const inLateBarrier    = lateBarrierMins > 0 && minsLeft <= lateBarrierMins;
+        const inSettleClose    = settleCloseMins > 0 && minsLeft <= settleCloseMins;
+        const inPreCloseForce  = preCloseForceMins > 0 && minsLeft <= preCloseForceMins;
+
+        // Lean signals (mirroring live bot)
+        const liveAgainst   = modelLiveLeanAgainstHeld(leanWindow, trade.side, modelLiveLeanMarginPct(ms));
+        const liveFavors    = modelLiveLeanStillFavors(leanWindow, trade.side, modelSoftLeanMarginPct(ms));
+        const engineTurning = modelEngineHardAgainst({
+          window: leanWindow, direction: null, side: trade.side,
+          minConf: ms.modelMinConfidence, config: ms,
+        });
+        const engineClearlyWithUs = modelEngineClearlyWithUs({
+          window: leanWindow, direction: null, side: trade.side,
+          entryHeldProb: trade.engineProbability, config: ms,
+        });
+        const engineSoftTurning = modelEngineTurningAgainst({
+          window: leanWindow, direction: null, side: trade.side,
+          minConf: ms.modelMinConfidence,
+          entryHeldProb: trade.engineProbability, config: ms,
+        });
+
+        // canExtendLate: inside barrier + lean still with us → hold to settlement
+        const canExtendLate = !!(
+          inLateBarrier && !inPreCloseForce &&
+          modelLateExtendOk(leanWindow, trade.side, ms)
+        );
+
+        // Lean decay
+        const decayState = modelLeanDecayCutState(trade, leanWindow, trade.side, minute, ms);
+
+        // modelDeteriorating mirrors bot.js logic
+        const leanStaleScratch = !!(
+          modelLiveProbNotWithUs(leanWindow, trade.side) ||
+          !modelLiveLeanStillFavors(leanWindow, trade.side, modelSoftLeanMarginPct(ms))
+        );
+        const modelDeteriorating = !!(engineTurning || leanStaleScratch);
+
+        // Hard adverse stop (unconditional)
+        const maxAdverse = modelMaxAdverseCentsForTrade(trade, ms);
+        if (!inOpenGrace && maxAdverse > 0 && adverseCents >= maxAdverse) {
+          const hardStop = Math.max(Math.round(entry - maxAdverse), 1);
+          exitPrice = hardStop;
+          reason = 'model_hard_stop';
+        }
+
+        // Hard floor stop (entry > floor; bid dropped below floor)
+        if (exitPrice == null && !inOpenGrace) {
+          const floor = modelStopFloorForEntryCents(entry, ms);
+          if (floor > 0 && mark < floor) {
+            exitPrice = floor;
+            reason = 'model_floor_stop';
+          }
+        }
+
+        // Hard absolute max loss
+        if (exitPrice == null && !inOpenGrace) {
+          const maxLoss = modelEffectiveMaxLossCents(trade, ms);
+          if (maxLoss > 0 && adverseCents >= maxLoss) {
+            exitPrice = Math.max(Math.round(entry - maxLoss), 1);
+            reason = 'model_max_loss';
+          }
+        }
+
+        // Lean-gated floor (lean deteriorating + below entry-scaled floor)
+        if (exitPrice == null && !inOpenGrace && modelDeteriorating && econUnderwater) {
+          const leanFloor = modelLeanGatedFloorCents(trade, ms);
+          if (leanFloor > 0 && mark < leanFloor) {
+            exitPrice = Math.max(leanFloor, 1);
+            reason = 'model_lean_floor';
+          }
+        }
+
+        // Trail stop (once armed: peak − trailCents)
+        const trailCents = modelTrailCentsForTrade(trade, ms);
+        if (exitPrice == null && !inOpenGrace && trailCents > 0 && armed &&
+            Number.isFinite(peak) && peak > entry) {
+          const trailFloor = Math.round(peak - trailCents);
+          if (trailFloor >= entry && mark < trailFloor) {
+            exitPrice = trailFloor;
+            reason = 'model_trail_stop';
+          }
+        }
+
+        // Pre-close force (final N seconds — always exits)
+        if (exitPrice == null && inPreCloseForce) {
+          if (flatOrGreen && isDecentGreen && heldLongEnough) {
+            exitPrice = mark;
+            reason = 'take_profit';
+          } else if (flatOrGreen) {
+            exitPrice = mark;
+            reason = 'breakeven';
+          } else {
+            const lateMax = modelLateExitMaxLossCents(ms);
+            const ok = lateMax <= 0 || adverseCents <= lateMax;
+            if (ok) {
+              exitPrice = Math.max(mark, 1);
+              reason = 'model_pre_close';
+            }
+          }
+        }
+
+        // Late barrier exit (canExtendLate = hold; otherwise force cash-out)
+        if (exitPrice == null && inLateBarrier && !canExtendLate) {
+          if (flatOrGreen && isDecentGreen && heldLongEnough) {
+            exitPrice = mark;
+            reason = 'take_profit';
+          } else if (flatOrGreen) {
+            exitPrice = mark;
+            reason = 'breakeven';
+          } else {
+            const lateMax = modelLateExitMaxLossCents(ms);
+            const ok = lateMax <= 0 || adverseCents <= lateMax;
+            if (ok) {
+              exitPrice = Math.max(mark, 1);
+              reason = 'model_late_exit';
+            }
+          }
+        }
+
+        // Settle-close window (≤ settleCloseMins left)
+        if (exitPrice == null && inSettleClose && !inLateBarrier && !canExtendLate) {
+          const settleThresh = ms.modelSettleCloseLossCents != null
+            ? ms.modelSettleCloseLossCents : 50;
+          if (flatOrGreen || adverseCents <= settleThresh) {
+            if (flatOrGreen && isDecentGreen && heldLongEnough) {
+              exitPrice = mark;
+              reason = 'take_profit';
+            } else if (flatOrGreen) {
+              exitPrice = mark;
+              reason = 'breakeven';
+            } else {
+              exitPrice = Math.max(mark, 1);
+              reason = 'model_late_exit';
+            }
+          }
+        }
+
+        // Stagnation: held too long with no progress + model decaying
+        if (exitPrice == null && !canExtendLate) {
+          const stagnSec  = modelStagnationSeconds(ms);
+          const stagnProg = modelStagnationMinProgressCents(ms);
+          const stagnReady = stagnSec > 0 && heldMs >= stagnSec * 1000 && peakProgress < stagnProg;
+          if (stagnReady && modelDeteriorating) {
+            if (flatOrGreen && isDecentGreen && heldLongEnough) {
+              exitPrice = mark; reason = 'take_profit';
+            } else if (flatOrGreen) {
+              exitPrice = mark; reason = 'breakeven';
+            } else {
+              exitPrice = Math.max(mark, 1); reason = 'model_stagnation';
+            }
+          }
+        }
+
+        // Lean decay cut: strong lean collapsed + not recovered
+        if (exitPrice == null && !canExtendLate && decayState.inDecayZone && decayState.cutReady) {
+          if (flatOrGreen && isDecentGreen && heldLongEnough) {
+            exitPrice = mark; reason = 'take_profit';
+          } else if (flatOrGreen) {
+            exitPrice = mark; reason = 'breakeven';
+          } else {
+            exitPrice = Math.max(mark, 1); reason = 'model_lean_decay';
+          }
+        }
+
+        // Hard lean against + confirmed → cut or scratch
+        const againstBeReady = !inOpenGrace && heldMs >= openGrace + (ms.modelLeanAgainstBeSeconds != null ? ms.modelLeanAgainstBeSeconds * 1000 : 2000);
+        if (exitPrice == null && engineTurning && againstBeReady) {
+          if (flatOrGreen && isDecentGreen && heldLongEnough) {
+            exitPrice = mark; reason = 'take_profit';
+          } else if (flatOrGreen) {
+            exitPrice = mark; reason = 'breakeven';
+          } else if (econUnderwater) {
+            exitPrice = Math.max(mark, 1); reason = 'model_against';
+          }
+        }
+
+        // Soft turning + flat/green → scratch to avoid riding into a loss
+        if (exitPrice == null && engineSoftTurning && againstBeReady && flatOrGreen && !engineClearlyWithUs) {
+          if (isDecentGreen && heldLongEnough) {
+            exitPrice = mark; reason = 'take_profit';
+          } else {
+            exitPrice = mark; reason = 'breakeven';
+          }
+        }
+
+        // ─── Green exits ──────────────────────────────────────────────────
+        // Rich bank (≥96¢ bid)
+        if (exitPrice == null && mark >= 96) {
+          exitPrice = mark; reason = 'take_profit';
+        }
+
+        // Commodity TP override reached
+        if (exitPrice == null && !commodityRideToSettle && commodityTpOverride > 0 &&
+            flatOrGreen && greenCents >= commodityTpOverride && heldLongEnough) {
+          exitPrice = mark; reason = 'take_profit';
+        }
+
+        // Standard TP: bid ≥ bankGreen above entry
+        if (exitPrice == null && isDecentGreen && heldLongEnough) {
+          exitPrice = mark; reason = 'take_profit';
+        }
+
+        // Trail stall-bank: armed, stalled, near target
+        if (exitPrice == null && armed && greenCents >= 1 && heldLongEnough && !liveFavors) {
+          const stallMs  = modelMomentumStallMs(ms);
+          const stallPb  = modelMomentumPullbackCents(ms);
+          const pullback = Number.isFinite(peak) ? Math.max(0, Math.round(peak - mark)) : 0;
+          const peakAgeMs = Number.isFinite(trade.peakHeldBidAt) ? minute - trade.peakHeldBidAt : Infinity;
+          const stalled = (stallPb > 0 && pullback >= stallPb) || (stallMs > 0 && peakAgeMs >= stallMs);
+          if (stalled && peakProgress >= nearTargetBank) {
+            exitPrice = mark; reason = 'take_profit';
+          }
+        }
+
+        // Settlement (time expired)
+        if (exitPrice == null && (minute >= trade.closeTime || minute >= trade.settleMinute)) {
+          const settleCandle = spotAt(tradeIndex, trade.settleMinute) || candle;
+          const settledUp = settleCandle.close >= trade.entrySpot;
+          const won = trade.side === 'yes' ? settledUp : !settledUp;
+          exitPrice = won ? 100 : 0;
+          reason = 'settled';
+        }
+
+      } else if (settleMode) {
         const mark = estimateSettleMarkCents(
           trade.side,
           trade.entrySpot,
@@ -421,6 +867,7 @@ function backtestWithSettings(
           reason = 'settled';
         }
       } else {
+        // ── EDGE strategy simulation (original) ──────────────────────────
         const mark = estimateMarkCents(trade.side, trade.entrySpot, spot);
         const stopLevel = Math.max(1, trade.entryPriceCents - settings.stopLossCents);
         const takeProfitLevel =
@@ -436,8 +883,6 @@ function backtestWithSettings(
           mark >= takeProfitLevel &&
           mark > trade.entryPriceCents
         ) {
-          // Simplified backtest TP (no live confidence override path here —
-          // continuous search already filters entries by confidence).
           exitPrice = takeProfitLevel;
           reason = 'take_profit';
         } else if (minute >= trade.closeTime || minute >= trade.settleMinute) {
@@ -609,7 +1054,9 @@ function backtestWithSettings(
 
       confidenceSamples.push(prediction.confidence);
 
-      if (prediction.confidence < settings.minConfidence) {
+      // Confidence gate (model uses its own threshold; others use global)
+      const confThreshold = modelMode ? ms.modelMinConfidence : settings.minConfidence;
+      if (prediction.confidence < confThreshold) {
         skipCounts.lowConfidence += 1;
         continue;
       }
@@ -617,7 +1064,31 @@ function backtestWithSettings(
       let side;
       let edge;
       let entryPriceCents;
-      if (settleMode) {
+      if (modelMode) {
+        // Model entry: favored side must have lean ≥ minEntryLean AND price in band.
+        // We proxy "Kalshi ask" as the favored engine probability (same as live model).
+        const favUp = prediction.probabilityUp >= prediction.probabilityDown;
+        const favoredProb = favUp ? prediction.probabilityUp : prediction.probabilityDown;
+        side = favUp ? 'yes' : 'no';
+        // Entry price proxy: favored probability clamped to min/max entry band
+        const minE = ms.modelMinEntryCents;
+        const maxE = ms.modelMaxEntryCents;
+        if (favoredProb < minE || favoredProb > maxE) {
+          skipCounts.lowEdge += 1;
+          continue;
+        }
+        // Lean gate: favored prob must be ≥ per-symbol minimum entry lean
+        const minLean = modelMinEntryLeanPctForSymbol(symbol, ms);
+        if (minLean > 0 && favoredProb < minLean) {
+          skipCounts.lowEdge += 1;
+          continue;
+        }
+        // Minimum time to settle window
+        const minMinsModel = ms.modelMinMinutesToOpen || 3.5;
+        if (minutesRemaining < minMinsModel) continue;
+        entryPriceCents = clamp(Math.round(favoredProb), minE, maxE);
+        edge = favoredProb - minE; // how far into the entry band
+      } else if (settleMode) {
         // Proxy for Kalshi ask in band: engine favored-side % must land in settle band.
         const favUp = prediction.probabilityUp >= prediction.probabilityDown;
         const favoredProb = favUp ? prediction.probabilityUp : prediction.probabilityDown;
@@ -766,6 +1237,9 @@ function backtestWithSettings(
       contracts,
       stakeDollars,
       entrySpot: best.entrySpot,
+      // Approximate bid-ask spread (model entries are at ask; mark is at bid).
+      // We stamp a 3¢ spread so lean-gated floor / econUnderwater work correctly.
+      entrySpread: modelMode ? 3 : 0,
       bucketStart,
       closeTime,
       settleMinute,
@@ -775,7 +1249,11 @@ function backtestWithSettings(
       window: best.window,
       rankScore: best.rankScore,
       openedAt: minute,
-      strategy: settleMode ? 'settle' : 'edge',
+      strategy: modelMode ? 'model' : settleMode ? 'settle' : 'edge',
+      // Model state tracking (mirrors bot.js trade object fields)
+      peakHeldBidCents: null,
+      peakHeldBidAt: null,
+      modelEntryHeldProb: best.side === 'yes' ? best.probabilityUp : best.probabilityDown,
     });
     tradesBySymbol[best.symbol] = (tradesBySymbol[best.symbol] || 0) + 1;
   }
@@ -819,11 +1297,27 @@ function backtestWithSettings(
   const openPos = openExposure();
   const totalEquity = available + openPos + reserveCents + insuranceCents;
   const netPnl = totalEquity - startingCents;
-  const stopLossExits = closedTrades.filter((t) => t.exitReason === 'stop_loss').length;
+  const stopLossExits = closedTrades.filter((t) =>
+    t.exitReason === 'stop_loss' ||
+    t.exitReason === 'model_hard_stop' ||
+    t.exitReason === 'model_floor_stop' ||
+    t.exitReason === 'model_max_loss'
+  ).length;
   const takeProfitExits = closedTrades.filter((t) => t.exitReason === 'take_profit').length;
   const settleStaleExits = closedTrades.filter((t) => t.exitReason === 'settle_stale').length;
   const settledExits = closedTrades.filter((t) => t.exitReason === 'settled' || t.exitReason === 'end_of_data').length;
   const breakevenExits = closedTrades.filter((t) => t.exitReason === 'breakeven').length;
+  const modelAgainstExits = closedTrades.filter((t) =>
+    t.exitReason === 'model_against' ||
+    t.exitReason === 'model_lean_decay' ||
+    t.exitReason === 'model_lean_floor' ||
+    t.exitReason === 'model_trail_stop' ||
+    t.exitReason === 'model_stagnation'
+  ).length;
+  const modelLateExits = closedTrades.filter((t) =>
+    t.exitReason === 'model_late_exit' ||
+    t.exitReason === 'model_pre_close'
+  ).length;
   const avgConfidenceTaken = closedTrades.length
     ? +(closedTrades.reduce((s, t) => s + t.engineConfidence, 0) / closedTrades.length).toFixed(1)
     : null;
@@ -876,6 +1370,8 @@ function backtestWithSettings(
     settleStaleExits,
     settledExits,
     breakevenExits,
+    modelAgainstExits,
+    modelLateExits,
     avgConfidenceTaken,
     avgConfidenceScanned,
     startingBankrollCents: startingCents,
@@ -908,14 +1404,17 @@ function backtestWithSettings(
       pnlDollars: +(t.pnlCents / 100).toFixed(2),
       exitReason: t.exitReason,
     })),
+    modelSettings: modelMode ? ms : null,
     note:
       (autoMode
         ? 'AUTO mode: continuously scanned all listed cryptos and traded only the best opportunity that cleared your confidence + edge settings (same ranking idea as live AUTO). '
         : 'Continuously searched for setups during each 15-minute window (not only at the open). ') +
       'Simulated continuous running time (full 24h days of minute data), not just market open hours. Longevity = how long Available Cash could still fund another stake before going dry. ' +
-      (settleMode
-        ? 'SETTLE mode: entry ≈ engine favored % inside the settle band; marks drift from that entry with spot (no historical Kalshi books). Tiered TP/stale exits match live settleExitPlan when enabled. '
-        : 'Kalshi quotes are assumed even-money (50¢ entry) because historical Kalshi order books are not available — real fill prices and edges will differ. Order-book signals are also excluded.'),
+      (modelMode
+        ? 'MODEL mode: entry uses engine favored-% as a proxy for Kalshi ask; lean is synthesized from the spot price move (no historical Kalshi order books). All model stop/TP/trail/lean-exit rules apply — hard-stop, floor-stop, trail, stagnation, lean-decay, late-barrier hold-to-settle. Results are directionally accurate but lean values are approximate. '
+        : settleMode
+          ? 'SETTLE mode: entry ≈ engine favored % inside the settle band; marks drift from that entry with spot (no historical Kalshi books). Tiered TP/stale exits match live settleExitPlan when enabled. '
+          : 'Kalshi quotes are assumed even-money (50¢ entry) because historical Kalshi order books are not available — real fill prices and edges will differ. Order-book signals are also excluded.'),
   };
 }
 
@@ -1026,6 +1525,8 @@ module.exports = {
   backtestWithSettings,
   huntBestSettings,
   normalizeSettings,
+  normalizeModelSettings,
   estimateSettleMarkCents,
+  estimateModelMarkCents,
   LOOKBACK_MIN,
 };
