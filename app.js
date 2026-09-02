@@ -3650,11 +3650,64 @@ function renderBacktestResults(data, dayLabel) {
     const appliedNote = isModel
       ? 'Save settings to apply these to the live bot.'
       : 'Those values were applied to the settings sliders above — save settings if you want the live bot to use them.';
+
+    // ── "What changed and why" insight block ─────────────────────────────────
+    // Compare winning settings to what was actually used in this backtest run.
+    // Highlight meaningful differences so it's obvious which knobs matter.
+    let insightRows = '';
+    if (isModel) {
+      const changes = [];
+      const warn = (cur, win, label, higherIsBetter = false) => {
+        if (cur == null || win == null || cur === win) return;
+        const improved = higherIsBetter ? win > cur : win < cur;
+        const arrow = improved ? '▼' : '▲';
+        const cls = improved ? 'chip-positive' : 'chip-negative';
+        const suffix = label.includes('conf') ? '%' : '¢';
+        const note = Math.abs(win - cur) >= 15
+          ? ' — large change, likely the main driver'
+          : Math.abs(win - cur) >= 8
+          ? ' — meaningful change'
+          : '';
+        changes.push(`<div class="backtest-row"><span>${label}</span><span><span class="${cls}">${arrow} ${cur}${suffix} → ${win}${suffix}</span>${note}</span></div>`);
+      };
+      warn(s.modelMinConfidence,    bs.modelMinConfidence,    'Confidence floor',     true);
+      warn(s.modelMaxAdverseCents,  bs.modelMaxAdverseCents,  'Hard stop (crypto)',   false);
+      warn(s.commodityStopCentsGold ?? s.modelMaxAdverseCents, bs.commodityStopCentsGold, 'Stop — Gold',   false);
+      warn(s.commodityStopCentsSilver ?? s.modelMaxAdverseCents, bs.commodityStopCentsSilver, 'Stop — Silver', false);
+      warn(s.commodityStopCentsOil ?? s.modelMaxAdverseCents, bs.commodityStopCentsOil, 'Stop — Oil',    false);
+      warn(s.commodityTpCentsGold,  bs.commodityTpCentsGold,  'TP target — Gold',    true);
+      warn(s.commodityTpCentsSilver,bs.commodityTpCentsSilver,'TP target — Silver',  true);
+      warn(s.commodityTpCentsOil,   bs.commodityTpCentsOil,   'TP target — Oil',     true);
+      if (changes.length === 0) {
+        insightRows = `<div class="backtest-row"><span>No meaningful changes from current settings</span><span>—</span></div>`;
+      } else {
+        insightRows = changes.join('');
+      }
+    } else {
+      const changes = [];
+      const warn = (cur, win, label, higherIsBetter = false) => {
+        if (cur == null || win == null || cur === win) return;
+        const improved = higherIsBetter ? win > cur : win < cur;
+        const arrow = improved ? '▼' : '▲';
+        const cls = improved ? 'chip-positive' : 'chip-negative';
+        const note = Math.abs(win - cur) >= 10 ? ' — large change' : '';
+        changes.push(`<div class="backtest-row"><span>${label}</span><span><span class="${cls}">${arrow} ${cur} → ${win}</span>${note}</span></div>`);
+      };
+      warn(s.minConfidence,   bs.minConfidence,   'Confidence floor', true);
+      warn(s.edgeThresholdPct,bs.edgeThresholdPct,'Edge threshold',   true);
+      warn(s.stopLossCents,   bs.stopLossCents,   'Stop loss (¢)',    false);
+      insightRows = changes.length
+        ? changes.join('')
+        : `<div class="backtest-row"><span>No meaningful changes from current settings</span><span>—</span></div>`;
+    }
+
     huntBlock = `
       <div class="capital-ledger backtest-ledger">
         <div class="capital-ledger-title">Hunt result — best win rate + profit</div>
         <p class="backtest-settings-line">Searched ${data.hunt.searched} combos. Winner: ${winnerLine}</p>
         <p class="backtest-settings-line">${appliedNote}</p>
+        <div class="backtest-recent-title">What changed vs your current settings</div>
+        ${insightRows}
         <div class="backtest-recent-title">Top combos</div>
         ${topRows}
       </div>`;
