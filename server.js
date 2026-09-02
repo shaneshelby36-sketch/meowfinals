@@ -973,7 +973,7 @@ app.get("/", (req, res) => {
     let hours = parseFloat(source.hours || '24');
     const isAuto = symbol === 'AUTO';
 
-    if (!isAuto && !SYMBOL_TO_PRODUCT[symbol]) {
+    if (!isAuto && !SYMBOL_TO_PRODUCT[symbol] && !COMMODITY_PRODUCT_SYMBOLS.includes(symbol)) {
       res.status(400).json({ error: `Unknown symbol '${symbol}'. Use AUTO or a supported asset.` });
       return;
     }
@@ -991,6 +991,18 @@ app.get("/", (req, res) => {
       console.log(`[backtest] fetching ${hours}h of ${fetchSymbols.join(',')} history…`);
       const candlesBySymbol = {};
       for (const sym of fetchSymbols) {
+        // Commodities (GOLD/SILVER/OIL) come from Polygon via the live state,
+        // not Coinbase — pull them directly from in-memory candle history.
+        if (COMMODITY_PRODUCT_SYMBOLS.includes(sym)) {
+          const s = state[sym];
+          if (s && s.series && Array.isArray(s.series.candles) && s.series.candles.length) {
+            candlesBySymbol[sym] = s.series.candles.slice();
+            console.log(`[backtest] ${sym}: ${candlesBySymbol[sym].length} candles (live state)`);
+          } else {
+            console.warn(`[backtest] ${sym}: no live candle history yet — skipping`);
+          }
+          continue;
+        }
         const productId = SYMBOL_TO_PRODUCT[sym];
         if (!productId) continue;
         // Sequential to stay polite with Coinbase's public rate limits.
