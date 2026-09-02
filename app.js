@@ -1008,6 +1008,7 @@ async function refreshBotStatus() {
   const persistLine = document.getElementById('bot-persist-line');
   const body = document.getElementById('bot-status-body');
   try {
+    let _candleCounts = null;
     const healthRes = await fetch(`${engineUrl}/api/health`, { cache: 'no-store' });
     if (healthRes.ok) {
       const health = await healthRes.json();
@@ -1018,6 +1019,7 @@ async function refreshBotStatus() {
         return;
       }
       if (health.version) _lastSeenAppVersion = health.version;
+      if (health.candleCounts) _candleCounts = health.candleCounts;
       if (persistLine) {
         if (health.dataDirEphemeral) {
           persistLine.hidden = false;
@@ -1084,6 +1086,8 @@ async function refreshBotStatus() {
     bindActivityLogUi();
     bindTradeLogUi();
     renderModelSetups(data.modelSetups, data.modelShadowBooks);
+    renderActiveSetupBanner(data.modelSetups, data.config);
+    renderBacktestActiveConfig(data.config, _candleCounts);
     renderAssetStats(data.assetStats, data.config);
     renderModelAutoSwitchNote(data.modelAutoSwitch);
     renderBotPerfGrid(data.assetStats);
@@ -2120,6 +2124,68 @@ async function toggleAssetStatus(symbol, action, config) {
   }
 }
 
+function renderActiveSetupBanner(setups, config) {
+  const labelEl = document.getElementById('bot-active-setup-label');
+  const coinsEl = document.getElementById('bot-active-setup-coins');
+  const whyEl   = document.getElementById('bot-active-setup-why');
+  const sel     = document.getElementById('bot-active-setup-select');
+  if (!labelEl || !sel) return;
+
+  const rows = Array.isArray(setups) ? setups.filter((s) => s.id !== 'all-logged') : [];
+  const activeId = config && config.activeSetupId ? String(config.activeSetupId) : 'core';
+  const active = rows.find((s) => s.id === activeId) || rows[0];
+
+  // Update banner text
+  if (active) {
+    labelEl.textContent = active.label || active.id;
+    if (coinsEl) coinsEl.textContent = active.autoTradeSymbols ? `· ${active.autoTradeSymbols}` : '';
+    if (whyEl)   whyEl.textContent   = active.why || '';
+  } else {
+    labelEl.textContent = activeId;
+    if (coinsEl) coinsEl.textContent = '';
+    if (whyEl)   whyEl.textContent   = '';
+  }
+
+  // Rebuild the select options once (or sync selection if already populated)
+  const currentIds = Array.from(sel.options).map((o) => o.value).filter(Boolean);
+  const newIds = rows.map((s) => s.id);
+  const needsRebuild = currentIds.join(',') !== newIds.join(',');
+  if (needsRebuild) {
+    sel.innerHTML = '<option value="">— select —</option>' +
+      rows.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.label || s.id)} · ${escapeHtml(s.autoTradeSymbols || '')}</option>`).join('');
+    // Wire the change handler once
+    sel.addEventListener('change', () => {
+      const id = sel.value;
+      if (id) {
+        sel.value = '';  // reset so it re-triggers next time
+        applyModelSetup(id);
+      }
+    });
+  }
+  // Sync current value (show nothing selected — banner already shows it)
+  sel.value = '';
+}
+
+async function refreshCommodityCandles() {
+  const { engineUrl } = loadSettings();
+  const btn = document.getElementById('bot-commodity-fetch-candles');
+  const status = document.getElementById('bot-commodity-fetch-status');
+  if (btn) { btn.disabled = true; btn.textContent = '⟳ Fetching…'; }
+  if (status) { status.style.display = ''; status.style.color = 'var(--wait)'; status.textContent = 'Fetching from Polygon…'; }
+  try {
+    const res = await fetch(`${engineUrl}/api/bot/refresh-commodity-candles`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (status) {
+      status.textContent = data.message || (data.ok ? 'Done.' : 'Failed.');
+      status.style.color = data.ok ? 'var(--up)' : 'var(--down)';
+    }
+  } catch (err) {
+    if (status) { status.textContent = err.message; status.style.color = 'var(--down)'; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '⟳ Fetch candles now'; }
+  }
+}
+
 async function applyModelSetup(setupId) {
   if (!setupId || setupId === 'all-logged') return;
   if (isBotSettingsLocked()) {
@@ -2151,6 +2217,7 @@ async function applyModelSetup(setupId) {
       feedback.style.color = 'var(--up)';
     }
     renderModelSetups(data.setups);
+    renderActiveSetupBanner(data.setups, data.config || { activeSetupId: setupId });
     await loadBotConfigIntoForm();
   } catch (err) {
     if (feedback) {
@@ -3429,18 +3496,21 @@ async function resetPaperHistory() {
 }
 
 function readBacktestSettingsFromForm() {
-  const skimMode = document.getElementById('bot-skim-mode').value;
-  const skimAmount = parseFloat(document.getElementById('bot-skim-amount').value);
+  const skimMode = document.getElementById('bot-skim-mode')?.value;
+  const skimAmount = parseFloat(document.getElementById('bot-skim-amount')?.value);
+  const strategyMode = document.getElementById('bot-strategy-mode')?.value || 'model';
   return {
-    edgeThresholdPct: parseFloat(document.getElementById('bot-edge').value),
-    minConfidence: parseFloat(document.getElementById('bot-confidence').value),
-    stopLossCents: parseFloat(document.getElementById('bot-stoploss').value),
-    stopRecoveryCents: parseFloat(document.getElementById('bot-stoprecovery').value),
-    takeProfitCents: parseFloat(document.getElementById('bot-takeprofit').value),
-    minEntryCents: parseFloat(document.getElementById('bot-minentries').value),
-    stakeDollars: parseFloat(document.getElementById('bot-stake').value),
-    maxOpenPositions: parseFloat(document.getElementById('bot-maxpos').value),
-    paperStartingBalanceDollars: parseFloat(document.getElementById('bot-paper-balance').value),
+    // Always send strategyMode so the server uses the right sim branch
+    strategyMode,
+    edgeThresholdPct: parseFloat(document.getElementById('bot-edge')?.value),
+    minConfidence: parseFloat(document.getElementById('bot-confidence')?.value),
+    stopLossCents: parseFloat(document.getElementById('bot-stoploss')?.value),
+    stopRecoveryCents: parseFloat(document.getElementById('bot-stoprecovery')?.value),
+    takeProfitCents: parseFloat(document.getElementById('bot-takeprofit')?.value),
+    minEntryCents: parseFloat(document.getElementById('bot-minentries')?.value),
+    stakeDollars: parseFloat(document.getElementById('bot-stake')?.value),
+    maxOpenPositions: parseFloat(document.getElementById('bot-maxpos')?.value),
+    paperStartingBalanceDollars: parseFloat(document.getElementById('bot-paper-balance')?.value),
     skimMode,
     ...(skimMode === 'insurance'
       ? { insuranceCapDollars: skimAmount }
@@ -3450,6 +3520,55 @@ function readBacktestSettingsFromForm() {
           ? { skimFixedDollars: skimAmount }
           : {}),
   };
+}
+
+/** Render the "what will run" summary above the backtest controls. Called on every bot status refresh. */
+function renderBacktestActiveConfig(config, candleCounts) {
+  const el = document.getElementById('backtest-active-config');
+  if (!el || !config) return;
+
+  const mode = String(config.strategyMode || 'model').toUpperCase();
+  const setup = String(config.activeSetupId || '—');
+  const coins = String(config.autoTradeSymbols || '—');
+  const stake = config.stakeDollars != null ? `$${config.stakeDollars}` : '—';
+
+  let modeDetail = '';
+  if (config.strategyMode === 'model') {
+    const conf = config.modelMinConfidence != null ? `conf ≥${config.modelMinConfidence}%` : '';
+    const stop = config.modelMaxAdverseCents != null && config.modelMaxAdverseCents > 0
+      ? `stop −${config.modelMaxAdverseCents}¢` : '';
+    const tp   = config.modelBankGreenCents != null ? `bank +${config.modelBankGreenCents}¢` : '';
+    const commStop = config.commodityStopCentsGold != null && config.commodityStopCentsGold > 0
+      ? `commodity stop −${config.commodityStopCentsGold}¢` : '';
+    const commTp   = config.commodityTpCentsGold != null && config.commodityTpCentsGold > 0 && config.commodityTpCentsGold < 99
+      ? `commodity TP +${config.commodityTpCentsGold}¢` : '';
+    modeDetail = [conf, stop, tp, commStop, commTp].filter(Boolean).join(' · ');
+  } else if (config.strategyMode === 'edge') {
+    modeDetail = `edge ≥${config.edgeThresholdPct}% · conf ≥${config.minConfidence}% · stop −${config.stopLossCents}¢ · TP +${config.takeProfitCents}¢`;
+  } else if (config.strategyMode === 'settle') {
+    modeDetail = `entry ${config.settleEntryMinCents}–${config.settleEntryMaxCents}¢ · stop −${config.settleStopLossCents}¢`;
+  }
+
+  // Commodity candle counts
+  let candleNote = '';
+  if (candleCounts && (candleCounts.GOLD != null || candleCounts.SILVER != null || candleCounts.OIL != null)) {
+    const parts = ['GOLD', 'SILVER', 'OIL']
+      .map((s) => candleCounts[s] != null ? `${s} ${candleCounts[s]}` : null)
+      .filter(Boolean);
+    if (parts.length) {
+      const allZero = ['GOLD', 'SILVER', 'OIL'].every((s) => !candleCounts[s]);
+      const warn = allZero
+        ? `<span class="bac-warn"> ⚠ No commodity candles — hit "⟳ Fetch candles now" in the MODEL tab first</span>`
+        : '';
+      candleNote = `<br>Commodity candles in memory: ${parts.join(' · ')}${warn}`;
+    }
+  }
+
+  el.innerHTML =
+    `<span class="bac-mode">${mode}</span>` +
+    `setup: <strong>${setup}</strong> · coins: <strong>${coins}</strong> · stake: <strong>${stake}</strong>` +
+    (modeDetail ? `<br>${modeDetail}` : '') +
+    candleNote;
 }
 
 function formatMoneyFromCents(cents, { signed = false } = {}) {
@@ -3473,18 +3592,36 @@ function applyHuntedSettingsToForm(settings) {
 function renderBacktestResults(data, dayLabel) {
   const t = data.trading || {};
   const s = data.settingsUsed || {};
+  const isModel = String(s.strategyMode || '').toLowerCase() === 'model';
   const skimLabel =
     s.skimMode === 'off'
       ? 'off'
       : s.skimMode === 'insurance'
-        ? `insurance 20/40/40 · arm $${s.insuranceCapDollars != null ? s.insuranceCapDollars : 10} / floor $${s.insuranceFloorDollars != null ? s.insuranceFloorDollars : 6} / overflow $${s.insuranceOverflowDollars != null ? s.insuranceOverflowDollars : 15}`
+        ? `insurance · arm $${s.insuranceCapDollars != null ? s.insuranceCapDollars : 10} / floor $${s.insuranceFloorDollars != null ? s.insuranceFloorDollars : 6} / overflow $${s.insuranceOverflowDollars != null ? s.insuranceOverflowDollars : 15}`
         : s.skimMode === 'percent'
         ? `${s.skimPercent}% of profit`
         : `$${Number(s.skimFixedDollars || 0).toFixed(0)} per win`;
   const pnlClass = (t.netPnlCents || 0) > 0 ? 'chip-positive' : (t.netPnlCents || 0) < 0 ? 'chip-negative' : '';
   const modeLabel = data.mode === 'AUTO' || t.mode === 'AUTO' ? 'AUTO' : data.symbol;
   const scanned = (data.symbolsScanned || t.symbolsScanned || [data.symbol]).join(', ');
-  const settingsLine = `Edge ≥ ${s.edgeThresholdPct}% · Confidence ≥ ${s.minConfidence}% · Stake $${s.stakeDollars} · Min entry ${s.minEntryCents != null ? s.minEntryCents + '¢' : '—'} · Stop −${s.stopLossCents}¢ · Recovery +${s.stopRecoveryCents != null ? s.stopRecoveryCents + '¢' : '—'} · TP +${s.takeProfitCents != null ? s.takeProfitCents + '¢' : '—'} · Max pos ${s.maxOpenPositions} · Skim ${skimLabel} · Bankroll $${s.paperStartingBalanceDollars}`;
+
+  // Settings summary line — mode-aware
+  let settingsLine;
+  if (isModel) {
+    const stop = s.modelMaxAdverseCents > 0 ? `stop −${s.modelMaxAdverseCents}¢` : 'stop global';
+    const tp   = s.modelBankGreenCents   > 0 ? `bank +${s.modelBankGreenCents}¢`  : '';
+    const commTp  = s.commodityTpCentsGold   > 0 && s.commodityTpCentsGold   < 99 ? `GOLD TP +${s.commodityTpCentsGold}¢`   : '';
+    const commStp = s.commodityStopCentsGold > 0 ? `GOLD stop −${s.commodityStopCentsGold}¢` : '';
+    settingsLine = [
+      `MODEL · setup ${s.activeSetupId || '—'} · coins ${s.autoTradeSymbols || '—'}`,
+      `conf ≥${s.modelMinConfidence}%`, stop, tp, commTp, commStp,
+      `stake $${s.stakeDollars}`, `max ${s.maxOpenPositions} pos`,
+      `skim ${skimLabel}`, `bankroll $${s.paperStartingBalanceDollars}`,
+    ].filter(Boolean).join(' · ');
+  } else {
+    settingsLine = `${String(s.strategyMode || 'edge').toUpperCase()} · Edge ≥ ${s.edgeThresholdPct}% · Conf ≥ ${s.minConfidence}% · Stake $${s.stakeDollars} · Stop −${s.stopLossCents}¢ · TP +${s.takeProfitCents != null ? s.takeProfitCents + '¢' : '—'} · Max pos ${s.maxOpenPositions} · Skim ${skimLabel} · Bankroll $${s.paperStartingBalanceDollars}`;
+  }
+
   const bySymbol = t.tradesBySymbol
     ? Object.entries(t.tradesBySymbol)
         .sort((a, b) => b[1] - a[1])
@@ -3495,17 +3632,29 @@ function renderBacktestResults(data, dayLabel) {
   let huntBlock = '';
   if (data.hunt && data.hunt.best) {
     const best = data.hunt.best;
+    // Format each top-combo row based on which strategy was hunted
     const topRows = (data.hunt.top || [])
-      .map(
-        (row, i) =>
-          `<div class="backtest-row"><span>#${i + 1} edge ${row.settings.edgeThresholdPct}% · conf ${row.settings.minConfidence}% · stop −${row.settings.stopLossCents}¢</span><span>${row.winRatePct != null ? row.winRatePct + '%' : '—'} WR · ${row.trades} trades · ${formatMoneyFromCents(row.netPnlCents, { signed: true })}</span></div>`
-      )
+      .map((row, i) => {
+        const bs = row.settings || {};
+        const label = isModel
+          ? `conf ${bs.modelMinConfidence}% · stop −${bs.modelMaxAdverseCents}¢ · TP +${bs.commodityTpCentsGold ?? bs.modelBankGreenCents ?? '—'}¢`
+          : `edge ${bs.edgeThresholdPct}% · conf ${bs.minConfidence}% · stop −${bs.stopLossCents}¢`;
+        return `<div class="backtest-row"><span>#${i + 1} ${label}</span><span>${row.winRatePct != null ? row.winRatePct + '%' : '—'} WR · ${row.trades} trades · ${formatMoneyFromCents(row.netPnlCents, { signed: true })}</span></div>`;
+      })
       .join('');
+    // Winner line — mode-aware
+    const bs = best.settings || {};
+    const winnerLine = isModel
+      ? `conf ${bs.modelMinConfidence}% · stop −${bs.modelMaxAdverseCents}¢ · commodity TP +${bs.commodityTpCentsGold ?? '—'}¢`
+      : `edge ${bs.edgeThresholdPct}% · confidence ${bs.minConfidence}% · stop −${bs.stopLossCents}¢`;
+    const appliedNote = isModel
+      ? 'Save settings to apply these to the live bot.'
+      : 'Those values were applied to the settings sliders above — save settings if you want the live bot to use them.';
     huntBlock = `
       <div class="capital-ledger backtest-ledger">
         <div class="capital-ledger-title">Hunt result — best win rate + profit</div>
-        <p class="backtest-settings-line">Searched ${data.hunt.searched} setting combos. Winner: edge ${best.settings.edgeThresholdPct}% · confidence ${best.settings.minConfidence}% · stop −${best.settings.stopLossCents}¢</p>
-        <p class="backtest-settings-line">Those values were applied to the settings sliders above — save settings if you want the live bot to use them.</p>
+        <p class="backtest-settings-line">Searched ${data.hunt.searched} combos. Winner: ${winnerLine}</p>
+        <p class="backtest-settings-line">${appliedNote}</p>
         <div class="backtest-recent-title">Top combos</div>
         ${topRows}
       </div>`;
@@ -3547,6 +3696,9 @@ function renderBacktestResults(data, dayLabel) {
       <div class="capital-row"><span>Stop-loss exits</span><span>${t.stopLossExits ?? 0}</span></div>
       <div class="capital-row"><span>Take-profit exits</span><span>${t.takeProfitExits ?? 0}</span></div>
       <div class="capital-row"><span>Breakeven exits</span><span>${t.breakevenExits ?? 0}</span></div>
+      ${isModel && (t.modelAgainstExits || t.modelLateExits) ? `
+      <div class="capital-row"><span>Model-against cuts</span><span>${t.modelAgainstExits ?? 0}</span></div>
+      <div class="capital-row"><span>Late/settle exits</span><span>${t.modelLateExits ?? 0}</span></div>` : ''}
       <div class="capital-divider"></div>
       <div class="capital-row capital-reserved"><span>Personal Wallet <em>(locked — never spent)</em></span><span class="${(t.reservedProfitCents || 0) > 0 ? 'chip-positive' : ''}">${formatMoneyFromCents(t.reservedProfitCents)}</span></div>
       <div class="capital-row capital-reserved"><span>Insurance Fund</span><span class="${(t.insuranceCents || 0) > 0 ? 'chip-positive' : ''}">${formatMoneyFromCents(t.insuranceCents || 0)}</span></div>
@@ -3818,6 +3970,7 @@ function wireBotUI() {
   document.getElementById('bot-dashboard-toggle').addEventListener('click', (event) => setBotRunning(event.currentTarget.dataset.running === 'true'));
   document.getElementById('bot-dashboard-open').addEventListener('click', openBotOverlay);
   document.getElementById('bot-reset-paper').addEventListener('click', resetPaperHistory);
+  document.getElementById('bot-commodity-fetch-candles')?.addEventListener('click', refreshCommodityCandles);
   document.getElementById('daily-loss-reset-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('daily-loss-reset-btn');
     if (btn) btn.disabled = true;

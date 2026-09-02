@@ -857,6 +857,34 @@ app.get("/", (req, res) => {
     res.json({ ...result, settleExitTiers: settleExitTiersForDashboard() });
   });
 
+  app.post('/api/bot/refresh-commodity-candles', async (req, res) => {
+    if (!POLYGON_API_KEY) {
+      res.status(400).json({ ok: false, message: 'POLYGON_API_KEY not set — cannot fetch commodity candles.' });
+      return;
+    }
+    try {
+      const candleMap = await seedCommodityCandles(COMMODITY_PRODUCT_SYMBOLS, POLYGON_API_KEY);
+      const counts = {};
+      for (const sym of COMMODITY_PRODUCT_SYMBOLS) {
+        const fresh = candleMap[sym];
+        if (fresh && fresh.length) {
+          const existing = Array.isArray(state[sym].series.candles) && state[sym].series.candles.length
+            ? state[sym].series.candles
+            : [];
+          const merged = existing.length
+            ? mergeCandleArrays(existing, fresh).slice(-300)
+            : fresh.slice(-300);
+          state[sym].series.candles = merged;
+        }
+        counts[sym] = state[sym].series.candles.length;
+      }
+      saveCommodityCandleCache();
+      res.json({ ok: true, counts, message: `Fetched: GOLD ${counts.GOLD}, SILVER ${counts.SILVER}, OIL ${counts.OIL} candles.` });
+    } catch (err) {
+      res.status(500).json({ ok: false, message: `Fetch failed: ${err.message}` });
+    }
+  });
+
   app.get('/api/bot/settle-window-rec', (req, res) => {
     if (!bot) {
       res.status(404).json({ enabled: false, message: 'Bot is not enabled (set KALSHI_ENABLED=true).' });
@@ -983,6 +1011,9 @@ app.get("/", (req, res) => {
       settleMinMinutesToOpen: pick('settleMinMinutesToOpen'),
       settleMaxMinutesToOpen: pick('settleMaxMinutesToOpen'),
       settleTieredExits: pick('settleTieredExits'),
+      // ── identity ─────────────────────────────────────────────────────────
+      activeSetupId:               pick('activeSetupId'),
+      autoTradeSymbols:            pick('autoTradeSymbols'),
       // ── model ────────────────────────────────────────────────────────────
       modelMinConfidence:          pick('modelMinConfidence'),
       modelMinEntryCents:          pick('modelMinEntryCents'),

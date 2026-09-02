@@ -392,11 +392,25 @@
         </div>
 
         <div id="bot-settings-model" class="bot-field-grid" hidden>
-          <p class="settings-hint"><strong>MODEL</strong> — Core: BTC/ETH, <strong>1</strong> slot, max <strong>88¢</strong>, conf <strong>55%</strong>, stall <strong>4s</strong>, stagnation <strong>60s</strong>, rapid adverse <strong>off</strong>. Full stake at all asks.</p>
+
+          <!-- ── Active setup banner ──────────────────────────────── -->
+          <div class="active-setup-banner" id="bot-active-setup-banner">
+            <div class="active-setup-row">
+              <span class="active-setup-pill" id="bot-active-setup-label">Loading…</span>
+              <span class="active-setup-coins" id="bot-active-setup-coins"></span>
+            </div>
+            <div class="active-setup-select-row">
+              <label class="active-setup-select-label" for="bot-active-setup-select">Switch setup</label>
+              <select id="bot-active-setup-select" class="active-setup-select">
+                <option value="">— select —</option>
+              </select>
+            </div>
+            <p class="active-setup-why" id="bot-active-setup-why"></p>
+          </div>
 
           <div class="model-setups" id="bot-model-setups">
-            <h4 class="bot-panel-subhead">Paper setups</h4>
-            <p class="settings-hint">Tap one to make it the <strong>live</strong> book — that <strong>brings its bankroll</strong> (avail / wallet / ins) with it, and parks the previous live book. Knobs stay either way. Shadow paper books are optional (off freezes them; what-if still uses saved fills). <strong>What-if</strong> is raw PnL on saved fills only.</p>
+            <h4 class="bot-panel-subhead">All setups</h4>
+            <p class="settings-hint">Tap a card — or use the dropdown above — to switch the <strong>live</strong> book. The new book brings its own bankroll. <strong>What-if</strong> is raw PnL on saved fills only.</p>
             <label>Shadow paper books
               <select id="bot-model-shadow-books">
                 <option value="off">Off — freeze shadows (default)</option>
@@ -568,7 +582,11 @@
           </label>
 
           <h4 class="bot-panel-subhead" style="border-top:2px solid #10b981;padding-top:8px;margin-top:12px;color:#10b981;">🎯 Commodity overrides (Gold / Silver / Oil)</h4>
-          <p class="field-hint" style="margin-top:0;">All sliders default to <strong>0 = use global</strong>. Set above 0 to override commodities independently.</p>
+          <div class="commodity-candle-row">
+            <p class="field-hint" style="margin:0;">All sliders default to <strong>0 = use global</strong>. Candles load from Polygon on startup — fetch fresh ones anytime.</p>
+            <button type="button" class="btn-secondary" id="bot-commodity-fetch-candles">⟳ Fetch candles now</button>
+          </div>
+          <p class="field-hint" id="bot-commodity-fetch-status" style="display:none;margin-top:4px;"></p>
 
           <label>🎯 Commodity — min entry (¢)
             <div class="slider-row">
@@ -1152,19 +1170,29 @@
 
       <div class="bot-section">
         <h3>Backtest</h3>
-        <p class="settings-hint">Uses the settings above. Runs a continuous full-day sim (24h of minute data per day) and reports how long Available Cash lasted before it couldn't fund another stake. Auto scans all Kalshi cryptos. Hunt best searches edge/confidence/stop on its own.</p>
+        <p class="settings-hint">Simulates trading on historical candles using the <strong>current live settings</strong>. Picks up your strategy mode (model/edge/settle), active coins, and all knobs automatically.</p>
+        <div class="backtest-active-config" id="backtest-active-config">
+          <!-- filled by app.js on bot status load -->
+        </div>
         <div class="backtest-controls">
           <label>Asset
             <select id="backtest-symbol">
-              <option value="AUTO">Auto (scan all markets, trade the best)</option>
-              <option value="BTC">BTC</option>
-              <option value="XRP">XRP</option>
-              <option value="ETH">ETH</option>
-              <option value="SOL">SOL</option>
-              <option value="BNB">BNB</option>
-              <option value="NEAR">NEAR</option>
-              <option value="HYPE">HYPE</option>
-              <option value="ZEC">ZEC</option>
+              <option value="AUTO">AUTO — all active coins (uses live autoTradeSymbols)</option>
+              <optgroup label="Crypto">
+                <option value="BTC">BTC</option>
+                <option value="ETH">ETH</option>
+                <option value="SOL">SOL</option>
+                <option value="XRP">XRP</option>
+                <option value="BNB">BNB</option>
+                <option value="NEAR">NEAR</option>
+                <option value="HYPE">HYPE</option>
+                <option value="ZEC">ZEC</option>
+              </optgroup>
+              <optgroup label="Commodities (needs POLYGON_API_KEY + live candles)">
+                <option value="GOLD">GOLD</option>
+                <option value="SILVER">SILVER</option>
+                <option value="OIL">OIL</option>
+              </optgroup>
             </select>
           </label>
           <div class="backtest-days" role="group" aria-label="Backtest range">

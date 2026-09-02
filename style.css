@@ -1165,6 +1165,70 @@ body[data-view-mode="bot"] .asset-picker {
 .auto-coin-chip input {
   margin: 0;
 }
+/* Active setup banner */
+.active-setup-banner {
+  grid-column: 1 / -1;
+  background: rgba(77, 163, 255, 0.07);
+  border: 1px solid rgba(77, 163, 255, 0.25);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+}
+.active-setup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.active-setup-pill {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--accent);
+}
+.active-setup-coins {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+}
+.active-setup-select-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.active-setup-select-label {
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.active-setup-select {
+  flex: 1;
+  min-width: 0;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font: inherit;
+  font-size: 0.9rem;
+}
+.active-setup-why {
+  margin: 6px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+/* Commodity candle refresh row */
+.commodity-candle-row {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.commodity-candle-row .field-hint {
+  flex: 1;
+}
 .model-setups {
   grid-column: 1 / -1;
 }
@@ -1555,6 +1619,24 @@ body[data-view-mode="bot"] .asset-picker {
   margin-top: 6px;
 }
 
+.backtest-active-config {
+  background: rgba(77, 163, 255, 0.06);
+  border: 1px solid rgba(77, 163, 255, 0.2);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  line-height: 1.5;
+}
+.backtest-active-config .bac-mode {
+  font-weight: 700;
+  color: var(--accent);
+  margin-right: 6px;
+}
+.backtest-active-config .bac-warn {
+  color: var(--wait);
+}
 .backtest-controls {
   display: flex;
   gap: 12px;
