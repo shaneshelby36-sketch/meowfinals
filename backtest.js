@@ -1436,13 +1436,9 @@ function scoreTradingResult(trading) {
  */
 function huntBestSettings(candlesBySymbol, baseSettings = {}, runOptions = {}) {
   const base = normalizeSettings(baseSettings);
-  const edgeGrid = [5, 8, 10, 12, 15, 18, 22, 25];
-  const confGrid = [50, 55, 60, 65, 70, 75, 80];
-  const stopGrid = [8, 10, 12, 15, 20].includes(base.stopLossCents)
-    ? [base.stopLossCents, 8, 10, 12, 15].filter((v, i, arr) => arr.indexOf(v) === i)
-    : [base.stopLossCents, 8, 10, 12, 15];
+  const isModelHunt = base.strategyMode === 'model';
+  const baseModel = isModelHunt ? normalizeModelSettings(baseSettings) : null;
 
-  const candidates = [];
   const huntOpts = {
     stepMinutes: runOptions.stepMinutes || 2,
     mode: runOptions.mode || 'AUTO',
@@ -1450,43 +1446,90 @@ function huntBestSettings(candlesBySymbol, baseSettings = {}, runOptions = {}) {
     continuousSearch: true,
   };
 
-  for (const edgeThresholdPct of edgeGrid) {
-    for (const minConfidence of confGrid) {
-      for (const stopLossCents of stopGrid) {
-        const settings = {
-          ...base,
-          edgeThresholdPct,
-          minConfidence,
-          stopLossCents,
-        };
-        const trading = backtestWithSettings(candlesBySymbol, settings, huntOpts);
-        const score = scoreTradingResult(trading);
-        candidates.push({
-          score,
-          settings: {
-            edgeThresholdPct,
-            minConfidence,
-            stopLossCents,
-            takeProfitCents: base.takeProfitCents,
-            stakeDollars: base.stakeDollars,
-            maxOpenPositions: base.maxOpenPositions,
-            paperStartingBalanceDollars: base.paperStartingBalanceDollars,
-            skimMode: base.skimMode,
-            skimPercent: base.skimPercent,
-            skimFixedDollars: base.skimFixedDollars,
-            insuranceCapDollars: base.insuranceCapDollars,
-            insuranceFloorDollars: base.insuranceFloorDollars,
-            insuranceOverflowDollars: base.insuranceOverflowDollars,
-          },
-          trades: trading.trades,
-          wins: trading.wins,
-          losses: trading.losses,
-          winRatePct: trading.winRatePct,
-          netPnlCents: trading.netPnlCents,
-          totalEquityCents: trading.totalEquityCents,
-          avgConfidenceTaken: trading.avgConfidenceTaken,
-          tradesBySymbol: trading.tradesBySymbol,
-        });
+  const candidates = [];
+
+  if (isModelHunt) {
+    // ── MODEL hunt: search the three knobs that most affect model P&L ────────
+    // 1. modelMinConfidence  — filters out low-conviction entries
+    // 2. modelMaxAdverseCents — hard stop depth (how much loss before cutting)
+    // 3. commodity TP cents  — how much green to bank before exiting
+    const confGrid    = [55, 60, 65, 70, 75, 80];
+    const adverseGrid = [10, 12, 15, 18, 20, 25];
+    const tpGrid      = [15, 20, 25, 30, 35];
+
+    for (const modelMinConfidence of confGrid) {
+      for (const modelMaxAdverseCents of adverseGrid) {
+        for (const commodityTp of tpGrid) {
+          const overrides = {
+            modelMinConfidence,
+            modelMaxAdverseCents,
+            modelMaxLossCents: modelMaxAdverseCents, // keep aligned
+            commodityTpCentsGold:   commodityTp,
+            commodityTpCentsSilver: commodityTp,
+            commodityTpCentsOil:    Math.max(15, commodityTp - 5), // OIL slightly tighter
+            commodityStopCentsGold:   modelMaxAdverseCents,
+            commodityStopCentsSilver: modelMaxAdverseCents,
+            commodityStopCentsOil:    modelMaxAdverseCents,
+          };
+          const settings = { ...baseSettings, ...overrides };
+          const trading = backtestWithSettings(candlesBySymbol, settings, huntOpts);
+          const score = scoreTradingResult(trading);
+          candidates.push({
+            score,
+            settings: overrides,
+            trades: trading.trades,
+            wins: trading.wins,
+            losses: trading.losses,
+            winRatePct: trading.winRatePct,
+            netPnlCents: trading.netPnlCents,
+            totalEquityCents: trading.totalEquityCents,
+            avgConfidenceTaken: trading.avgConfidenceTaken,
+            tradesBySymbol: trading.tradesBySymbol,
+          });
+        }
+      }
+    }
+  } else {
+    // ── EDGE / SETTLE hunt: original grid ────────────────────────────────────
+    const edgeGrid = [5, 8, 10, 12, 15, 18, 22, 25];
+    const confGrid = [50, 55, 60, 65, 70, 75, 80];
+    const stopGrid = [8, 10, 12, 15, 20].includes(base.stopLossCents)
+      ? [base.stopLossCents, 8, 10, 12, 15].filter((v, i, arr) => arr.indexOf(v) === i)
+      : [base.stopLossCents, 8, 10, 12, 15];
+
+    for (const edgeThresholdPct of edgeGrid) {
+      for (const minConfidence of confGrid) {
+        for (const stopLossCents of stopGrid) {
+          const settings = { ...base, edgeThresholdPct, minConfidence, stopLossCents };
+          const trading = backtestWithSettings(candlesBySymbol, settings, huntOpts);
+          const score = scoreTradingResult(trading);
+          candidates.push({
+            score,
+            settings: {
+              edgeThresholdPct,
+              minConfidence,
+              stopLossCents,
+              takeProfitCents: base.takeProfitCents,
+              stakeDollars: base.stakeDollars,
+              maxOpenPositions: base.maxOpenPositions,
+              paperStartingBalanceDollars: base.paperStartingBalanceDollars,
+              skimMode: base.skimMode,
+              skimPercent: base.skimPercent,
+              skimFixedDollars: base.skimFixedDollars,
+              insuranceCapDollars: base.insuranceCapDollars,
+              insuranceFloorDollars: base.insuranceFloorDollars,
+              insuranceOverflowDollars: base.insuranceOverflowDollars,
+            },
+            trades: trading.trades,
+            wins: trading.wins,
+            losses: trading.losses,
+            winRatePct: trading.winRatePct,
+            netPnlCents: trading.netPnlCents,
+            totalEquityCents: trading.totalEquityCents,
+            avgConfidenceTaken: trading.avgConfidenceTaken,
+            tradesBySymbol: trading.tradesBySymbol,
+          });
+        }
       }
     }
   }
@@ -1500,7 +1543,7 @@ function huntBestSettings(candlesBySymbol, baseSettings = {}, runOptions = {}) {
   if (best) {
     bestTrading = backtestWithSettings(
       candlesBySymbol,
-      { ...base, ...best.settings },
+      { ...baseSettings, ...best.settings },
       {
         stepMinutes: 1,
         mode: huntOpts.mode,
@@ -1515,8 +1558,9 @@ function huntBestSettings(candlesBySymbol, baseSettings = {}, runOptions = {}) {
     top,
     bestTrading,
     searched: candidates.length,
-    note:
-      'Hunted edge × confidence × stop-loss while keeping your stake/skim/bankroll. Ranked for higher net profit and win rate (min 3 trades). Continuous AUTO-style scanning used throughout.',
+    note: isModelHunt
+      ? 'MODEL hunt: searched confidence × hard-stop × commodity TP combos. Ranked for net profit + win rate (min 3 trades). Apply the winner to save these as your live settings.'
+      : 'Hunted edge × confidence × stop-loss while keeping your stake/skim/bankroll. Ranked for higher net profit and win rate (min 3 trades). Continuous AUTO-style scanning used throughout.',
   };
 }
 

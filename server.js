@@ -226,12 +226,20 @@ async function seedAll() {
     .map((s) => s.series.seed())
   );
   // Seed commodity candles from Polygon (if API key is set).
+  // Merge with any disk-cached candles: Polygon provides the most-recent window,
+  // the disk cache provides history beyond what Polygon's MAX_CANDLES covers.
   if (POLYGON_API_KEY) {
     const candleMap = await seedCommodityCandles(COMMODITY_PRODUCT_SYMBOLS, POLYGON_API_KEY);
     for (const sym of COMMODITY_PRODUCT_SYMBOLS) {
-      const candles = candleMap[sym];
-      if (candles && candles.length) {
-        state[sym].series.candles = candles.slice(-300);
+      const fresh = candleMap[sym];
+      if (fresh && fresh.length) {
+        const existing = Array.isArray(state[sym].series.candles) && state[sym].series.candles.length
+          ? state[sym].series.candles
+          : [];
+        const merged = existing.length
+          ? mergeCandleArrays(existing, fresh).slice(-300)
+          : fresh.slice(-300);
+        state[sym].series.candles = merged;
         console.log(`[commodity-feed] seeded ${sym}: ${state[sym].series.candles.length} candles (ready=${state[sym].series.ready(60)})`);
       } else {
         console.warn(`[commodity-feed] seed returned 0 candles for ${sym} — will rely on live feed to build history`);
@@ -566,15 +574,82 @@ async function recompute() {
   }
 }
 
+// ── Commodity candle persistence ─────────────────────────────────────────────
+// Saves commodity candle history to disk every 5 minutes so a redeploy/restart
+// can restore the full accumulated history rather than starting from scratch.
+// The cache is considered stale after MAX_CANDLES candles could have been
+// produced (300 minutes = 5 hours); beyond that Polygon is the ground truth.
+const COMMODITY_CANDLE_CACHE_PATH = dataPath('commodity-candles.json');
+const COMMODITY_CANDLE_SAVE_INTERVAL_MS = 5 * 60 * 1000; // every 5 minutes
+const COMMODITY_CANDLE_CACHE_MAX_AGE_MS = 12 * 60 * 60 * 1000; // 12 hours
+
+function loadCommodityCandleCache() {
+  try {
+    if (!fs.existsSync(COMMODITY_CANDLE_CACHE_PATH)) return null;
+    const raw = JSON.parse(fs.readFileSync(COMMODITY_CANDLE_CACHE_PATH, 'utf8'));
+    if (!raw || typeof raw !== 'object') return null;
+    const age = Date.now() - Number(raw.savedAt || 0);
+    if (age > COMMODITY_CANDLE_CACHE_MAX_AGE_MS) {
+      console.log('[commodity-candles] disk cache too old — ignoring');
+      return null;
+    }
+    return raw;
+  } catch (err) {
+    console.warn('[commodity-candles] failed to load disk cache:', err.message);
+    return null;
+  }
+}
+
+function saveCommodityCandleCache() {
+  try {
+    const out = { savedAt: Date.now() };
+    for (const sym of COMMODITY_PRODUCT_SYMBOLS) {
+      const s = state[sym];
+      if (s && s.series && Array.isArray(s.series.candles) && s.series.candles.length) {
+        out[sym] = s.series.candles.slice();
+      }
+    }
+    writeJsonAtomic(COMMODITY_CANDLE_CACHE_PATH, out);
+  } catch (err) {
+    console.warn('[commodity-candles] failed to save disk cache:', err.message);
+  }
+}
+
+/** Merge two sorted candle arrays (both oldest→newest), deduplicating by time. */
+function mergeCandleArrays(older, newer) {
+  const map = new Map();
+  for (const c of older) map.set(c.time, c);
+  for (const c of newer) map.set(c.time, c); // newer wins on collision
+  return Array.from(map.values()).sort((a, b) => a.time - b.time);
+}
+
 async function main() {
   console.log('[startup] seeding historical candles…');
-  await seedAll();
+
+  // Pre-load commodity candle disk cache before Polygon fetch so we have
+  // the full accumulated history from prior runs.
+  const diskCache = loadCommodityCandleCache();
+  if (diskCache) {
+    for (const sym of COMMODITY_PRODUCT_SYMBOLS) {
+      const cached = diskCache[sym];
+      if (Array.isArray(cached) && cached.length) {
+        state[sym].series.candles = cached.slice(-300);
+        console.log(`[commodity-candles] restored ${sym}: ${state[sym].series.candles.length} candles from disk cache`);
+      }
+    }
+  }
+
+  await seedAll(); // Polygon fetch will merge on top of disk cache below
   for (const [symbol, s] of Object.entries(state)) {
     console.log(`[startup] ${symbol}: seeded ${s.series.candles.length} candles`);
   }
 
   wireFeed();
   wireCommodityFeed();
+
+  // Periodic candle persistence — save every 5 minutes so history survives restarts.
+  setInterval(saveCommodityCandleCache, COMMODITY_CANDLE_SAVE_INTERVAL_MS);
+  console.log(`[startup] commodity candle cache: saving every ${COMMODITY_CANDLE_SAVE_INTERVAL_MS / 60000}m to ${COMMODITY_CANDLE_CACHE_PATH}`);
 
   // First compute as soon as we have enough seeded history; then on an interval.
   await recompute();

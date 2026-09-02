@@ -9206,18 +9206,22 @@ class TradingBot {
 
       // Unconditional stop: if bid drops this many ¢ below entry, cut immediately
       // regardless of lean state. Catches fast collapses before lean reacts.
-      // Use _sideBidCentsReal so a synthesized complement (100−yes_ask) can't
-      // mask a real NO bid collapse and silently prevent the stop from firing.
+      // Prefer _sideBidCentsReal so a synthesized complement (100−yes_ask) can't
+      // inflate the adverse reading; but if no real bid exists at all (thin book /
+      // collapsing market), fall back to heldSideBidCents so the stop still fires.
       // Use effective max-adverse which applies the no-progress tighten after N seconds
       // if the trail arm has never been reached.
       const maxAdverse = modelEffectiveMaxAdverse(trade, this.config);
       const baseMaxAdverse = modelMaxAdverseCentsForTrade(trade, this.config);
       if (!inOpenGrace && maxAdverse > 0) {
         const realBid = this._sideBidCentsReal(market, trade.side);
-        const realAdverse = realBid != null && Number.isFinite(entry) && realBid < entry
-          ? Math.round(entry - realBid)
-          : adverseCents; // fall back to normal adverseCents if real bid unavailable
-        if (realBid != null && realAdverse >= maxAdverse) {
+        // Use real bid when available; fall back to synthesized bid so the stop
+        // cannot be silently bypassed when the real bid is absent (thin book).
+        const stopBid = realBid != null ? realBid : heldSideBidCents;
+        const realAdverse = stopBid != null && Number.isFinite(entry) && stopBid < entry
+          ? Math.round(entry - stopBid)
+          : adverseCents;
+        if (stopBid != null && realAdverse >= maxAdverse) {
           const tightened = maxAdverse < baseMaxAdverse;
           this.lastDecision = tightened
             ? `No-progress stop tighten: −${realAdverse}¢ (≥${maxAdverse}¢, tightened from ${baseMaxAdverse}¢) on ${trade.symbol} — cutting.`
