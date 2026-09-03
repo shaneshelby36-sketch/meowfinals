@@ -1017,6 +1017,13 @@
             </div>
             <span class="field-hint">Default <strong>2¢</strong>. How close to the peak counts as a touch. Wider = easier to trigger on thin/wide-spread coins; tighter = stricter on liquid coins like BTC/ETH.</span>
           </label>
+          <label>MODEL entry momentum block (% against)
+            <div class="slider-row">
+              <input id="bot-model-entry-momentum-block" type="range" min="0" max="1" step="0.05" />
+              <span class="slider-value" id="bot-model-entry-momentum-block-value">—</span>
+            </div>
+            <span class="field-hint">Block entry when the 3-min price momentum is moving against the entry direction by more than this %. e.g. <strong>0.15</strong> blocks YES entries when price has dropped >0.15% in the last 3 candles. <strong>0</strong> = off.</span>
+          </label>
           <label>MODEL cash out before settle (min left)
             <div class="slider-row">
               <input id="bot-model-settle-close" type="range" min="0" max="8" step="0.5" />

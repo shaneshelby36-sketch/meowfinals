@@ -1838,6 +1838,16 @@ function modelHardAdverseCents(config = {}) {
 }
 
 /**
+ * 3-candle momentum threshold (% of price) below which an entry in the
+ * against-momentum direction is blocked. 0 = off (feature disabled).
+ */
+function modelEntryMomentumBlockPct(config = {}) {
+  const n = Number(config.modelEntryMomentumBlockPct);
+  if (Number.isFinite(n) && n >= 0) return n;
+  return MODEL_ENTRY_MOMENTUM_BLOCK_PCT_DEFAULT;
+}
+
+/**
  * Lean-gated dynamic floor. Returns the minimum bid price allowed for this
  * trade when lean is deteriorating. Returns 0 when the feature is off (baseDrop=0)
  * — the caller must also gate on modelDeteriorating before acting on this.
@@ -3254,6 +3264,13 @@ const MODEL_LEAN_FLOOR_SCALE_DEFAULT = 0.2;
 const MODEL_LEAN_FLOOR_BASE_ENTRY_DEFAULT = 65;
 /** Hard cliff (−N¢ from entry). 0 = off — MODEL losses use stagnation + hard floor. */
 const MODEL_HARD_ADVERSE_CENTS_DEFAULT = 0;
+/**
+ * Block entry when the 3-candle price momentum (% change) is moving against
+ * the entry direction. 0 = off. e.g. 0.15 = block YES entries if price has
+ * dropped >0.15% in the last 3 minutes, and block NO entries if price has
+ * risen >0.15% in the last 3 minutes.
+ */
+const MODEL_ENTRY_MOMENTUM_BLOCK_PCT_DEFAULT = 0;
 /** Paper fill ceiling on adverse exits. 0 = off (book live bid). */
 const MODEL_MAX_LOSS_CENTS_DEFAULT = 0;
 /**
@@ -3846,6 +3863,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelMaxMinutesToOpen',
   'modelPeakTouchTp',
   'modelPeakTouchWindow',
+  'modelEntryMomentumBlockPct',
   'commodityStakeDollarsGold',
   'commodityStakeDollarsSilver',
   'commodityStakeDollarsOil',
@@ -5040,6 +5058,7 @@ class TradingBot {
       modelMaxMinutesToOpen: MODEL_MAX_MINUTES_TO_OPEN_DEFAULT,
       modelPeakTouchTp: MODEL_PEAK_TOUCH_TP_DEFAULT,
       modelPeakTouchWindow: MODEL_PEAK_TOUCH_WINDOW_DEFAULT,
+      modelEntryMomentumBlockPct: MODEL_ENTRY_MOMENTUM_BLOCK_PCT_DEFAULT,
       // Per-commodity overrides: 0/unset = use code default (TP=30¢, stop=15¢, stake=$0=global).
       commodityStakeDollarsGold: MODEL_COMMODITY_STAKE_DEFAULT,
       commodityStakeDollarsSilver: MODEL_COMMODITY_STAKE_DEFAULT,
@@ -12103,6 +12122,25 @@ class TradingBot {
     if (!priceGate.ok) {
       say(`Waiting: ${symbol} ${side.toUpperCase()} is ${priceCents}¢ — ${priceGate.reason}.`);
       return null;
+    }
+
+    // Momentum block: if price has moved against the entry direction in the
+    // last 3 candles by more than the configured threshold, skip the entry.
+    const entryMomBlock = modelEntryMomentumBlockPct(this.config);
+    if (entryMomBlock > 0) {
+      const momPct = assetPrediction.indicatorsSnapshot && assetPrediction.indicatorsSnapshot.momentumShortPct;
+      if (Number.isFinite(momPct)) {
+        // YES = betting price goes UP → block if falling (momPct < -threshold)
+        // NO  = betting price goes DOWN → block if rising (momPct > +threshold)
+        const blocked = side === 'yes' ? momPct < -entryMomBlock : momPct > entryMomBlock;
+        if (blocked) {
+          say(
+            `Waiting: ${symbol} ${side.toUpperCase()} — 3-min momentum ${momPct >= 0 ? '+' : ''}${(momPct * 100).toFixed(2)}% ` +
+              `is against entry direction (block threshold ${(entryMomBlock * 100).toFixed(2)}%).`
+          );
+          return null;
+        }
+      }
     }
 
     const lowAskGate = modelLowAskConvictionGate({
