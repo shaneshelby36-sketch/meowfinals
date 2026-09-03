@@ -1751,9 +1751,22 @@ function modelTrailCentsForTrade(trade, config = {}) {
 }
 
 /** Block entries when held-side live lean is too soft (e.g. 72% NO on a 74¢ ticket). */
-function modelMinEntryLeanGate({ window, side, config = {}, symbol } = {}) {
+function modelMinEntryLeanGate({ window, side, config = {}, symbol, priceCents } = {}) {
   const need = modelMinEntryLeanPctForSymbol(symbol, config);
   if (!(need > 0)) return { ok: true, skipped: true };
+  // For commodity symbols the lean requirement only applies below the min-entry
+  // price threshold (e.g. <70¢). At or above that price the lean gate is skipped,
+  // making it adjustable: set the lean slider to 0 to disable entirely, or set it
+  // to enforce lean for sub-min-entry entries only.
+  if (symbol && isCommoditySymbol(symbol) && priceCents != null) {
+    const commodityMin = Number(config.commodityMinEntryCents);
+    const minEntry = Number.isFinite(commodityMin) && commodityMin > 0
+      ? commodityMin
+      : Number.isFinite(Number(config.modelMinEntryCents))
+        ? Number(config.modelMinEntryCents)
+        : MODEL_MIN_ENTRY_DEFAULT_CENTS;
+    if (Number(priceCents) >= minEntry) return { ok: true, skipped: true };
+  }
   const held = modelHeldSideProb(window, side);
   if (!Number.isFinite(held)) {
     return { ok: false, reason: 'held-side lean unavailable' };
@@ -2585,7 +2598,7 @@ function modelEntryRoomToFloorGate(priceCents, config = {}) {
   };
 }
 
-function modelPriceAllowed(priceCents, window, config = {}, symbol = null) {
+function modelPriceAllowed(priceCents, window, config = {}, symbol = null, side = null) {
   const price = Number(priceCents);
   if (!Number.isFinite(price) || price < 1 || price > 99) {
     return { ok: false, reason: 'invalid price' };
@@ -2605,15 +2618,29 @@ function modelPriceAllowed(priceCents, window, config = {}, symbol = null) {
     return { ok: false, reason: `above model max entry ${maxEntry}¢` };
   }
   // Per-commodity min entry override (0 = fall back to global modelMinEntryCents).
-  const commodityMin = symbol && isCommoditySymbol(symbol)
-    ? Number(config.commodityMinEntryCents)
-    : NaN;
+  const isCommodity = symbol && isCommoditySymbol(symbol);
+  const commodityMin = isCommodity ? Number(config.commodityMinEntryCents) : NaN;
   const minEntry = Number.isFinite(commodityMin) && commodityMin > 0
     ? commodityMin
     : Number.isFinite(Number(config.modelMinEntryCents))
       ? Number(config.modelMinEntryCents)
       : MODEL_MIN_ENTRY_DEFAULT_CENTS;
   if (!(minEntry > 0) || price >= minEntry) return { ok: true };
+
+  // For commodity symbols below minEntry, require held-side lean ≥ the per-symbol
+  // lean minimum (e.g. 80%). This enforces the rule: price < 70¢ → lean ≥ 80%.
+  if (isCommodity && side) {
+    const leanMin = modelMinEntryLeanPctForSymbol(symbol, config);
+    if (leanMin > 0) {
+      const heldProb = modelHeldSideProb(window, side);
+      if (!Number.isFinite(heldProb) || heldProb < leanMin) {
+        return {
+          ok: false,
+          reason: `below ${minEntry}¢ — ${symbol} lean ${Number.isFinite(heldProb) ? Math.round(heldProb) : '?'}% (need ≥${leanMin}% when under min entry)`,
+        };
+      }
+    }
+  }
 
   const perfectFloor = Number.isFinite(Number(config.modelPerfectMinEntryCents))
     ? Number(config.modelPerfectMinEntryCents)
@@ -11955,7 +11982,7 @@ class TradingBot {
       return null;
     }
 
-    const leanGate = modelMinEntryLeanGate({ window, side, config: this.config, symbol });
+    const leanGate = modelMinEntryLeanGate({ window, side, config: this.config, symbol, priceCents });
     if (!leanGate.ok) {
       say(`Waiting: ${symbol} ${String(side).toUpperCase()} — ${leanGate.reason}.`);
       return null;
@@ -12018,7 +12045,7 @@ class TradingBot {
       return null;
     }
 
-    const priceGate = modelPriceAllowed(priceCents, window, this.config, symbol);
+    const priceGate = modelPriceAllowed(priceCents, window, this.config, symbol, side);
     if (!priceGate.ok) {
       say(`Waiting: ${symbol} ${side.toUpperCase()} is ${priceCents}¢ — ${priceGate.reason}.`);
       return null;

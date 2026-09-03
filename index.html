@@ -564,21 +564,21 @@
               <input id="bot-model-min-entry-lean-gold" type="range" min="0" max="95" step="1" />
               <span class="slider-value" id="bot-model-min-entry-lean-gold-value">—</span>
             </div>
-            <span class="field-hint">GOLD-specific lean minimum. Overrides global when set above 0. <strong>0</strong> = use global.</span>
+            <span class="field-hint">GOLD lean required to enter <em>below</em> the commodity min-entry price. At or above min-entry this lean check is skipped. <strong>0</strong> = use global (or off if global is 0).</span>
           </label>
           <label>MODEL min entry lean — SILVER (%)
             <div class="slider-row">
               <input id="bot-model-min-entry-lean-silver" type="range" min="0" max="95" step="1" />
               <span class="slider-value" id="bot-model-min-entry-lean-silver-value">—</span>
             </div>
-            <span class="field-hint">SILVER-specific lean minimum. Overrides global when set above 0. <strong>0</strong> = use global.</span>
+            <span class="field-hint">SILVER lean required to enter <em>below</em> the commodity min-entry price. At or above min-entry this lean check is skipped. <strong>0</strong> = use global (or off if global is 0).</span>
           </label>
           <label>MODEL min entry lean — OIL (%)
             <div class="slider-row">
               <input id="bot-model-min-entry-lean-oil" type="range" min="0" max="95" step="1" />
               <span class="slider-value" id="bot-model-min-entry-lean-oil-value">—</span>
             </div>
-            <span class="field-hint">OIL (WTI)-specific lean minimum. Overrides global when set above 0. <strong>0</strong> = use global.</span>
+            <span class="field-hint">OIL (WTI) lean required to enter <em>below</em> the commodity min-entry price. At or above min-entry this lean check is skipped. <strong>0</strong> = use global (or off if global is 0).</span>
           </label>
 
           <h4 class="bot-panel-subhead" style="border-top:2px solid #10b981;padding-top:8px;margin-top:12px;color:#10b981;">🎯 Commodity overrides (Gold / Silver / Oil)</h4>
@@ -594,6 +594,14 @@
               <span class="slider-value" id="bot-commodity-min-entry-value">—</span>
             </div>
             <span class="field-hint">Min ask price for GOLD/SILVER/OIL entries. <strong>0</strong> = use global MODEL min entry.</span>
+          </label>
+
+          <label>🎯 Commodity — max entry (¢)
+            <div class="slider-row">
+              <input id="bot-commodity-max-entry" type="range" min="0" max="99" step="1" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-max-entry-value">—</span>
+            </div>
+            <span class="field-hint">Max ask price for GOLD/SILVER/OIL entries. <strong>0</strong> = no upper cap.</span>
           </label>
 
           <label>🎯 GOLD — stake ($)
