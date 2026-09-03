@@ -116,7 +116,7 @@
   "secondOpenRequiresGreen": "on",
   "tradeDoge": "off",
   "tradeNear": "off",
-  "autoTradeSymbols": "BTC,BNB,SOL",
+  "autoTradeSymbols": "BTC,BNB,SOL,GOLD,SILVER,OIL,NATGAS,COPPER",
   "activeSetupId": "tight",
   "modelInvertSide": "off",
   "modelAutoSwitchSetup": "off",
