@@ -60,6 +60,7 @@
   "modelExtremeLiveLeanExitPct": 96,
   "modelEntryLiveLeanMarginPct": 5,
   "modelMinEntryLeanPct": 80,
+  "modelLeanSkipAboveCents": 80,
   "modelSoftLeanMarginPct": 2,
   "modelSignalDominanceMin": 0.3,
   "modelTrailCents": 8,
@@ -96,6 +97,7 @@
   "modelOpenGraceMs": 4000,
   "modelMaxEntrySpreadCents": 8,
   "modelMinMinutesToOpen": 3.5,
+  "modelMaxMinutesToOpen": 12,
   "modelAutoSwitchLowAvailDollars": 20,
   "modelAutoSwitchMinLeadDollars": 5,
   "modelAutoSwitchCooldownMinutes": 60,
@@ -137,5 +139,15 @@
   "commodityTrailCentsOil": 10,
   "modelMinEntryLeanPctGold": 0,
   "modelMinEntryLeanPctSilver": 0,
-  "modelMinEntryLeanPctOil": 0
+  "modelMinEntryLeanPctOil": 0,
+  "modelMinEntryLeanPctNatgas": 0,
+  "modelMinEntryLeanPctCopper": 0,
+  "commodityStakeDollarsNatgas": 3,
+  "commodityStakeDollarsCopper": 3,
+  "commodityStopCentsNatgas": 0,
+  "commodityStopCentsCopper": 0,
+  "commodityTpCentsNatgas": 99,
+  "commodityTpCentsCopper": 99,
+  "commodityTrailCentsNatgas": 10,
+  "commodityTrailCentsCopper": 10
 }

@@ -8,7 +8,8 @@ const fetch = globalThis.fetch
 
 // Polygon.io free tier: up to 1 connection, 5 API calls/min on the Stocks plan.
 // For Forex/Crypto the free tier allows WebSocket streaming on the free plan.
-// Commodity tickers on Polygon: C:XAUUSD (Gold), C:XAGUSD (Silver), C:USOILUSD (Oil/WTI)
+// Commodity tickers on Polygon: C:XAUUSD (Gold), C:XAGUSD (Silver), C:USOILUSD (Oil/WTI),
+// C:XNGUSD (Natural Gas), C:XCUUSD (Copper)
 // Set POLYGON_API_KEY in your environment to enable live commodity data.
 
 const POLYGON_WS_URL = 'wss://socket.polygon.io/forex';
@@ -19,6 +20,8 @@ const POLYGON_TICKER = {
   GOLD: 'C:XAUUSD',
   SILVER: 'C:XAGUSD',
   OIL: 'C:USOILUSD',
+  NATGAS: 'C:XNGUSD',
+  COPPER: 'C:XCUUSD',
 };
 
 // Rough multipliers: Polygon forex gives bid/ask mid; we treat it as a trade print.
@@ -68,7 +71,7 @@ async function fetchPolygonCandles(polygonTicker, apiKey) {
 class CommodityFeed extends EventEmitter {
   constructor(symbols, apiKey) {
     super();
-    this.symbols = symbols; // e.g. ['GOLD', 'SILVER', 'OIL']
+    this.symbols = symbols; // e.g. ['GOLD', 'SILVER', 'OIL', 'NATGAS', 'COPPER']
     this.apiKey = apiKey || '';
     this.ws = null;
     this.reconnectDelay = 2000;
@@ -79,7 +82,7 @@ class CommodityFeed extends EventEmitter {
 
   connect() {
     if (!this.apiKey) {
-      console.warn('[commodity-feed] No POLYGON_API_KEY set — commodity symbols (GOLD/SILVER/OIL) will have no live price feed.');
+      console.warn('[commodity-feed] No POLYGON_API_KEY set — commodity symbols (GOLD/SILVER/OIL/NATGAS/COPPER) will have no live price feed.');
       return;
     }
     this.closedByUser = false;
@@ -186,7 +189,7 @@ class CommodityFeed extends EventEmitter {
 
 /**
  * Seeds historical candles for commodity symbols via Polygon REST.
- * Returns a map: { GOLD: [...candles], SILVER: [...candles], OIL: [...candles] }
+ * Returns a map: { GOLD: [...candles], SILVER: [...candles], OIL: [...candles], NATGAS: [...candles], COPPER: [...candles] }
  * Gracefully returns empty arrays when the API key is missing or the request fails.
  */
 async function seedCommodityCandles(symbols, apiKey) {

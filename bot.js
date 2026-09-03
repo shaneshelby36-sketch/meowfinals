@@ -108,10 +108,12 @@ const SERIES_BY_SYMBOL = {
   GOLD: 'KXGOLD15M',
   SILVER: 'KXSILVER15M',
   OIL: 'KXWTI15M',
+  NATGAS: 'KXNATGAS15M',
+  COPPER: 'KXCOPPER15M',
 };
 
 /** Commodity (non-crypto) symbols — slower moving, different late-hold defaults. */
-const COMMODITY_SYMBOLS = new Set(['GOLD', 'SILVER', 'OIL']);
+const COMMODITY_SYMBOLS = new Set(['GOLD', 'SILVER', 'OIL', 'NATGAS', 'COPPER']);
 
 /** Returns true if this symbol is a commodity (Gold/Silver/Oil). */
 function isCommoditySymbol(symbol) {
@@ -313,9 +315,9 @@ const MODEL_SETUPS = [
   },
   {
     id: 'commodities',
-    label: 'Commodities (Gold / Silver / Oil)',
-    why: 'Gold, Silver, Oil — slow-moving markets; holds to 7m remaining, banks at +20–25¢. Stop at −15¢. Needs POLYGON_API_KEY.',
-    autoTradeSymbols: 'GOLD,SILVER,OIL',
+    label: 'Commodities (Gold / Silver / Oil / NatGas / Copper)',
+    why: 'Gold, Silver, Oil, NatGas, Copper — slow-moving markets; holds to 7m remaining, banks at +20–25¢. Stop at −15¢. Needs POLYGON_API_KEY.',
+    autoTradeSymbols: 'GOLD,SILVER,OIL,NATGAS,COPPER',
     modelMinConfidence: 55,
     modelEntryLiveLeanMarginPct: 3,
     modelBankGreenCents: 7,
@@ -325,12 +327,18 @@ const MODEL_SETUPS = [
     commodityStopCentsGold: 15,
     commodityStopCentsSilver: 15,
     commodityStopCentsOil: 15,
+    commodityStopCentsNatgas: 15,
+    commodityStopCentsCopper: 15,
     commodityTpCentsGold: 25,
     commodityTpCentsSilver: 25,
     commodityTpCentsOil: 20,
+    commodityTpCentsNatgas: 20,
+    commodityTpCentsCopper: 20,
     commodityTrailCentsGold: 15,
     commodityTrailCentsSilver: 15,
     commodityTrailCentsOil: 12,
+    commodityTrailCentsNatgas: 12,
+    commodityTrailCentsCopper: 12,
     commodityLateBarrierMinutes: 7,
     commoditySettleCloseMinutes: 3.5,
   },
@@ -872,6 +880,8 @@ const MODEL_MIN_ENTRY_LEAN_HYPE_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_GOLD_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_SILVER_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_OIL_DEFAULT = 54; // OIL requires 54% lean to enter (vs global 75%)
+const MODEL_MIN_ENTRY_LEAN_NATGAS_DEFAULT = 0;
+const MODEL_MIN_ENTRY_LEAN_COPPER_DEFAULT = 0;
 
 // Per-commodity overrides for stake ($), max-loss stop (¢), TP bank (¢), and trail stop (¢).
 // 0 = fall back to the global setting for that parameter.
@@ -1234,7 +1244,7 @@ function modelTakeProfitMeetsFloor(trade, exitPriceCents, config = {}) {
   if (Math.round(exit) >= MODEL_RICH_BANK_CENTS_DEFAULT) return true;
   // For commodity trades, prefer the per-commodity TP override as the floor.
   const sym = String(trade && trade.symbol || '').toUpperCase();
-  if (['GOLD', 'SILVER', 'OIL'].includes(sym)) {
+  if (isCommoditySymbol(sym)) {
     const commodityTp = modelCommodityTpCents(sym, config);
     if (commodityTp > 0) return Math.round(exit - entry) >= commodityTp;
   }
@@ -1258,7 +1268,7 @@ function modelBankGreenCents(config = {}) {
  */
 function modelBankGreenCentsForTrade(trade, config = {}) {
   const sym = String(trade && trade.symbol || '').toUpperCase();
-  if (['GOLD', 'SILVER', 'OIL'].includes(sym)) {
+  if (isCommoditySymbol(sym)) {
     const override = modelCommodityTpCents(sym, config);
     if (override > 0) return override;
   }
@@ -1680,7 +1690,7 @@ function modelMinEntryLeanPctForSymbol(symbol, config = {}) {
  */
 function modelCommodityStakeDollars(symbol, config = {}) {
   const sym = String(symbol || '').toUpperCase();
-  if (!['GOLD', 'SILVER', 'OIL'].includes(sym)) return 0;
+  if (!isCommoditySymbol(sym)) return 0;
   const key = `commodityStakeDollars${sym.charAt(0)}${sym.slice(1).toLowerCase()}`;
   const n = Number(config[key]);
   if (Number.isFinite(n) && n > 0) return +n.toFixed(2);
@@ -1694,7 +1704,7 @@ function modelCommodityStakeDollars(symbol, config = {}) {
  */
 function modelCommodityStopCents(symbol, config = {}) {
   const sym = String(symbol || '').toUpperCase();
-  if (!['GOLD', 'SILVER', 'OIL'].includes(sym)) return 0;
+  if (!isCommoditySymbol(sym)) return 0;
   const key = `commodityStopCents${sym.charAt(0)}${sym.slice(1).toLowerCase()}`;
   const n = Number(config[key]);
   if (Number.isFinite(n) && n > 0) return Math.round(n);
@@ -1710,7 +1720,7 @@ function modelCommodityStopCents(symbol, config = {}) {
  */
 function modelCommodityTpCents(symbol, config = {}) {
   const sym = String(symbol || '').toUpperCase();
-  if (!['GOLD', 'SILVER', 'OIL'].includes(sym)) return 0;
+  if (!isCommoditySymbol(sym)) return 0;
   const key = `commodityTpCents${sym.charAt(0)}${sym.slice(1).toLowerCase()}`;
   const n = Number(config[key]);
   if (Number.isFinite(n) && n === 99) return 99; // sentinel: ride to settlement
@@ -1730,7 +1740,7 @@ function modelCommodityRideToSettle(symbol, config = {}) {
  */
 function modelCommodityTrailCents(symbol, config = {}) {
   const sym = String(symbol || '').toUpperCase();
-  if (!['GOLD', 'SILVER', 'OIL'].includes(sym)) return 0;
+  if (!isCommoditySymbol(sym)) return 0;
   const key = `commodityTrailCents${sym.charAt(0)}${sym.slice(1).toLowerCase()}`;
   const n = Number(config[key]);
   if (Number.isFinite(n) && n > 0) return Math.round(n);
@@ -1743,7 +1753,7 @@ function modelCommodityTrailCents(symbol, config = {}) {
  */
 function modelTrailCentsForTrade(trade, config = {}) {
   const sym = String(trade && trade.symbol || '').toUpperCase();
-  if (['GOLD', 'SILVER', 'OIL'].includes(sym)) {
+  if (isCommoditySymbol(sym)) {
     const override = modelCommodityTrailCents(sym, config);
     if (override > 0) return override;
   }
@@ -1754,20 +1764,29 @@ function modelTrailCentsForTrade(trade, config = {}) {
 function modelMinEntryLeanGate({ window, side, config = {}, symbol, priceCents } = {}) {
   const need = modelMinEntryLeanPctForSymbol(symbol, config);
   if (!(need > 0)) return { ok: true, skipped: true };
-  // Lean requirement only applies below the min-entry price threshold.
-  // At or above min-entry the lean gate is skipped for all symbols —
-  // set the lean slider to 0 to disable entirely, or to N to enforce
-  // lean only on sub-min-entry entries.
+  // Lean requirement only applies below a price threshold.
+  // For commodities: threshold = commodityMinEntryCents (e.g. 70¢).
+  // For crypto: threshold = modelLeanSkipAboveCents if set (e.g. 80¢),
+  //   otherwise falls back to modelMinEntryCents.
+  // At or above the threshold the lean gate is skipped entirely.
   if (priceCents != null) {
-    const commodityMin = symbol && isCommoditySymbol(symbol)
-      ? Number(config.commodityMinEntryCents)
-      : NaN;
-    const minEntry = Number.isFinite(commodityMin) && commodityMin > 0
-      ? commodityMin
-      : Number.isFinite(Number(config.modelMinEntryCents))
-        ? Number(config.modelMinEntryCents)
-        : MODEL_MIN_ENTRY_DEFAULT_CENTS;
-    if (Number(priceCents) >= minEntry) return { ok: true, skipped: true };
+    let skipAbove;
+    if (symbol && isCommoditySymbol(symbol)) {
+      const commodityMin = Number(config.commodityMinEntryCents);
+      skipAbove = Number.isFinite(commodityMin) && commodityMin > 0
+        ? commodityMin
+        : Number.isFinite(Number(config.modelMinEntryCents))
+          ? Number(config.modelMinEntryCents)
+          : MODEL_MIN_ENTRY_DEFAULT_CENTS;
+    } else {
+      const cryptoSkip = Number(config.modelLeanSkipAboveCents);
+      skipAbove = Number.isFinite(cryptoSkip) && cryptoSkip > 0
+        ? cryptoSkip
+        : Number.isFinite(Number(config.modelMinEntryCents))
+          ? Number(config.modelMinEntryCents)
+          : MODEL_MIN_ENTRY_DEFAULT_CENTS;
+    }
+    if (Number(priceCents) >= skipAbove) return { ok: true, skipped: true };
   }
   const held = modelHeldSideProb(window, side);
   if (!Number.isFinite(held)) {
@@ -1801,7 +1820,7 @@ function modelMaxAdverseCents(config = {}) {
  */
 function modelMaxAdverseCentsForTrade(trade, config = {}) {
   const sym = String(trade && trade.symbol || '').toUpperCase();
-  if (['GOLD', 'SILVER', 'OIL'].includes(sym)) {
+  if (isCommoditySymbol(sym)) {
     const override = modelCommodityStopCents(sym, config);
     if (override > 0) return override;
   }
@@ -1859,7 +1878,7 @@ function modelMaxLossCents(config = {}) {
  */
 function modelMaxLossCentsForTrade(trade, config = {}) {
   const sym = String(trade && trade.symbol || '').toUpperCase();
-  if (['GOLD', 'SILVER', 'OIL'].includes(sym)) {
+  if (isCommoditySymbol(sym)) {
     const override = modelCommodityStopCents(sym, config);
     if (override > 0) return override;
   }
@@ -3202,6 +3221,8 @@ function modelKalshiFavoriteGate({ market, side, priceCents, config = {} } = {})
 
 /** Default model-entry cutoff. It must sit outside the late-exit zone with margin. */
 const MODEL_MIN_MINUTES_TO_OPEN_DEFAULT = 2.5;
+/** Max minutes remaining allowed for a new entry. 0 = off (no early-entry block). */
+const MODEL_MAX_MINUTES_TO_OPEN_DEFAULT = 0;
 const MODEL_PEAK_TOUCH_TP_DEFAULT = 10;
 const MODEL_PEAK_TOUCH_WINDOW_DEFAULT = 2;
 /** Confidence required to allow entries below the normal min. */
@@ -3759,6 +3780,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'assetPinnedSymbols',
   'assetExcludedSymbols',
   'modelMinEntryLeanPct',
+  'modelLeanSkipAboveCents',
   'modelMinEntryLeanPctSOL',
   'modelMinEntryLeanPctBTC',
   'modelMinEntryLeanPctETH',
@@ -3770,6 +3792,8 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelMinEntryLeanPctGold',
   'modelMinEntryLeanPctSilver',
   'modelMinEntryLeanPctOil',
+  'modelMinEntryLeanPctNatgas',
+  'modelMinEntryLeanPctCopper',
   'modelSoftLeanMarginPct',
   'modelSignalDominanceMin',
   'modelTrailCents',
@@ -3819,20 +3843,29 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelOpenGraceMs',
   'modelMaxEntrySpreadCents',
   'modelMinMinutesToOpen',
+  'modelMaxMinutesToOpen',
   'modelPeakTouchTp',
   'modelPeakTouchWindow',
   'commodityStakeDollarsGold',
   'commodityStakeDollarsSilver',
   'commodityStakeDollarsOil',
+  'commodityStakeDollarsNatgas',
+  'commodityStakeDollarsCopper',
   'commodityStopCentsGold',
   'commodityStopCentsSilver',
   'commodityStopCentsOil',
+  'commodityStopCentsNatgas',
+  'commodityStopCentsCopper',
   'commodityTpCentsGold',
   'commodityTpCentsSilver',
   'commodityTpCentsOil',
+  'commodityTpCentsNatgas',
+  'commodityTpCentsCopper',
   'commodityTrailCentsGold',
   'commodityTrailCentsSilver',
   'commodityTrailCentsOil',
+  'commodityTrailCentsNatgas',
+  'commodityTrailCentsCopper',
   'commodityMinEntryCents',
   'commodityMaxEntryCents',
   'commoditySettleCloseMinutes',
@@ -4959,6 +4992,7 @@ class TradingBot {
       modelExtremeLiveLeanExitPct: MODEL_EXTREME_LIVE_LEAN_EXIT_PCT_DEFAULT,
       modelEntryLiveLeanMarginPct: MODEL_ENTRY_LIVE_LEAN_MARGIN_DEFAULT,
       modelMinEntryLeanPct: MODEL_MIN_ENTRY_LEAN_PCT_DEFAULT,
+      modelLeanSkipAboveCents: 0,
       modelMinEntryLeanPctSOL: MODEL_MIN_ENTRY_LEAN_SOL_DEFAULT,
       modelMinEntryLeanPctBTC: MODEL_MIN_ENTRY_LEAN_BTC_DEFAULT,
       modelMinEntryLeanPctETH: MODEL_MIN_ENTRY_LEAN_ETH_DEFAULT,
@@ -4970,6 +5004,8 @@ class TradingBot {
       modelMinEntryLeanPctGold: MODEL_MIN_ENTRY_LEAN_GOLD_DEFAULT,
       modelMinEntryLeanPctSilver: MODEL_MIN_ENTRY_LEAN_SILVER_DEFAULT,
       modelMinEntryLeanPctOil: MODEL_MIN_ENTRY_LEAN_OIL_DEFAULT,
+      modelMinEntryLeanPctNatgas: MODEL_MIN_ENTRY_LEAN_NATGAS_DEFAULT,
+      modelMinEntryLeanPctCopper: MODEL_MIN_ENTRY_LEAN_COPPER_DEFAULT,
       modelSoftLeanMarginPct: MODEL_SOFT_LEAN_MARGIN_DEFAULT,
       modelSignalDominanceMin: MODEL_SIGNAL_DOMINANCE_MIN_DEFAULT,
       modelTrailCents: MODEL_TRAIL_CENTS_DEFAULT,
@@ -5001,22 +5037,31 @@ class TradingBot {
       modelOpenGraceMs: MODEL_OPEN_GRACE_MS_DEFAULT,
       modelMaxEntrySpreadCents: MODEL_MAX_ENTRY_SPREAD_CENTS_DEFAULT,
       modelMinMinutesToOpen: MODEL_MIN_MINUTES_TO_OPEN_DEFAULT,
+      modelMaxMinutesToOpen: MODEL_MAX_MINUTES_TO_OPEN_DEFAULT,
       modelPeakTouchTp: MODEL_PEAK_TOUCH_TP_DEFAULT,
       modelPeakTouchWindow: MODEL_PEAK_TOUCH_WINDOW_DEFAULT,
       // Per-commodity overrides: 0/unset = use code default (TP=30¢, stop=15¢, stake=$0=global).
       commodityStakeDollarsGold: MODEL_COMMODITY_STAKE_DEFAULT,
       commodityStakeDollarsSilver: MODEL_COMMODITY_STAKE_DEFAULT,
       commodityStakeDollarsOil: MODEL_COMMODITY_STAKE_DEFAULT,
+      commodityStakeDollarsNatgas: MODEL_COMMODITY_STAKE_DEFAULT,
+      commodityStakeDollarsCopper: MODEL_COMMODITY_STAKE_DEFAULT,
       commodityStopCentsGold: MODEL_COMMODITY_STOP_CENTS_DEFAULT,
       commodityStopCentsSilver: MODEL_COMMODITY_STOP_CENTS_DEFAULT,
       commodityStopCentsOil: MODEL_COMMODITY_STOP_CENTS_DEFAULT,
+      commodityStopCentsNatgas: MODEL_COMMODITY_STOP_CENTS_DEFAULT,
+      commodityStopCentsCopper: MODEL_COMMODITY_STOP_CENTS_DEFAULT,
       commodityTpCentsGold: MODEL_COMMODITY_TP_CENTS_DEFAULT,
       commodityTpCentsSilver: MODEL_COMMODITY_TP_CENTS_DEFAULT,
       commodityTpCentsOil: MODEL_COMMODITY_TP_CENTS_DEFAULT,
+      commodityTpCentsNatgas: MODEL_COMMODITY_TP_CENTS_DEFAULT,
+      commodityTpCentsCopper: MODEL_COMMODITY_TP_CENTS_DEFAULT,
       // Per-commodity trail stop (¢ pullback from peak; 0 = use global modelTrailCents).
       commodityTrailCentsGold: MODEL_COMMODITY_TRAIL_CENTS_DEFAULT,
       commodityTrailCentsSilver: MODEL_COMMODITY_TRAIL_CENTS_DEFAULT,
       commodityTrailCentsOil: MODEL_COMMODITY_TRAIL_CENTS_DEFAULT,
+      commodityTrailCentsNatgas: MODEL_COMMODITY_TRAIL_CENTS_DEFAULT,
+      commodityTrailCentsCopper: MODEL_COMMODITY_TRAIL_CENTS_DEFAULT,
       // Per-commodity entry floor (0 = use global modelMinEntryCents).
       commodityMinEntryCents: 0,
       commodityMaxEntryCents: 0,
@@ -11766,8 +11811,8 @@ class TradingBot {
       return null;
     }
 
-    // GOLD and SILVER are mutually exclusive — only one precious metal at a time.
-    // OIL can run alongside either GOLD or SILVER.
+    // Precious metals are mutually exclusive — only one of GOLD/SILVER at a time.
+    // OIL, NATGAS, COPPER can run alongside any precious metal.
     if (symbol === 'GOLD' || symbol === 'SILVER') {
       const conflicting = this.openTrades.find(
         (t) => t && (t.symbol === 'GOLD' || t.symbol === 'SILVER') && t.symbol !== symbol
@@ -11845,6 +11890,13 @@ class TradingBot {
     if (minMinutesToOpen > 0 && minutesRemaining < minMinutesToOpen) {
       say(
         `Waiting: ${symbol} model — only ${minutesRemaining.toFixed(1)} min left (no new entries in last ${minMinutesToOpen}m).`
+      );
+      return null;
+    }
+    const maxMinutesToOpen = Number(this.config.modelMaxMinutesToOpen);
+    if (Number.isFinite(maxMinutesToOpen) && maxMinutesToOpen > 0 && minutesRemaining > maxMinutesToOpen) {
+      say(
+        `Waiting: ${symbol} model — ${minutesRemaining.toFixed(1)} min left, waiting until ≤${maxMinutesToOpen}m (early-entry block).`
       );
       return null;
     }

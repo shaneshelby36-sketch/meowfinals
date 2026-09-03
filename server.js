@@ -165,7 +165,7 @@ const CORS_ORIGIN = process.env.CORS_ORIGIN || '*';
 const POLYGON_API_KEY = process.env.POLYGON_API_KEY || '';
 
 // Commodity symbols tracked via Polygon (not available on Coinbase).
-const COMMODITY_PRODUCT_SYMBOLS = ['GOLD', 'SILVER', 'OIL'];
+const COMMODITY_PRODUCT_SYMBOLS = ['GOLD', 'SILVER', 'OIL', 'NATGAS', 'COPPER'];
 
 const SYMBOL_OF = {
   'BTC-USD': 'BTC',
@@ -251,7 +251,7 @@ async function seedAll() {
   // indicators compute immediately (returning neutral values with no real history,
   // which is correct). Live ticks from the recompute loop will replace these over time.
   const { marketStrikePrice: msp } = require('./kalshiClient');
-  const SERIES_BY_SYMBOL_LOCAL = { GOLD: 'KXGOLD15M', SILVER: 'KXSILVER15M', OIL: 'KXWTI15M' };
+  const SERIES_BY_SYMBOL_LOCAL = { GOLD: 'KXGOLD15M', SILVER: 'KXSILVER15M', OIL: 'KXWTI15M', NATGAS: 'KXNATGAS15M', COPPER: 'KXCOPPER15M' };
   for (const sym of COMMODITY_PRODUCT_SYMBOLS) {
     if (state[sym].series.ready(60)) continue; // already seeded via Polygon
     try {
@@ -879,7 +879,7 @@ app.get("/", (req, res) => {
         counts[sym] = state[sym].series.candles.length;
       }
       saveCommodityCandleCache();
-      res.json({ ok: true, counts, message: `Fetched: GOLD ${counts.GOLD}, SILVER ${counts.SILVER}, OIL ${counts.OIL} candles.` });
+      res.json({ ok: true, counts, message: `Fetched: GOLD ${counts.GOLD}, SILVER ${counts.SILVER}, OIL ${counts.OIL}, NATGAS ${counts.NATGAS}, COPPER ${counts.COPPER} candles.` });
     } catch (err) {
       res.status(500).json({ ok: false, message: `Fetch failed: ${err.message}` });
     }
@@ -1097,7 +1097,7 @@ app.get("/", (req, res) => {
       console.log(`[backtest] fetching ${hours}h of ${fetchSymbols.join(',')} history…`);
       const candlesBySymbol = {};
       for (const sym of fetchSymbols) {
-        // Commodities (GOLD/SILVER/OIL) come from Polygon via the live state,
+        // Commodities (GOLD/SILVER/OIL/NATGAS/COPPER) come from Polygon via the live state,
         // not Coinbase — pull them directly from in-memory candle history.
         if (COMMODITY_PRODUCT_SYMBOLS.includes(sym)) {
           const s = state[sym];

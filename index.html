@@ -501,7 +501,15 @@
               <input id="bot-model-min-entry-lean" type="range" min="0" max="95" step="1" />
               <span class="slider-value" id="bot-model-min-entry-lean-value">—</span>
             </div>
-            <span class="field-hint">Held-side live prob must be at least this to open — but only when price is <em>below</em> the MODEL min entry threshold. At or above min-entry this lean check is skipped. Default <strong>65%</strong>. Per-asset overrides below take priority. <strong>0</strong> = off.</span>
+            <span class="field-hint">Held-side live prob must be at least this to open — but only when price is <em>below</em> the lean skip threshold. At or above that threshold the lean check is skipped. Default <strong>65%</strong>. Per-asset overrides below take priority. <strong>0</strong> = off.</span>
+          </label>
+
+          <label>MODEL lean skip above (¢)
+            <div class="slider-row">
+              <input id="bot-model-lean-skip-above" type="range" min="0" max="99" step="1" />
+              <span class="slider-value" id="bot-model-lean-skip-above-value">—</span>
+            </div>
+            <span class="field-hint">Crypto: skip the lean gate when ask is at or above this price (e.g. 80 = no lean required at ≥80¢). <strong>0</strong> = use MODEL min entry as the threshold.</span>
           </label>
           <label>MODEL min entry lean — SOL (%)
             <div class="slider-row">
@@ -580,8 +588,22 @@
             </div>
             <span class="field-hint">OIL (WTI) lean required to enter <em>below</em> the commodity min-entry price. At or above min-entry this lean check is skipped. <strong>0</strong> = use global (or off if global is 0).</span>
           </label>
+          <label>MODEL min entry lean — NATGAS (%)
+            <div class="slider-row">
+              <input id="bot-model-min-entry-lean-natgas" type="range" min="0" max="95" step="1" />
+              <span class="slider-value" id="bot-model-min-entry-lean-natgas-value">—</span>
+            </div>
+            <span class="field-hint">NATGAS lean required to enter <em>below</em> the commodity min-entry price. At or above min-entry this lean check is skipped. <strong>0</strong> = use global (or off if global is 0).</span>
+          </label>
+          <label>MODEL min entry lean — COPPER (%)
+            <div class="slider-row">
+              <input id="bot-model-min-entry-lean-copper" type="range" min="0" max="95" step="1" />
+              <span class="slider-value" id="bot-model-min-entry-lean-copper-value">—</span>
+            </div>
+            <span class="field-hint">COPPER lean required to enter <em>below</em> the commodity min-entry price. At or above min-entry this lean check is skipped. <strong>0</strong> = use global (or off if global is 0).</span>
+          </label>
 
-          <h4 class="bot-panel-subhead" style="border-top:2px solid #10b981;padding-top:8px;margin-top:12px;color:#10b981;">🎯 Commodity overrides (Gold / Silver / Oil)</h4>
+          <h4 class="bot-panel-subhead" style="border-top:2px solid #10b981;padding-top:8px;margin-top:12px;color:#10b981;">🎯 Commodity overrides (Gold / Silver / Oil / NatGas / Copper)</h4>
           <div class="commodity-candle-row">
             <p class="field-hint" style="margin:0;">All sliders default to <strong>0 = use global</strong>. Candles load from Polygon on startup — fetch fresh ones anytime.</p>
             <button type="button" class="btn-secondary" id="bot-commodity-fetch-candles">⟳ Fetch candles now</button>
@@ -670,6 +692,50 @@
             <span class="field-hint">OIL TP target (¢ green). <strong>0</strong> = use global. <strong>99</strong> = ride to settlement (no TP).</span>
           </label>
 
+          <label>🎯 NATGAS — stake ($)
+            <div class="slider-row">
+              <input id="bot-commodity-stake-natgas" type="range" min="0" max="50" step="0.5" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-stake-natgas-value">—</span>
+            </div>
+            <span class="field-hint">NATGAS stake per trade ($). <strong>0</strong> = use global stakeDollars.</span>
+          </label>
+          <label>🎯 NATGAS — stop (¢)
+            <div class="slider-row">
+              <input id="bot-commodity-stop-natgas" type="range" min="0" max="50" step="1" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-stop-natgas-value">—</span>
+            </div>
+            <span class="field-hint">NATGAS max-loss stop (¢ below entry). <strong>0</strong> = use global modelMaxLossCents.</span>
+          </label>
+          <label>🎯 NATGAS — TP bank (¢)
+            <div class="slider-row">
+              <input id="bot-commodity-tp-natgas" type="range" min="0" max="99" step="1" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-tp-natgas-value">—</span>
+            </div>
+            <span class="field-hint">NATGAS TP target (¢ green). <strong>0</strong> = use global. <strong>99</strong> = ride to settlement (no TP).</span>
+          </label>
+
+          <label>🎯 COPPER — stake ($)
+            <div class="slider-row">
+              <input id="bot-commodity-stake-copper" type="range" min="0" max="50" step="0.5" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-stake-copper-value">—</span>
+            </div>
+            <span class="field-hint">COPPER stake per trade ($). <strong>0</strong> = use global stakeDollars.</span>
+          </label>
+          <label>🎯 COPPER — stop (¢)
+            <div class="slider-row">
+              <input id="bot-commodity-stop-copper" type="range" min="0" max="50" step="1" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-stop-copper-value">—</span>
+            </div>
+            <span class="field-hint">COPPER max-loss stop (¢ below entry). <strong>0</strong> = use global modelMaxLossCents.</span>
+          </label>
+          <label>🎯 COPPER — TP bank (¢)
+            <div class="slider-row">
+              <input id="bot-commodity-tp-copper" type="range" min="0" max="99" step="1" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-tp-copper-value">—</span>
+            </div>
+            <span class="field-hint">COPPER TP target (¢ green). <strong>0</strong> = use global. <strong>99</strong> = ride to settlement (no TP).</span>
+          </label>
+
           <label>🛤️ GOLD — trail stop (¢ from peak)
             <div class="slider-row">
               <input id="bot-commodity-trail-gold" type="range" min="0" max="30" step="1" style="border:2px solid #10b981;" />
@@ -688,6 +754,20 @@
             <div class="slider-row">
               <input id="bot-commodity-trail-oil" type="range" min="0" max="30" step="1" style="border:2px solid #10b981;" />
               <span class="slider-value" id="bot-commodity-trail-oil-value">—</span>
+            </div>
+            <span class="field-hint">Once +trailArm¢ green, exit if bid drops this far from peak. <strong>0</strong> = use global modelTrailCents.</span>
+          </label>
+          <label>🛤️ NATGAS — trail stop (¢ from peak)
+            <div class="slider-row">
+              <input id="bot-commodity-trail-natgas" type="range" min="0" max="30" step="1" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-trail-natgas-value">—</span>
+            </div>
+            <span class="field-hint">Once +trailArm¢ green, exit if bid drops this far from peak. <strong>0</strong> = use global modelTrailCents.</span>
+          </label>
+          <label>🛤️ COPPER — trail stop (¢ from peak)
+            <div class="slider-row">
+              <input id="bot-commodity-trail-copper" type="range" min="0" max="30" step="1" style="border:2px solid #10b981;" />
+              <span class="slider-value" id="bot-commodity-trail-copper-value">—</span>
             </div>
             <span class="field-hint">Once +trailArm¢ green, exit if bid drops this far from peak. <strong>0</strong> = use global modelTrailCents.</span>
           </label>
@@ -912,6 +992,14 @@
               <span class="slider-value" id="bot-model-min-open-value">—</span>
             </div>
             <span class="field-hint">Default <strong>2.5</strong>. Block new MODEL entries in the last N minutes. If a trade opens anyway (slipped through), it will only exit at flat-or-better. <strong>0</strong> = off.</span>
+          </label>
+
+          <label>MODEL early-entry block (max min remaining)
+            <div class="slider-row">
+              <input id="bot-model-max-open" type="range" min="0" max="15" step="0.5" />
+              <span class="slider-value" id="bot-model-max-open-value">—</span>
+            </div>
+            <span class="field-hint">Block entries when more than N minutes remain in the window (e.g. 12 = wait until ≤12 min left, skipping the first 3 min of a 15-min window). <strong>0</strong> = off.</span>
           </label>
           <label style="border: 2px solid #10b981; border-radius: 6px; padding: 8px;">🎯 MODEL peak-touch TP (touches needed)
             <div class="slider-row">

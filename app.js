@@ -1756,6 +1756,7 @@ const SLIDER_UNITS = {
   'bot-minentries': (v) => `${Math.round(v)}¢`,
   'bot-model-confidence': (v) => `${Math.round(v)}%`,
   'bot-model-min-entry-lean': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-model-lean-skip-above': (v) => (Number(v) <= 0 ? 'min-entry' : `≥${Math.round(v)}¢`),
   'bot-model-min-entry-lean-sol': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-min-entry-lean-btc': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-min-entry-lean-eth': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
@@ -1767,6 +1768,8 @@ const SLIDER_UNITS = {
   'bot-model-min-entry-lean-gold': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-min-entry-lean-silver': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-min-entry-lean-oil': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-model-min-entry-lean-natgas': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
+  'bot-model-min-entry-lean-copper': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-commodity-min-entry': (v) => (Number(v) <= 0 ? 'global' : `${Math.round(v)}¢`),
   'bot-commodity-max-entry': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}¢`),
   'bot-commodity-stake-gold': (v) => (Number(v) <= 0 ? 'global' : `$${parseFloat(v).toFixed(2)}`),
@@ -1775,12 +1778,20 @@ const SLIDER_UNITS = {
   'bot-commodity-stop-gold': (v) => (Number(v) <= 0 ? 'global' : `−${Math.round(v)}¢`),
   'bot-commodity-stop-silver': (v) => (Number(v) <= 0 ? 'global' : `−${Math.round(v)}¢`),
   'bot-commodity-stop-oil': (v) => (Number(v) <= 0 ? 'global' : `−${Math.round(v)}¢`),
+  'bot-commodity-stop-natgas': (v) => (Number(v) <= 0 ? 'global' : `−${Math.round(v)}¢`),
+  'bot-commodity-stop-copper': (v) => (Number(v) <= 0 ? 'global' : `−${Math.round(v)}¢`),
   'bot-commodity-tp-gold': (v) => (Number(v) <= 0 ? 'global' : Number(v) >= 99 ? 'settle' : `+${Math.round(v)}¢`),
   'bot-commodity-tp-silver': (v) => (Number(v) <= 0 ? 'global' : Number(v) >= 99 ? 'settle' : `+${Math.round(v)}¢`),
   'bot-commodity-tp-oil': (v) => (Number(v) <= 0 ? 'global' : Number(v) >= 99 ? 'settle' : `+${Math.round(v)}¢`),
+  'bot-commodity-tp-natgas': (v) => (Number(v) <= 0 ? 'global' : Number(v) >= 99 ? 'settle' : `+${Math.round(v)}¢`),
+  'bot-commodity-tp-copper': (v) => (Number(v) <= 0 ? 'global' : Number(v) >= 99 ? 'settle' : `+${Math.round(v)}¢`),
+  'bot-commodity-stake-natgas': (v) => (Number(v) <= 0 ? 'global' : `$${parseFloat(v).toFixed(2)}`),
+  'bot-commodity-stake-copper': (v) => (Number(v) <= 0 ? 'global' : `$${parseFloat(v).toFixed(2)}`),
   'bot-commodity-trail-gold': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢ from peak`),
   'bot-commodity-trail-silver': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢ from peak`),
   'bot-commodity-trail-oil': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢ from peak`),
+  'bot-commodity-trail-natgas': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢ from peak`),
+  'bot-commodity-trail-copper': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢ from peak`),
   'bot-model-live-favor': (v) => (Number(v) <= 0 ? 'any lead' : `≥${Math.round(v)} pts`),
   'bot-model-min-room-floor': (v) => (Number(v) <= 0 ? 'off' : `≥${Math.round(v)}¢`),
   'bot-model-signal-dom': (v) => {
@@ -1814,6 +1825,7 @@ const SLIDER_UNITS = {
   'bot-model-decay-stall': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-decay-floor': (v) => `${Math.round(v)}%`,
   'bot-model-min-open': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
+  'bot-model-max-open': (v) => (Number(v) <= 0 ? 'off' : `≤${(+v).toFixed(1)} min`),
   'bot-model-peak-touch-tp': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}×`),
   'bot-model-peak-touch-window': (v) => `${Math.round(v)}¢`,
   'bot-model-settle-close': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
@@ -2355,6 +2367,7 @@ function wireSliderDisplays() {
     'bot-model-confidence',
     'bot-model-live-favor',
     'bot-model-min-entry-lean',
+    'bot-model-lean-skip-above',
     'bot-model-min-entry-lean-sol',
     'bot-model-min-entry-lean-btc',
     'bot-model-min-entry-lean-eth',
@@ -2366,20 +2379,30 @@ function wireSliderDisplays() {
     'bot-model-min-entry-lean-gold',
     'bot-model-min-entry-lean-silver',
     'bot-model-min-entry-lean-oil',
+    'bot-model-min-entry-lean-natgas',
+    'bot-model-min-entry-lean-copper',
     'bot-commodity-min-entry',
     'bot-commodity-max-entry',
     'bot-commodity-stake-gold',
     'bot-commodity-stake-silver',
     'bot-commodity-stake-oil',
+    'bot-commodity-stake-natgas',
+    'bot-commodity-stake-copper',
     'bot-commodity-stop-gold',
     'bot-commodity-stop-silver',
     'bot-commodity-stop-oil',
+    'bot-commodity-stop-natgas',
+    'bot-commodity-stop-copper',
     'bot-commodity-tp-gold',
     'bot-commodity-tp-silver',
     'bot-commodity-tp-oil',
+    'bot-commodity-tp-natgas',
+    'bot-commodity-tp-copper',
     'bot-commodity-trail-gold',
     'bot-commodity-trail-silver',
     'bot-commodity-trail-oil',
+    'bot-commodity-trail-natgas',
+    'bot-commodity-trail-copper',
     'bot-model-signal-dom',
     'bot-model-confirm-cross',
     'bot-model-confirm-ext',
@@ -2408,6 +2431,7 @@ function wireSliderDisplays() {
     'bot-model-decay-stall',
     'bot-model-decay-floor',
     'bot-model-min-open',
+    'bot-model-max-open',
     'bot-model-peak-touch-tp',
     'bot-model-peak-touch-window',
     'bot-model-settle-close',
@@ -2539,6 +2563,7 @@ function wireBotConfigAutoSave() {
     'bot-model-confidence',
     'bot-model-live-favor',
     'bot-model-min-entry-lean',
+    'bot-model-lean-skip-above',
     'bot-model-min-entry-lean-sol',
     'bot-model-min-entry-lean-btc',
     'bot-model-min-entry-lean-eth',
@@ -2550,20 +2575,30 @@ function wireBotConfigAutoSave() {
     'bot-model-min-entry-lean-gold',
     'bot-model-min-entry-lean-silver',
     'bot-model-min-entry-lean-oil',
+    'bot-model-min-entry-lean-natgas',
+    'bot-model-min-entry-lean-copper',
     'bot-commodity-stake-gold',
     'bot-commodity-min-entry',
     'bot-commodity-max-entry',
     'bot-commodity-stake-silver',
     'bot-commodity-stake-oil',
+    'bot-commodity-stake-natgas',
+    'bot-commodity-stake-copper',
     'bot-commodity-stop-gold',
     'bot-commodity-stop-silver',
     'bot-commodity-stop-oil',
+    'bot-commodity-stop-natgas',
+    'bot-commodity-stop-copper',
     'bot-commodity-tp-gold',
     'bot-commodity-tp-silver',
     'bot-commodity-tp-oil',
+    'bot-commodity-tp-natgas',
+    'bot-commodity-tp-copper',
     'bot-commodity-trail-gold',
     'bot-commodity-trail-silver',
     'bot-commodity-trail-oil',
+    'bot-commodity-trail-natgas',
+    'bot-commodity-trail-copper',
     'bot-model-signal-dom',
     'bot-model-confirm-cross',
     'bot-model-confirm-ext',
@@ -2592,6 +2627,7 @@ function wireBotConfigAutoSave() {
     'bot-model-decay-stall',
     'bot-model-decay-floor',
     'bot-model-min-open',
+    'bot-model-max-open',
     'bot-model-peak-touch-tp',
     'bot-model-peak-touch-window',
     'bot-model-settle-close',
@@ -2719,6 +2755,8 @@ async function loadBotConfigIntoForm() {
       softLeanDisplay.textContent = v + ' pts';
       softLeanDisplay.dataset.value = v;
     }
+    const modelLeanSkipAbove = document.getElementById('bot-model-lean-skip-above');
+    if (modelLeanSkipAbove) modelLeanSkipAbove.value = c.modelLeanSkipAboveCents != null ? c.modelLeanSkipAboveCents : 0;
     const modelMinEntryLean = document.getElementById('bot-model-min-entry-lean');
     if (modelMinEntryLean) {
       modelMinEntryLean.value =
@@ -2768,6 +2806,10 @@ async function loadBotConfigIntoForm() {
     if (modelMinEntryLeanOIL) {
       modelMinEntryLeanOIL.value = c.modelMinEntryLeanPctOil != null ? c.modelMinEntryLeanPctOil : 0;
     }
+    const modelMinEntryLeanNATGAS = document.getElementById('bot-model-min-entry-lean-natgas');
+    if (modelMinEntryLeanNATGAS) modelMinEntryLeanNATGAS.value = c.modelMinEntryLeanPctNatgas != null ? c.modelMinEntryLeanPctNatgas : 0;
+    const modelMinEntryLeanCOPPER = document.getElementById('bot-model-min-entry-lean-copper');
+    if (modelMinEntryLeanCOPPER) modelMinEntryLeanCOPPER.value = c.modelMinEntryLeanPctCopper != null ? c.modelMinEntryLeanPctCopper : 0;
     // Commodity overrides
     const commodityMinEntry = document.getElementById('bot-commodity-min-entry');
     if (commodityMinEntry) commodityMinEntry.value = c.commodityMinEntryCents != null ? c.commodityMinEntryCents : 0;
@@ -2779,24 +2821,40 @@ async function loadBotConfigIntoForm() {
     if (commodityStakeSilver) commodityStakeSilver.value = c.commodityStakeDollarsSilver != null ? c.commodityStakeDollarsSilver : 0;
     const commodityStakeOil = document.getElementById('bot-commodity-stake-oil');
     if (commodityStakeOil) commodityStakeOil.value = c.commodityStakeDollarsOil != null ? c.commodityStakeDollarsOil : 0;
+    const commodityStakeNatgas = document.getElementById('bot-commodity-stake-natgas');
+    if (commodityStakeNatgas) commodityStakeNatgas.value = c.commodityStakeDollarsNatgas != null ? c.commodityStakeDollarsNatgas : 0;
+    const commodityStakeCopper = document.getElementById('bot-commodity-stake-copper');
+    if (commodityStakeCopper) commodityStakeCopper.value = c.commodityStakeDollarsCopper != null ? c.commodityStakeDollarsCopper : 0;
     const commodityStopGold = document.getElementById('bot-commodity-stop-gold');
     if (commodityStopGold) commodityStopGold.value = c.commodityStopCentsGold != null ? c.commodityStopCentsGold : 0;
     const commodityStopSilver = document.getElementById('bot-commodity-stop-silver');
     if (commodityStopSilver) commodityStopSilver.value = c.commodityStopCentsSilver != null ? c.commodityStopCentsSilver : 0;
     const commodityStopOil = document.getElementById('bot-commodity-stop-oil');
     if (commodityStopOil) commodityStopOil.value = c.commodityStopCentsOil != null ? c.commodityStopCentsOil : 0;
+    const commodityStopNatgas = document.getElementById('bot-commodity-stop-natgas');
+    if (commodityStopNatgas) commodityStopNatgas.value = c.commodityStopCentsNatgas != null ? c.commodityStopCentsNatgas : 0;
+    const commodityStopCopper = document.getElementById('bot-commodity-stop-copper');
+    if (commodityStopCopper) commodityStopCopper.value = c.commodityStopCentsCopper != null ? c.commodityStopCentsCopper : 0;
     const commodityTpGold = document.getElementById('bot-commodity-tp-gold');
     if (commodityTpGold) commodityTpGold.value = c.commodityTpCentsGold != null ? c.commodityTpCentsGold : 0;
     const commodityTpSilver = document.getElementById('bot-commodity-tp-silver');
     if (commodityTpSilver) commodityTpSilver.value = c.commodityTpCentsSilver != null ? c.commodityTpCentsSilver : 0;
     const commodityTpOil = document.getElementById('bot-commodity-tp-oil');
     if (commodityTpOil) commodityTpOil.value = c.commodityTpCentsOil != null ? c.commodityTpCentsOil : 0;
+    const commodityTpNatgas = document.getElementById('bot-commodity-tp-natgas');
+    if (commodityTpNatgas) commodityTpNatgas.value = c.commodityTpCentsNatgas != null ? c.commodityTpCentsNatgas : 0;
+    const commodityTpCopper = document.getElementById('bot-commodity-tp-copper');
+    if (commodityTpCopper) commodityTpCopper.value = c.commodityTpCentsCopper != null ? c.commodityTpCentsCopper : 0;
     const commodityTrailGold = document.getElementById('bot-commodity-trail-gold');
     if (commodityTrailGold) commodityTrailGold.value = c.commodityTrailCentsGold != null ? c.commodityTrailCentsGold : 0;
     const commodityTrailSilver = document.getElementById('bot-commodity-trail-silver');
     if (commodityTrailSilver) commodityTrailSilver.value = c.commodityTrailCentsSilver != null ? c.commodityTrailCentsSilver : 0;
     const commodityTrailOil = document.getElementById('bot-commodity-trail-oil');
     if (commodityTrailOil) commodityTrailOil.value = c.commodityTrailCentsOil != null ? c.commodityTrailCentsOil : 0;
+    const commodityTrailNatgas = document.getElementById('bot-commodity-trail-natgas');
+    if (commodityTrailNatgas) commodityTrailNatgas.value = c.commodityTrailCentsNatgas != null ? c.commodityTrailCentsNatgas : 0;
+    const commodityTrailCopper = document.getElementById('bot-commodity-trail-copper');
+    if (commodityTrailCopper) commodityTrailCopper.value = c.commodityTrailCentsCopper != null ? c.commodityTrailCentsCopper : 0;
     const modelSignalDom = document.getElementById('bot-model-signal-dom');
     if (modelSignalDom) {
       const dom =
@@ -2910,6 +2968,8 @@ async function loadBotConfigIntoForm() {
     if (modelPeakTouchTp) modelPeakTouchTp.value = c.modelPeakTouchTp != null ? c.modelPeakTouchTp : 10;
     const modelPeakTouchWindow = document.getElementById('bot-model-peak-touch-window');
     if (modelPeakTouchWindow) modelPeakTouchWindow.value = c.modelPeakTouchWindow != null ? c.modelPeakTouchWindow : 2;
+    const modelMaxOpen = document.getElementById('bot-model-max-open');
+    if (modelMaxOpen) modelMaxOpen.value = c.modelMaxMinutesToOpen != null ? c.modelMaxMinutesToOpen : 0;
     const modelMinOpen = document.getElementById('bot-model-min-open');
     if (modelMinOpen) {
       modelMinOpen.value = c.modelMinMinutesToOpen != null ? c.modelMinMinutesToOpen : 4;
@@ -3066,6 +3126,7 @@ async function loadBotConfigIntoForm() {
       'bot-model-confidence',
       'bot-model-live-favor',
       'bot-model-min-entry-lean',
+      'bot-model-lean-skip-above',
       'bot-model-min-entry-lean-sol',
       'bot-model-min-entry-lean-btc',
       'bot-model-min-entry-lean-eth',
@@ -3077,20 +3138,30 @@ async function loadBotConfigIntoForm() {
       'bot-model-min-entry-lean-gold',
       'bot-model-min-entry-lean-silver',
       'bot-model-min-entry-lean-oil',
+      'bot-model-min-entry-lean-natgas',
+      'bot-model-min-entry-lean-copper',
       'bot-commodity-stake-gold',
       'bot-commodity-min-entry',
       'bot-commodity-max-entry',
       'bot-commodity-stake-silver',
       'bot-commodity-stake-oil',
+      'bot-commodity-stake-natgas',
+      'bot-commodity-stake-copper',
       'bot-commodity-stop-gold',
       'bot-commodity-stop-silver',
       'bot-commodity-stop-oil',
+      'bot-commodity-stop-natgas',
+      'bot-commodity-stop-copper',
       'bot-commodity-tp-gold',
       'bot-commodity-tp-silver',
       'bot-commodity-tp-oil',
+      'bot-commodity-tp-natgas',
+      'bot-commodity-tp-copper',
       'bot-commodity-trail-gold',
       'bot-commodity-trail-silver',
       'bot-commodity-trail-oil',
+      'bot-commodity-trail-natgas',
+      'bot-commodity-trail-copper',
       'bot-model-signal-dom',
       'bot-model-confirm-cross',
       'bot-model-confirm-ext',
@@ -3119,6 +3190,7 @@ async function loadBotConfigIntoForm() {
     'bot-model-decay-stall',
     'bot-model-decay-floor',
       'bot-model-min-open',
+      'bot-model-max-open',
       'bot-model-peak-touch-tp',
       'bot-model-peak-touch-window',
       'bot-model-settle-close',
@@ -3295,6 +3367,7 @@ async function saveBotConfig(opts = {}) {
     modelEntryLiveLeanMarginPct: parseFloat(document.getElementById('bot-model-live-favor')?.value || '2'),
     modelSoftLeanMarginPct: parseFloat(document.getElementById('bot-model-soft-lean-value')?.dataset.value || '3'),
     modelMinEntryLeanPct: parseFloat(document.getElementById('bot-model-min-entry-lean')?.value || '65'),
+    modelLeanSkipAboveCents: parseFloat(document.getElementById('bot-model-lean-skip-above')?.value || '0'),
     modelMinEntryLeanPctSOL: parseFloat(document.getElementById('bot-model-min-entry-lean-sol')?.value || '0'),
     modelMinEntryLeanPctBTC: parseFloat(document.getElementById('bot-model-min-entry-lean-btc')?.value || '0'),
     modelMinEntryLeanPctETH: parseFloat(document.getElementById('bot-model-min-entry-lean-eth')?.value || '0'),
@@ -3306,20 +3379,30 @@ async function saveBotConfig(opts = {}) {
     modelMinEntryLeanPctGold: parseFloat(document.getElementById('bot-model-min-entry-lean-gold')?.value || '0'),
     modelMinEntryLeanPctSilver: parseFloat(document.getElementById('bot-model-min-entry-lean-silver')?.value || '0'),
     modelMinEntryLeanPctOil: parseFloat(document.getElementById('bot-model-min-entry-lean-oil')?.value || '0'),
+    modelMinEntryLeanPctNatgas: parseFloat(document.getElementById('bot-model-min-entry-lean-natgas')?.value || '0'),
+    modelMinEntryLeanPctCopper: parseFloat(document.getElementById('bot-model-min-entry-lean-copper')?.value || '0'),
     commodityMinEntryCents: parseFloat(document.getElementById('bot-commodity-min-entry')?.value || '0'),
     commodityMaxEntryCents: parseFloat(document.getElementById('bot-commodity-max-entry')?.value || '0'),
     commodityStakeDollarsGold: parseFloat(document.getElementById('bot-commodity-stake-gold')?.value || '0'),
     commodityStakeDollarsSilver: parseFloat(document.getElementById('bot-commodity-stake-silver')?.value || '0'),
     commodityStakeDollarsOil: parseFloat(document.getElementById('bot-commodity-stake-oil')?.value || '0'),
+    commodityStakeDollarsNatgas: parseFloat(document.getElementById('bot-commodity-stake-natgas')?.value || '0'),
+    commodityStakeDollarsCopper: parseFloat(document.getElementById('bot-commodity-stake-copper')?.value || '0'),
     commodityStopCentsGold: parseFloat(document.getElementById('bot-commodity-stop-gold')?.value || '0'),
     commodityStopCentsSilver: parseFloat(document.getElementById('bot-commodity-stop-silver')?.value || '0'),
     commodityStopCentsOil: parseFloat(document.getElementById('bot-commodity-stop-oil')?.value || '0'),
+    commodityStopCentsNatgas: parseFloat(document.getElementById('bot-commodity-stop-natgas')?.value || '0'),
+    commodityStopCentsCopper: parseFloat(document.getElementById('bot-commodity-stop-copper')?.value || '0'),
     commodityTpCentsGold: parseFloat(document.getElementById('bot-commodity-tp-gold')?.value || '0'),
     commodityTpCentsSilver: parseFloat(document.getElementById('bot-commodity-tp-silver')?.value || '0'),
     commodityTpCentsOil: parseFloat(document.getElementById('bot-commodity-tp-oil')?.value || '0'),
+    commodityTpCentsNatgas: parseFloat(document.getElementById('bot-commodity-tp-natgas')?.value || '0'),
+    commodityTpCentsCopper: parseFloat(document.getElementById('bot-commodity-tp-copper')?.value || '0'),
     commodityTrailCentsGold: parseFloat(document.getElementById('bot-commodity-trail-gold')?.value || '0'),
     commodityTrailCentsSilver: parseFloat(document.getElementById('bot-commodity-trail-silver')?.value || '0'),
     commodityTrailCentsOil: parseFloat(document.getElementById('bot-commodity-trail-oil')?.value || '0'),
+    commodityTrailCentsNatgas: parseFloat(document.getElementById('bot-commodity-trail-natgas')?.value || '0'),
+    commodityTrailCentsCopper: parseFloat(document.getElementById('bot-commodity-trail-copper')?.value || '0'),
     modelSignalDominanceMin: (() => {
       const raw = parseFloat(document.getElementById('bot-model-signal-dom')?.value || '0');
       if (!Number.isFinite(raw) || raw <= 0) return 0;
@@ -3363,6 +3446,7 @@ async function saveBotConfig(opts = {}) {
     modelLeanDecayStallSeconds: parseFloat(document.getElementById('bot-model-decay-stall')?.value || '6'),
     modelLeanDecayFloor: parseFloat(document.getElementById('bot-model-decay-floor')?.value || '85'),
     modelMinMinutesToOpen: parseFloat(document.getElementById('bot-model-min-open')?.value || '2.5'),
+    modelMaxMinutesToOpen: parseFloat(document.getElementById('bot-model-max-open')?.value || '0'),
     modelPeakTouchTp: parseFloat(document.getElementById('bot-model-peak-touch-tp')?.value || '3'),
     modelPeakTouchWindow: parseFloat(document.getElementById('bot-model-peak-touch-window')?.value || '2'),
     modelSettleCloseMinutes: parseFloat(document.getElementById('bot-model-settle-close')?.value || '2.5'),
