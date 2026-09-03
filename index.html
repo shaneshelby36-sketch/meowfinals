@@ -501,7 +501,7 @@
               <input id="bot-model-min-entry-lean" type="range" min="0" max="95" step="1" />
               <span class="slider-value" id="bot-model-min-entry-lean-value">—</span>
             </div>
-            <span class="field-hint">Held-side live prob must be at least this to open (e.g. NO needs ≥65% DOWN). Default <strong>65%</strong>. Per-asset overrides below take priority when set. <strong>0</strong> = off.</span>
+            <span class="field-hint">Held-side live prob must be at least this to open — but only when price is <em>below</em> the MODEL min entry threshold. At or above min-entry this lean check is skipped. Default <strong>65%</strong>. Per-asset overrides below take priority. <strong>0</strong> = off.</span>
           </label>
           <label>MODEL min entry lean — SOL (%)
             <div class="slider-row">

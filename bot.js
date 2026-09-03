@@ -1754,12 +1754,14 @@ function modelTrailCentsForTrade(trade, config = {}) {
 function modelMinEntryLeanGate({ window, side, config = {}, symbol, priceCents } = {}) {
   const need = modelMinEntryLeanPctForSymbol(symbol, config);
   if (!(need > 0)) return { ok: true, skipped: true };
-  // For commodity symbols the lean requirement only applies below the min-entry
-  // price threshold (e.g. <70¢). At or above that price the lean gate is skipped,
-  // making it adjustable: set the lean slider to 0 to disable entirely, or set it
-  // to enforce lean for sub-min-entry entries only.
-  if (symbol && isCommoditySymbol(symbol) && priceCents != null) {
-    const commodityMin = Number(config.commodityMinEntryCents);
+  // Lean requirement only applies below the min-entry price threshold.
+  // At or above min-entry the lean gate is skipped for all symbols —
+  // set the lean slider to 0 to disable entirely, or to N to enforce
+  // lean only on sub-min-entry entries.
+  if (priceCents != null) {
+    const commodityMin = symbol && isCommoditySymbol(symbol)
+      ? Number(config.commodityMinEntryCents)
+      : NaN;
     const minEntry = Number.isFinite(commodityMin) && commodityMin > 0
       ? commodityMin
       : Number.isFinite(Number(config.modelMinEntryCents))
@@ -2627,9 +2629,9 @@ function modelPriceAllowed(priceCents, window, config = {}, symbol = null, side 
       : MODEL_MIN_ENTRY_DEFAULT_CENTS;
   if (!(minEntry > 0) || price >= minEntry) return { ok: true };
 
-  // For commodity symbols below minEntry, require held-side lean ≥ the per-symbol
+  // For any symbol below minEntry, require held-side lean ≥ the per-symbol
   // lean minimum (e.g. 80%). This enforces the rule: price < 70¢ → lean ≥ 80%.
-  if (isCommodity && side) {
+  if (side) {
     const leanMin = modelMinEntryLeanPctForSymbol(symbol, config);
     if (leanMin > 0) {
       const heldProb = modelHeldSideProb(window, side);
