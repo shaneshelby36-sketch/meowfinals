@@ -1771,6 +1771,11 @@ const SLIDER_UNITS = {
   'bot-model-min-entry-lean-natgas': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-min-entry-lean-copper': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-commodity-min-entry': (v) => (Number(v) <= 0 ? 'global' : `${Math.round(v)}¢`),
+  'bot-commodity-min-entry-gold': (v) => (Number(v) <= 0 ? 'global' : `${Math.round(v)}¢`),
+  'bot-commodity-min-entry-silver': (v) => (Number(v) <= 0 ? 'global' : `${Math.round(v)}¢`),
+  'bot-commodity-min-entry-oil': (v) => (Number(v) <= 0 ? 'global' : `${Math.round(v)}¢`),
+  'bot-commodity-min-entry-natgas': (v) => (Number(v) <= 0 ? 'global' : `${Math.round(v)}¢`),
+  'bot-commodity-min-entry-copper': (v) => (Number(v) <= 0 ? 'global' : `${Math.round(v)}¢`),
   'bot-commodity-max-entry': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}¢`),
   'bot-commodity-stake-gold': (v) => (Number(v) <= 0 ? 'global' : `$${parseFloat(v).toFixed(2)}`),
   'bot-commodity-stake-silver': (v) => (Number(v) <= 0 ? 'global' : `$${parseFloat(v).toFixed(2)}`),
@@ -2383,6 +2388,11 @@ function wireSliderDisplays() {
     'bot-model-min-entry-lean-natgas',
     'bot-model-min-entry-lean-copper',
     'bot-commodity-min-entry',
+    'bot-commodity-min-entry-gold',
+    'bot-commodity-min-entry-silver',
+    'bot-commodity-min-entry-oil',
+    'bot-commodity-min-entry-natgas',
+    'bot-commodity-min-entry-copper',
     'bot-commodity-max-entry',
     'bot-commodity-stake-gold',
     'bot-commodity-stake-silver',
@@ -2581,6 +2591,11 @@ function wireBotConfigAutoSave() {
     'bot-model-min-entry-lean-copper',
     'bot-commodity-stake-gold',
     'bot-commodity-min-entry',
+    'bot-commodity-min-entry-gold',
+    'bot-commodity-min-entry-silver',
+    'bot-commodity-min-entry-oil',
+    'bot-commodity-min-entry-natgas',
+    'bot-commodity-min-entry-copper',
     'bot-commodity-max-entry',
     'bot-commodity-stake-silver',
     'bot-commodity-stake-oil',
@@ -2816,6 +2831,16 @@ async function loadBotConfigIntoForm() {
     // Commodity overrides
     const commodityMinEntry = document.getElementById('bot-commodity-min-entry');
     if (commodityMinEntry) commodityMinEntry.value = c.commodityMinEntryCents != null ? c.commodityMinEntryCents : 0;
+    const commodityMinEntryGold = document.getElementById('bot-commodity-min-entry-gold');
+    if (commodityMinEntryGold) commodityMinEntryGold.value = c.commodityMinEntryCentsGold != null ? c.commodityMinEntryCentsGold : 0;
+    const commodityMinEntrySilver = document.getElementById('bot-commodity-min-entry-silver');
+    if (commodityMinEntrySilver) commodityMinEntrySilver.value = c.commodityMinEntryCentsSilver != null ? c.commodityMinEntryCentsSilver : 0;
+    const commodityMinEntryOil = document.getElementById('bot-commodity-min-entry-oil');
+    if (commodityMinEntryOil) commodityMinEntryOil.value = c.commodityMinEntryCentsOil != null ? c.commodityMinEntryCentsOil : 0;
+    const commodityMinEntryNatgas = document.getElementById('bot-commodity-min-entry-natgas');
+    if (commodityMinEntryNatgas) commodityMinEntryNatgas.value = c.commodityMinEntryCentsNatgas != null ? c.commodityMinEntryCentsNatgas : 0;
+    const commodityMinEntryCopper = document.getElementById('bot-commodity-min-entry-copper');
+    if (commodityMinEntryCopper) commodityMinEntryCopper.value = c.commodityMinEntryCentsCopper != null ? c.commodityMinEntryCentsCopper : 0;
     const commodityMaxEntry = document.getElementById('bot-commodity-max-entry');
     if (commodityMaxEntry) commodityMaxEntry.value = c.commodityMaxEntryCents != null ? c.commodityMaxEntryCents : 0;
     const commodityStakeGold = document.getElementById('bot-commodity-stake-gold');
@@ -3147,6 +3172,11 @@ async function loadBotConfigIntoForm() {
       'bot-model-min-entry-lean-copper',
       'bot-commodity-stake-gold',
       'bot-commodity-min-entry',
+      'bot-commodity-min-entry-gold',
+      'bot-commodity-min-entry-silver',
+      'bot-commodity-min-entry-oil',
+      'bot-commodity-min-entry-natgas',
+      'bot-commodity-min-entry-copper',
       'bot-commodity-max-entry',
       'bot-commodity-stake-silver',
       'bot-commodity-stake-oil',
@@ -3388,6 +3418,11 @@ async function saveBotConfig(opts = {}) {
     modelMinEntryLeanPctNatgas: parseFloat(document.getElementById('bot-model-min-entry-lean-natgas')?.value || '0'),
     modelMinEntryLeanPctCopper: parseFloat(document.getElementById('bot-model-min-entry-lean-copper')?.value || '0'),
     commodityMinEntryCents: parseFloat(document.getElementById('bot-commodity-min-entry')?.value || '0'),
+    commodityMinEntryCentsGold: parseFloat(document.getElementById('bot-commodity-min-entry-gold')?.value || '0'),
+    commodityMinEntryCentsSilver: parseFloat(document.getElementById('bot-commodity-min-entry-silver')?.value || '0'),
+    commodityMinEntryCentsOil: parseFloat(document.getElementById('bot-commodity-min-entry-oil')?.value || '0'),
+    commodityMinEntryCentsNatgas: parseFloat(document.getElementById('bot-commodity-min-entry-natgas')?.value || '0'),
+    commodityMinEntryCentsCopper: parseFloat(document.getElementById('bot-commodity-min-entry-copper')?.value || '0'),
     commodityMaxEntryCents: parseFloat(document.getElementById('bot-commodity-max-entry')?.value || '0'),
     commodityStakeDollarsGold: parseFloat(document.getElementById('bot-commodity-stake-gold')?.value || '0'),
     commodityStakeDollarsSilver: parseFloat(document.getElementById('bot-commodity-stake-silver')?.value || '0'),

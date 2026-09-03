@@ -1728,6 +1728,27 @@ function modelCommodityTpCents(symbol, config = {}) {
   return MODEL_COMMODITY_TP_CENTS_DEFAULT;
 }
 
+/**
+ * Per-commodity min-entry price (¢). Falls back to the global commodityMinEntryCents,
+ * then to modelMinEntryCents, then to MODEL_MIN_ENTRY_DEFAULT_CENTS.
+ * Config keys: commodityMinEntryCentsGold, commodityMinEntryCentsSilver,
+ *              commodityMinEntryCentsOil, commodityMinEntryCentsNatgas,
+ *              commodityMinEntryCentsCopper
+ * 0 / unset = use global commodityMinEntryCents.
+ */
+function modelCommodityMinEntryCents(symbol, config = {}) {
+  const sym = String(symbol || '').toUpperCase();
+  if (!isCommoditySymbol(sym)) return 0;
+  const key = `commodityMinEntryCents${sym.charAt(0)}${sym.slice(1).toLowerCase()}`;
+  const perSym = Number(config[key]);
+  if (Number.isFinite(perSym) && perSym > 0) return Math.round(perSym);
+  const global = Number(config.commodityMinEntryCents);
+  if (Number.isFinite(global) && global > 0) return Math.round(global);
+  const modelMin = Number(config.modelMinEntryCents);
+  if (Number.isFinite(modelMin) && modelMin > 0) return Math.round(modelMin);
+  return MODEL_MIN_ENTRY_DEFAULT_CENTS;
+}
+
 /** Returns true when the commodity TP is set to "ride to settlement" (value 99). */
 function modelCommodityRideToSettle(symbol, config = {}) {
   return modelCommodityTpCents(symbol, config) === 99;
@@ -1772,12 +1793,7 @@ function modelMinEntryLeanGate({ window, side, config = {}, symbol, priceCents }
   if (priceCents != null) {
     let skipAbove;
     if (symbol && isCommoditySymbol(symbol)) {
-      const commodityMin = Number(config.commodityMinEntryCents);
-      skipAbove = Number.isFinite(commodityMin) && commodityMin > 0
-        ? commodityMin
-        : Number.isFinite(Number(config.modelMinEntryCents))
-          ? Number(config.modelMinEntryCents)
-          : MODEL_MIN_ENTRY_DEFAULT_CENTS;
+      skipAbove = modelCommodityMinEntryCents(symbol, config);
     } else {
       const cryptoSkip = Number(config.modelLeanSkipAboveCents);
       skipAbove = Number.isFinite(cryptoSkip) && cryptoSkip > 0
@@ -2648,11 +2664,10 @@ function modelPriceAllowed(priceCents, window, config = {}, symbol = null, side 
   if (maxEntry > 0 && price > maxEntry) {
     return { ok: false, reason: `above model max entry ${maxEntry}¢` };
   }
-  // Per-commodity min entry override (0 = fall back to global modelMinEntryCents).
+  // Per-commodity min entry: per-symbol override → global commodity → global model default.
   const isCommodity = symbol && isCommoditySymbol(symbol);
-  const commodityMin = isCommodity ? Number(config.commodityMinEntryCents) : NaN;
-  const minEntry = Number.isFinite(commodityMin) && commodityMin > 0
-    ? commodityMin
+  const minEntry = isCommodity
+    ? modelCommodityMinEntryCents(symbol, config)
     : Number.isFinite(Number(config.modelMinEntryCents))
       ? Number(config.modelMinEntryCents)
       : MODEL_MIN_ENTRY_DEFAULT_CENTS;
@@ -3885,6 +3900,11 @@ const EDITABLE_NUMERIC_FIELDS = [
   'commodityTrailCentsNatgas',
   'commodityTrailCentsCopper',
   'commodityMinEntryCents',
+  'commodityMinEntryCentsGold',
+  'commodityMinEntryCentsSilver',
+  'commodityMinEntryCentsOil',
+  'commodityMinEntryCentsNatgas',
+  'commodityMinEntryCentsCopper',
   'commodityMaxEntryCents',
   'commoditySettleCloseMinutes',
   'commodityLateBarrierMinutes',
@@ -5081,8 +5101,13 @@ class TradingBot {
       commodityTrailCentsOil: MODEL_COMMODITY_TRAIL_CENTS_DEFAULT,
       commodityTrailCentsNatgas: MODEL_COMMODITY_TRAIL_CENTS_DEFAULT,
       commodityTrailCentsCopper: MODEL_COMMODITY_TRAIL_CENTS_DEFAULT,
-      // Per-commodity entry floor (0 = use global modelMinEntryCents).
+      // Per-commodity entry floor (0 = use global commodityMinEntryCents, then modelMinEntryCents).
       commodityMinEntryCents: 0,
+      commodityMinEntryCentsGold: 0,
+      commodityMinEntryCentsSilver: 0,
+      commodityMinEntryCentsOil: 0,
+      commodityMinEntryCentsNatgas: 0,
+      commodityMinEntryCentsCopper: 0,
       commodityMaxEntryCents: 0,
       // Per-commodity cash-out window (0 = use commodity default: 6m settle-close, 7m barrier).
       commoditySettleCloseMinutes: 0,
