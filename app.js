@@ -917,9 +917,11 @@ const _goAlertLastState = {};   // sym → last goSignal string
 const _goAlertLastFired = {};   // sym → timestamp last fired
 const GO_ALERT_COOLDOWN_MS = 2 * 60 * 1000; // 2 min cooldown per symbol
 
-function playGoAlert(sym, dir) {
+async function playGoAlert(sym, dir) {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ready = await ensureExitAudioReady();
+    if (!ready) return;
+    const ctx = exitAudioCtx;
     const now = ctx.currentTime;
     // Three ascending tones: C5 → E5 → G5 (523 → 659 → 784 Hz)
     const notes = [523, 659, 784];
@@ -935,7 +937,6 @@ function playGoAlert(sym, dir) {
       gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.18 + 0.22);
       osc.start(now + i * 0.18);
       osc.stop(now + i * 0.18 + 0.25);
-      if (i === notes.length - 1) osc.onended = () => ctx.close();
     });
     console.log(`[GO alert] ${sym} → ${dir}`);
   } catch (_) {}
@@ -4706,6 +4707,10 @@ window.addEventListener('DOMContentLoaded', () => {
   tryLockLandscape();
   startPolling();
   setInterval(tickAllCountdowns, 1000);
+
+  // Prime the shared audio context on first user interaction so GO alerts
+  // are never blocked by the browser's autoplay policy.
+  document.addEventListener('click', () => ensureExitAudioReady(), { once: true });
 
   // If this is the very first run, nudge the user to set the engine address.
   if (!localStorage.getItem('engineUrl')) {
