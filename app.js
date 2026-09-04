@@ -1051,6 +1051,58 @@ function renderCommodityLeanBar(data) {
       ? `<span style="color:${agreeDir === 'YES' ? '#22c55e' : '#ef4444'};font-size:13px;line-height:1;" title="All 3 windows agree">●</span>`
       : `<span style="color:#30363d;font-size:13px;line-height:1;" title="Windows disagree">○</span>`;
 
+    // ── GO / WAIT / NO signal ──────────────────────────────────────────────
+    let goSignal = 'WAIT';
+    let goColor = '#d97706';
+    let goTitle = '';
+
+    if (!isStale) {
+      // Timing: block first 3 min and last 2 min
+      const SESSION_MS = 15 * 60 * 1000;
+      const ct = d.targetCloseTime ? Number(d.targetCloseTime) : null;
+      const msLeft = ct ? ct - Date.now() : null;
+      const tooEarly = msLeft != null && msLeft > SESSION_MS - 3 * 60 * 1000; // >12 min left
+      const tooLate  = msLeft != null && msLeft < 2 * 60 * 1000;              // <2 min left
+
+      // Signal trends — count weakening windows
+      const trends = [w5, w10, w15].filter(Boolean).map((w) => w.signalScore && w.signalScore.trend);
+      const weakeningCount = trends.filter((t) => t === 'weakening').length;
+      const strengtheningCount = trends.filter((t) => t === 'strengthening').length;
+
+      // All leans ≥78%
+      const allLeanOk = leans.every((l) => l >= 78);
+      // Conf ok
+      const confOk = avgConf != null && avgConf >= 70;
+
+      if (tooEarly) {
+        goSignal = 'EARLY'; goColor = '#57606a';
+        goTitle = 'Too early — wait until 12 min or less remain';
+      } else if (tooLate) {
+        goSignal = 'LATE'; goColor = '#57606a';
+        goTitle = 'Too late — less than 2 min left';
+      } else if (weakeningCount >= 2) {
+        goSignal = 'NO'; goColor = '#ef4444';
+        goTitle = `${weakeningCount}/3 windows weakening — lean fading`;
+      } else if (!allAgree) {
+        goSignal = 'WAIT'; goColor = '#d97706';
+        goTitle = 'Windows disagree on direction';
+      } else if (!allLeanOk) {
+        goSignal = 'WAIT'; goColor = '#d97706';
+        goTitle = 'Lean not strong enough on all windows (need ≥78%)';
+      } else if (!confOk) {
+        goSignal = 'WAIT'; goColor = '#d97706';
+        goTitle = `Confidence too low (${avgConf}%, need ≥70%)`;
+      } else if (weakeningCount === 1 && strengtheningCount === 0) {
+        goSignal = 'WAIT'; goColor = '#d97706';
+        goTitle = '1 window weakening — borderline, be cautious';
+      } else {
+        goSignal = 'GO'; goColor = '#22c55e';
+        goTitle = `All systems OK — ${agreeDir} entry looks good`;
+      }
+    }
+
+    const goHtml = isStale ? '' : `<span style="color:${goColor};font-size:10px;font-weight:800;letter-spacing:0.5px;" title="${goTitle}">${goSignal}</span>`;
+
     cell.innerHTML = `
       <div style="display:flex;align-items:center;gap:3px;">
         ${agreeDot}
@@ -1058,6 +1110,7 @@ function renderCommodityLeanBar(data) {
         ${isStale ? `<span style="color:#f97316;font-size:9px;" title="Window closed — awaiting new market">⏳</span>` : ''}
         ${!isStale && avgConf != null ? `<span style="color:#57606a;font-size:9px;">c${avgConf}%</span>` : ''}
         ${!isStale ? priceHtml : ''}
+        ${goHtml}
       </div>
       <div style="display:flex;gap:3px;align-items:center;font-size:10px;">
         <span style="color:#57606a;">5m</span>${windowLeanHtml(w5)}
