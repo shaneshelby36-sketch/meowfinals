@@ -1,7 +1,7 @@
 'use strict';
 
 // Bump this on every deploy so old clients pick up the new shell.
-const CACHE_NAME = 'crypto-dashboard-shell-v310';
+const CACHE_NAME = 'crypto-dashboard-shell-v311';
 
 const SHELL_FILES = [
   './',
@@ -30,8 +30,8 @@ self.addEventListener('activate', (event) => {
 
 // Strategy:
 // - Never cache API calls (/api/) — they must always hit the network live.
-// - Cache-first for the static app shell so it loads instantly and works
-//   briefly offline; falls back to network if a shell file isn't cached yet.
+// - Network-first for the static app shell so every load picks up the latest
+//   files; falls back to cache only when the network is unavailable (offline).
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
@@ -42,9 +42,13 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      if (cached) return cached;
-      return fetch(event.request).catch(() => cached);
-    })
+    fetch(event.request)
+      .then((response) => {
+        // Update the cache with the fresh response.
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        return response;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

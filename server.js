@@ -680,6 +680,13 @@ async function main() {
   const app = express();
   app.use(cors({ origin: CORS_ORIGIN === '*' ? true : CORS_ORIGIN.split(',') }));
   app.use(express.json());
+  // Never cache the service worker file itself — the browser must always fetch
+  // the latest version so it can detect changes and re-install.
+  app.get('/sw.js', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.sendFile(path.join(__dirname, 'sw.js'));
+  });
+
   app.use(express.static(__dirname));
 
 app.get("/", (req, res) => {
