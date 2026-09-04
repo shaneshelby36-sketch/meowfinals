@@ -418,7 +418,7 @@ function buildPredictions(data, kalshiTargets = {}, accumulatorManager = null, o
   const COMMODITY_MIN_CANDLES = 60; // Polygon free tier may return fewer bars; RSI/MACD/ATR work from 60+
   const indicators = {};
   for (const symbol of Object.keys(data)) {
-    const isCom = ['GOLD', 'SILVER', 'OIL'].includes(symbol);
+    const isCom = ['GOLD', 'SILVER', 'OIL', 'NATGAS', 'COPPER'].includes(symbol);
     indicators[symbol] = gatherIndicators(data[symbol].series, data[symbol].book, isCom ? COMMODITY_MIN_CANDLES : 210);
   }
 
@@ -431,7 +431,7 @@ function buildPredictions(data, kalshiTargets = {}, accumulatorManager = null, o
   // benchmark most alts move with) rather than an arbitrary "other" symbol —
   // this scales cleanly whether we're tracking 2 symbols or 7. BTC itself
   // has no reference (correlating BTC with itself is meaningless).
-  const COMMODITY_SET = new Set(['GOLD', 'SILVER', 'OIL']);
+  const COMMODITY_SET = new Set(['GOLD', 'SILVER', 'OIL', 'NATGAS', 'COPPER']);
   const correlations = {};
   for (const symbol of symbols) {
     // Commodities don't correlate meaningfully with BTC — skip cross-reference.
