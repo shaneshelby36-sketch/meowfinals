@@ -763,7 +763,7 @@ async function fetchLatest() {
     }
     renderAssetTabs(assetSymbols, data);
     renderCommodityLeanBar(data);
-    checkCommoAlerts(data);
+    checkGoAlerts(data);
     refreshBotStatus();
     renderUpdatedTime();
     setStatus('live', 'Live');
@@ -1007,6 +1007,8 @@ function checkGoAlerts(data) {
 
     const prev = _goAlertLastState[sym];
     _goAlertLastState[sym] = signal;
+
+    console.log(`[GO check] ${sym}: signal=${signal} prev=${prev} firedThisCycle=${firedThisCycle} msLeft=${msLeft != null ? Math.round(msLeft/1000)+'s' : 'null'} tooEarly=${tooEarly} tooLate=${tooLate} allAgree=${allAgree} allLeanOk=${allLeanOk} confOk=${confOk} weakening=${weakeningCount}`);
 
     // Fire on transition TO GO. On very first load (prev===undefined) we skip
     // silently so we don't blast the user immediately on page load —
