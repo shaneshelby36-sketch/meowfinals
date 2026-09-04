@@ -4586,8 +4586,10 @@ async function tryLockLandscape() {
 
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch((err) => {
-      console.warn('[dashboard] service worker registration failed:', err.message);
+    // Unregister any previously installed service worker so it can never
+    // serve stale cached files again. The app works fine without it.
+    navigator.serviceWorker.getRegistrations().then((regs) => {
+      for (const reg of regs) reg.unregister();
     });
   }
 }

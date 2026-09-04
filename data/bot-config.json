@@ -130,7 +130,7 @@
   "commodityMinEntryCentsOil": 80,
   "commodityMinEntryCentsNatgas": 0,
   "commodityMinEntryCentsCopper": 0,
-  "commodityMaxEntryCents": 87,
+  "commodityMaxEntryCents": 80,
   "commodityStakeDollarsGold": 3,
   "commodityStakeDollarsSilver": 3,
   "commodityStakeDollarsOil": 3,
