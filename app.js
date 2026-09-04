@@ -974,8 +974,8 @@ function checkGoAlerts(data) {
 
     const SESSION_MS = 15 * 60 * 1000;
     const msLeft = closeTime ? closeTime - now : null;
-    const tooEarly = msLeft != null && msLeft > SESSION_MS - 3 * 60 * 1000;
-    const tooLate  = msLeft != null && msLeft < 2 * 60 * 1000;
+    const tooEarly = msLeft != null && msLeft > 8 * 60 * 1000; // must have ≤8 min left
+    const tooLate  = msLeft != null && msLeft < 2 * 60 * 1000; // must have ≥2 min left
 
     const dirs = [w5, w10, w15].filter(Boolean).map((w) => Number(w.probabilityUp) >= 50 ? 'YES' : 'NO');
     const allAgree = dirs.length === 3 && dirs.every((v) => v === dirs[0]);
@@ -1008,8 +1008,10 @@ function checkGoAlerts(data) {
     const prev = _goAlertLastState[sym];
     _goAlertLastState[sym] = signal;
 
-    // Fire alert only on transition TO GO, with cooldown, one per cycle max
-    if (!firedThisCycle && signal === 'GO' && prev !== 'GO' && prev !== undefined) {
+    // Fire on transition TO GO. On very first load (prev===undefined) we skip
+    // silently so we don't blast the user immediately on page load —
+    // but on the second cycle (prev is now set) transitions work normally.
+    if (!firedThisCycle && signal === 'GO' && prev !== 'GO' && prev !== undefined && prev !== 'init') {
       const lastFired = _goAlertLastFired[sym] || 0;
       if (now - lastFired >= GO_ALERT_COOLDOWN_MS) {
         _goAlertLastFired[sym] = now;
@@ -1156,12 +1158,11 @@ function renderCommodityLeanBar(data) {
     let goTitle = '';
 
     if (!isStale) {
-      // Timing: block first 3 min and last 2 min
-      const SESSION_MS = 15 * 60 * 1000;
+      // Entry window: 7–8 min left to settlement
       const ct = d.targetCloseTime ? Number(d.targetCloseTime) : null;
       const msLeft = ct ? ct - Date.now() : null;
-      const tooEarly = msLeft != null && msLeft > SESSION_MS - 3 * 60 * 1000; // >12 min left
-      const tooLate  = msLeft != null && msLeft < 2 * 60 * 1000;              // <2 min left
+      const tooEarly = msLeft != null && msLeft > 8 * 60 * 1000; // must have ≤8 min left
+      const tooLate  = msLeft != null && msLeft < 2 * 60 * 1000; // must have ≥2 min left
 
       // Signal trends — count weakening windows
       const trends = [w5, w10, w15].filter(Boolean).map((w) => w.signalScore && w.signalScore.trend);
