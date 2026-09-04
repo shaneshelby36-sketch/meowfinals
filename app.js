@@ -780,32 +780,51 @@ const COMMO_SYMS = [
   { sym: 'COPPER', id: 'commo-lean-copper' },
 ];
 
+function windowLeanHtml(w) {
+  if (!w) return `<span style="color:#57606a;">—</span>`;
+  const up = Number(w.probabilityUp);
+  const down = Number(w.probabilityDown);
+  const dominant = up >= down ? 'YES' : 'NO';
+  const pct = up >= down ? up : down;
+  const strong = pct >= 80;
+  const moderate = pct >= 65;
+  const color = dominant === 'YES'
+    ? (strong ? '#22c55e' : moderate ? '#86efac' : '#6b7280')
+    : (strong ? '#ef4444' : moderate ? '#fca5a5' : '#6b7280');
+  return `<span style="color:${color};font-weight:${strong ? '700' : '500'};">${dominant} ${pct.toFixed(0)}%</span>`;
+}
+
 function renderCommodityLeanBar(data) {
   for (const { sym, id } of COMMO_SYMS) {
     const cell = document.getElementById(id);
     if (!cell) continue;
     const d = data && data[sym];
-    if (!d || !d.ready || !d.overall) {
-      cell.innerHTML = `<span style="color:#57606a;font-size:11px;">${sym}</span><span style="color:#57606a;font-size:10px;">—</span>`;
+    if (!d || !d.ready || !d.windows) {
+      cell.innerHTML = `<span style="color:#57606a;font-size:11px;font-weight:600;">${sym}</span><span style="color:#57606a;font-size:10px;">seeding…</span>`;
       cell.style.background = '';
       continue;
     }
-    const up = Number(d.overall.probabilityUp);
-    const down = Number(d.overall.probabilityDown);
-    const dominant = up >= down ? 'YES' : 'NO';
-    const pct = up >= down ? up : down;
-    const strong = pct >= 80;
-    const moderate = pct >= 65;
-    const color = dominant === 'YES'
-      ? (strong ? '#22c55e' : moderate ? '#86efac' : '#57606a')
-      : (strong ? '#ef4444' : moderate ? '#fca5a5' : '#57606a');
-    const bg = dominant === 'YES'
-      ? (strong ? '#052e16' : moderate ? '#071f14' : '')
-      : (strong ? '#2d0a0a' : moderate ? '#1a0a0a' : '');
-    cell.style.background = bg;
+    const w5 = d.windows && d.windows.w5;
+    const w10 = d.windows && d.windows.w10;
+    const w15 = d.windows && d.windows.w15;
+    // Background driven by w5 (most actionable for current window)
+    const up5 = w5 ? Number(w5.probabilityUp) : 50;
+    const dominant5 = up5 >= 50 ? 'YES' : 'NO';
+    const pct5 = up5 >= 50 ? up5 : 100 - up5;
+    const strong5 = pct5 >= 80;
+    const moderate5 = pct5 >= 65;
+    cell.style.background = dominant5 === 'YES'
+      ? (strong5 ? '#052e16' : moderate5 ? '#071f14' : '')
+      : (strong5 ? '#2d0a0a' : moderate5 ? '#1a0a0a' : '');
     cell.innerHTML = `
-      <span style="color:#c9d1d9;font-size:11px;font-weight:600;letter-spacing:0.5px;">${sym}</span>
-      <span style="color:${color};font-size:12px;font-weight:700;">${dominant} ${pct.toFixed(0)}%</span>
+      <span style="color:#c9d1d9;font-size:11px;font-weight:700;letter-spacing:0.3px;">${sym}</span>
+      <div style="display:flex;gap:4px;align-items:center;font-size:10px;">
+        <span style="color:#57606a;">5m</span>${windowLeanHtml(w5)}
+        <span style="color:#30363d;">│</span>
+        <span style="color:#57606a;">10m</span>${windowLeanHtml(w10)}
+        <span style="color:#30363d;">│</span>
+        <span style="color:#57606a;">15m</span>${windowLeanHtml(w15)}
+      </div>
     `;
   }
 }
