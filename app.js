@@ -943,6 +943,7 @@ function playGoAlert(sym, dir) {
 
 function checkGoAlerts(data) {
   const now = Date.now();
+  let firedThisCycle = false; // only one alert per poll cycle max
   for (const { sym } of ALL_LEAN_SYMS) {
     const d = data && data[sym];
     if (!d || !d.ready || !d.windows) {
@@ -983,8 +984,8 @@ function checkGoAlerts(data) {
     const prev = _goAlertLastState[sym];
     _goAlertLastState[sym] = signal;
 
-    // Fire alert only on transition TO go, with cooldown
-    if (signal === 'GO' && prev !== 'GO' && prev !== undefined) {
+    // Fire alert only on transition TO GO, with cooldown, one per cycle max
+    if (!firedThisCycle && signal === 'GO' && prev !== 'GO' && prev !== undefined) {
       const lastFired = _goAlertLastFired[sym] || 0;
       if (now - lastFired >= GO_ALERT_COOLDOWN_MS) {
         _goAlertLastFired[sym] = now;
@@ -994,6 +995,7 @@ function checkGoAlerts(data) {
            _latestBotStatus.config.modelInvertSide === 1);
         const tradeDir = agreeDir ? (isFade ? (agreeDir === 'YES' ? 'NO' : 'YES') : agreeDir) : '?';
         playGoAlert(sym, tradeDir);
+        firedThisCycle = true;
       }
     }
   }
