@@ -939,6 +939,28 @@ function windowLeanHtml(w) {
 }
 
 function renderCommodityLeanBar(data) {
+  // Render each group and sort by avg confidence (highest first, not-ready last)
+  for (const group of [COMMO_SYMS, CRYPTO_SYMS]) {
+    const scored = group.map(({ sym, id }) => {
+      const d = data && data[sym];
+      const confs = d && d.ready && d.windows
+        ? ['w5','w10','w15'].map((k) => Number(d.windows[k] && d.windows[k].confidence)).filter(Number.isFinite)
+        : [];
+      const avgConf = confs.length ? confs.reduce((a, b) => a + b, 0) / confs.length : -1;
+      return { sym, id, avgConf };
+    });
+    scored.sort((a, b) => b.avgConf - a.avgConf);
+    // Reorder cells in DOM
+    const firstCell = document.getElementById(scored[0].id);
+    const parent = firstCell && firstCell.parentElement;
+    if (parent) {
+      for (const { id } of scored) {
+        const el = document.getElementById(id);
+        if (el) parent.appendChild(el);
+      }
+    }
+  }
+
   for (const { sym, id } of ALL_LEAN_SYMS) {
     const cell = document.getElementById(id);
     if (!cell) continue;
