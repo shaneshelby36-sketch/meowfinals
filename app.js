@@ -917,11 +917,27 @@ const _goAlertLastState = {};   // sym → last goSignal string
 const _goAlertLastFired = {};   // sym → timestamp last fired
 const GO_ALERT_COOLDOWN_MS = 2 * 60 * 1000; // 2 min cooldown per symbol
 
-async function playGoAlert(sym, dir) {
+// Persistent audio context for GO alerts — created on first user gesture
+// and reused forever so the browser never blocks it.
+let _goAudioCtx = null;
+
+function _ensureGoAudio() {
   try {
-    const ready = await ensureExitAudioReady();
-    if (!ready) return;
-    const ctx = exitAudioCtx;
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return null;
+    if (!_goAudioCtx) _goAudioCtx = new AudioCtx();
+    if (_goAudioCtx.state === 'suspended') _goAudioCtx.resume();
+    return _goAudioCtx;
+  } catch (_) { return null; }
+}
+
+// Prime on first click so the context is already running before any GO fires
+document.addEventListener('click', () => _ensureGoAudio(), { once: true });
+
+function playGoAlert(sym, dir) {
+  try {
+    const ctx = _ensureGoAudio();
+    if (!ctx) return;
     const now = ctx.currentTime;
     // Three ascending tones: C5 → E5 → G5 (523 → 659 → 784 Hz)
     const notes = [523, 659, 784];
@@ -4707,10 +4723,6 @@ window.addEventListener('DOMContentLoaded', () => {
   tryLockLandscape();
   startPolling();
   setInterval(tickAllCountdowns, 1000);
-
-  // Prime the shared audio context on first user interaction so GO alerts
-  // are never blocked by the browser's autoplay policy.
-  document.addEventListener('click', () => ensureExitAudioReady(), { once: true });
 
   // If this is the very first run, nudge the user to set the engine address.
   if (!localStorage.getItem('engineUrl')) {
