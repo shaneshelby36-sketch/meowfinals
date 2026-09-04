@@ -97,6 +97,7 @@
   "modelOpenGraceMs": 4000,
   "modelMaxEntrySpreadCents": 8,
   "modelMinMinutesToOpen": 3.5,
+  "modelEntryMomentumBlockPct": 0.12,
   "modelMaxMinutesToOpen": 12,
   "modelAutoSwitchLowAvailDollars": 20,
   "modelAutoSwitchMinLeadDollars": 5,
