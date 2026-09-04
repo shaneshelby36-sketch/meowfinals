@@ -762,12 +762,51 @@ async function fetchLatest() {
       renderAsset(symbol, data[symbol]);
     }
     renderAssetTabs(assetSymbols, data);
+    renderCommodityLeanBar(data);
     refreshBotStatus();
     renderUpdatedTime();
     setStatus('live', 'Live');
   } catch (err) {
     setStatus('down', 'Connection lost — retrying…');
     console.error('[dashboard] fetch failed:', err.message);
+  }
+}
+
+const COMMO_SYMS = [
+  { sym: 'GOLD',   id: 'commo-lean-gold' },
+  { sym: 'SILVER', id: 'commo-lean-silver' },
+  { sym: 'OIL',    id: 'commo-lean-oil' },
+  { sym: 'NATGAS', id: 'commo-lean-natgas' },
+  { sym: 'COPPER', id: 'commo-lean-copper' },
+];
+
+function renderCommodityLeanBar(data) {
+  for (const { sym, id } of COMMO_SYMS) {
+    const cell = document.getElementById(id);
+    if (!cell) continue;
+    const d = data && data[sym];
+    if (!d || !d.ready || !d.overall) {
+      cell.innerHTML = `<span style="color:#57606a;font-size:11px;">${sym}</span><span style="color:#57606a;font-size:10px;">—</span>`;
+      cell.style.background = '';
+      continue;
+    }
+    const up = Number(d.overall.probabilityUp);
+    const down = Number(d.overall.probabilityDown);
+    const dominant = up >= down ? 'YES' : 'NO';
+    const pct = up >= down ? up : down;
+    const strong = pct >= 80;
+    const moderate = pct >= 65;
+    const color = dominant === 'YES'
+      ? (strong ? '#22c55e' : moderate ? '#86efac' : '#57606a')
+      : (strong ? '#ef4444' : moderate ? '#fca5a5' : '#57606a');
+    const bg = dominant === 'YES'
+      ? (strong ? '#052e16' : moderate ? '#071f14' : '')
+      : (strong ? '#2d0a0a' : moderate ? '#1a0a0a' : '');
+    cell.style.background = bg;
+    cell.innerHTML = `
+      <span style="color:#c9d1d9;font-size:11px;font-weight:600;letter-spacing:0.5px;">${sym}</span>
+      <span style="color:${color};font-size:12px;font-weight:700;">${dominant} ${pct.toFixed(0)}%</span>
+    `;
   }
 }
 

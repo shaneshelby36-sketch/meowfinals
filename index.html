@@ -78,6 +78,22 @@
     </footer>
   </div>
 
+  <!-- Commodity lean ticker — always visible at bottom of screen -->
+  <div id="commo-lean-bar" style="
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 999;
+    background: #0d1117; border-top: 1px solid #30363d;
+    display: flex; align-items: stretch; gap: 0;
+    font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+    font-size: 12px; height: 44px; overflow: hidden;
+  ">
+    <div style="display:flex;align-items:center;padding:0 10px;color:#57606a;font-size:11px;white-space:nowrap;border-right:1px solid #30363d;">COMMO</div>
+    <div id="commo-lean-gold"   data-sym="GOLD"   class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 6px;border-right:1px solid #21262d;"></div>
+    <div id="commo-lean-silver" data-sym="SILVER" class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 6px;border-right:1px solid #21262d;"></div>
+    <div id="commo-lean-oil"    data-sym="OIL"    class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 6px;border-right:1px solid #21262d;"></div>
+    <div id="commo-lean-natgas" data-sym="NATGAS" class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 6px;border-right:1px solid #21262d;"></div>
+    <div id="commo-lean-copper" data-sym="COPPER" class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 6px;"></div>
+  </div>
+
   <div id="settings-overlay" class="overlay hidden">
     <div class="settings-card">
       <h2>Prediction Engine Connection</h2>
