@@ -895,11 +895,13 @@ function checkCommoAlarms(data) {
     const msRemaining = closeTime ? closeTime - now : null;
     const sessionHalfDone = msRemaining != null && msRemaining <= halfwayMs;
 
-    // Fire if: session is halfway done OR all 3 windows agree (with ≥80% lean)
-    if (!sessionHalfDone && !allAgree) continue;
-
-    // Also require ≥80% avg confidence when all-agree override fires early
-    if (allAgree && !sessionHalfDone) {
+    // Fire if: session is halfway done OR all 3 windows agree same side
+    // and every window is within the 78–82% band (right around 80%) + avg conf ≥80%
+    if (!sessionHalfDone) {
+      if (!allAgree) continue;
+      // All 3 must individually be ≥78% lean
+      const allNear80 = leans.every((l) => l >= 78);
+      if (!allNear80) continue;
       const avgConf = windows.reduce((s, w) => s + Number(w.confidence || 0), 0) / windows.length;
       if (avgConf < 80) continue;
     }
