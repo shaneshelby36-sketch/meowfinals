@@ -763,12 +763,59 @@ async function fetchLatest() {
     }
     renderAssetTabs(assetSymbols, data);
     renderCommodityLeanBar(data);
+    checkCommoAlarms(data);
     refreshBotStatus();
     renderUpdatedTime();
     setStatus('live', 'Live');
   } catch (err) {
     setStatus('down', 'Connection lost — retrying…');
     console.error('[dashboard] fetch failed:', err.message);
+  }
+}
+
+// Commodity lean alarm — beeps when any window hits ≥75% lean either side.
+// Cooldown per symbol prevents repeat beeps on the same signal.
+const _commoAlarmLastFired = {};
+const COMMO_ALARM_COOLDOWN_MS = 60_000; // 1 minute between beeps per symbol
+
+function playCommoAlarm(strong) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(strong ? 880 : 660, ctx.currentTime);
+    osc.frequency.setValueAtTime(strong ? 1100 : 880, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.18, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.35);
+    osc.onended = () => ctx.close();
+  } catch (_) {}
+}
+
+function checkCommoAlarms(data) {
+  const now = Date.now();
+  for (const { sym } of COMMO_SYMS) {
+    const d = data && data[sym];
+    if (!d || !d.ready || !d.windows) continue;
+    const lastFired = _commoAlarmLastFired[sym] || 0;
+    if (now - lastFired < COMMO_ALARM_COOLDOWN_MS) continue;
+    let maxLean = 0;
+    for (const wk of ['w5', 'w10', 'w15']) {
+      const w = d.windows[wk];
+      if (!w) continue;
+      const up = Number(w.probabilityUp);
+      const lean = up >= 50 ? up : 100 - up;
+      if (lean > maxLean) maxLean = lean;
+    }
+    if (maxLean >= 75) {
+      _commoAlarmLastFired[sym] = now;
+      playCommoAlarm(maxLean >= 85);
+      break; // one beep per cycle max
+    }
   }
 }
 
