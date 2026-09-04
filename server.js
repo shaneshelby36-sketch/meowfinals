@@ -557,6 +557,14 @@ async function recompute() {
       await bot.runCycle(result).catch((err) => {
         console.error('[bot] cycle error:', err.message);
       });
+      // Inject last known Kalshi yes_ask prices into the prediction payload
+      // so the dashboard can use them for the ≥70¢ GO gate.
+      if (latestPrediction && typeof latestPrediction === 'object') {
+        const prices = bot.getLastKnownPrices();
+        for (const [sym, cents] of Object.entries(prices)) {
+          if (latestPrediction[sym]) latestPrediction[sym].kalshiPriceCents = cents;
+        }
+      }
     }
   } catch (err) {
     lastComputeError = err.message;

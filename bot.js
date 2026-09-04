@@ -12958,6 +12958,26 @@ class TradingBot {
     };
   }
 
+  // Returns the last known Kalshi yes_ask price in cents per symbol,
+  // keyed by uppercase symbol name (e.g. { BTC: 72, GOLD: 55 }).
+  // Used by the server to inject kalshiPriceCents into /api/latest.
+  getLastKnownPrices() {
+    const out = Object.create(null);
+    if (!this._lastLiveMarket) return out;
+    for (const [series, market] of Object.entries(this._lastLiveMarket)) {
+      if (!market) continue;
+      const sym = Object.keys(SERIES_BY_SYMBOL).find(
+        (s) => SERIES_BY_SYMBOL[s] === series
+      );
+      if (!sym) continue;
+      const yesAsk = Number(market.yes_ask);
+      if (Number.isFinite(yesAsk) && yesAsk >= 1 && yesAsk <= 99) {
+        out[sym] = Math.round(yesAsk);
+      }
+    }
+    return out;
+  }
+
   status() {
     const closed = this.ledger.trades.filter((t) => t.status === 'closed');
     const wins = closed.filter((t) => t.pnlCents > 0).length;

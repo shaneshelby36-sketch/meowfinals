@@ -993,9 +993,16 @@ function checkGoAlerts(data) {
     const trends = [w5, w10, w15].filter(Boolean).map((w) => w.signalScore && w.signalScore.trend);
     const weakeningCount = trends.filter((t) => t === 'weakening').length;
 
+    const kalshiCents = d.kalshiPriceCents != null ? Number(d.kalshiPriceCents) : null;
+    const priceGate = kalshiCents != null && kalshiCents >= 70;
+
     let signal = 'WAIT';
-    if (!tooEarly && !tooLate && allAgree && allLeanOk && confOk && weakeningCount < 2) {
-      signal = 'GO';
+    if (!tooEarly && !tooLate && weakeningCount < 2 && allAgree) {
+      if (allLeanOk && confOk) {
+        signal = 'GO';
+      } else if (priceGate) {
+        signal = 'GO';
+      }
     }
 
     const prev = _goAlertLastState[sym];
@@ -1035,8 +1042,6 @@ const CRYPTO_SYMS = [
   { sym: 'XRP',  id: 'commo-lean-xrp' },
   { sym: 'DOGE', id: 'commo-lean-doge' },
   { sym: 'BNB',  id: 'commo-lean-bnb' },
-  { sym: 'NEAR', id: 'commo-lean-near' },
-  { sym: 'HYPE', id: 'commo-lean-hype' },
 ];
 
 const ALL_LEAN_SYMS = [...COMMO_SYMS, ...CRYPTO_SYMS];
@@ -1171,6 +1176,9 @@ function renderCommodityLeanBar(data) {
       const allLeanOk = leans.length === 3 && leans.every((l) => l >= 78);
       // Conf ok
       const confOk = avgConf != null && avgConf >= 70;
+      // ≥70¢ gate — if Kalshi price is already this high, likely holds to settle
+      const kalshiCents = d.kalshiPriceCents != null ? Number(d.kalshiPriceCents) : null;
+      const priceGate = kalshiCents != null && kalshiCents >= 70;
 
       if (tooEarly) {
         goSignal = 'EARLY'; goColor = '#57606a';
@@ -1181,6 +1189,10 @@ function renderCommodityLeanBar(data) {
       } else if (weakeningCount >= 2) {
         goSignal = 'NO'; goColor = '#ef4444';
         goTitle = `${weakeningCount}/3 windows weakening — lean fading`;
+      } else if (priceGate && allAgree && weakeningCount < 2) {
+        // Price ≥70¢ and direction agreed — override weak lean/conf
+        goSignal = 'GO'; goColor = '#22c55e';
+        goTitle = `Price ${kalshiCents}¢ ≥70¢ — likely holds to settle (${agreeDir})`;
       } else if (!allAgree) {
         goSignal = 'WAIT'; goColor = '#d97706';
         goTitle = 'Windows disagree on direction';
