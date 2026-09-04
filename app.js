@@ -798,7 +798,7 @@ function playCommoAlarm(strong) {
 
 function checkCommoAlarms(data) {
   const now = Date.now();
-  for (const { sym } of COMMO_SYMS) {
+  for (const { sym } of ALL_LEAN_SYMS) {
     const d = data && data[sym];
     if (!d || !d.ready || !d.windows) continue;
     const lastFired = _commoAlarmLastFired[sym] || 0;
@@ -819,6 +819,20 @@ function checkCommoAlarms(data) {
   }
 }
 
+let _leanBarTab = 'commo';
+
+function leanBarSetTab(tab) {
+  _leanBarTab = tab;
+  const commoRow = document.getElementById('lean-bar-commo');
+  const cryptoRow = document.getElementById('lean-bar-crypto');
+  const commoBtn = document.getElementById('lean-tab-commo');
+  const cryptoBtn = document.getElementById('lean-tab-crypto');
+  if (commoRow) commoRow.style.display = tab === 'commo' ? 'flex' : 'none';
+  if (cryptoRow) cryptoRow.style.display = tab === 'crypto' ? 'flex' : 'none';
+  if (commoBtn) { commoBtn.style.background = tab === 'commo' ? '#10b981' : 'transparent'; commoBtn.style.color = tab === 'commo' ? '#fff' : '#57606a'; }
+  if (cryptoBtn) { cryptoBtn.style.background = tab === 'crypto' ? '#3b82f6' : 'transparent'; cryptoBtn.style.color = tab === 'crypto' ? '#fff' : '#57606a'; }
+}
+
 const COMMO_SYMS = [
   { sym: 'GOLD',   id: 'commo-lean-gold' },
   { sym: 'SILVER', id: 'commo-lean-silver' },
@@ -826,6 +840,19 @@ const COMMO_SYMS = [
   { sym: 'NATGAS', id: 'commo-lean-natgas' },
   { sym: 'COPPER', id: 'commo-lean-copper' },
 ];
+
+const CRYPTO_SYMS = [
+  { sym: 'BTC',  id: 'commo-lean-btc' },
+  { sym: 'ETH',  id: 'commo-lean-eth' },
+  { sym: 'SOL',  id: 'commo-lean-sol' },
+  { sym: 'XRP',  id: 'commo-lean-xrp' },
+  { sym: 'DOGE', id: 'commo-lean-doge' },
+  { sym: 'BNB',  id: 'commo-lean-bnb' },
+  { sym: 'NEAR', id: 'commo-lean-near' },
+  { sym: 'HYPE', id: 'commo-lean-hype' },
+];
+
+const ALL_LEAN_SYMS = [...COMMO_SYMS, ...CRYPTO_SYMS];
 
 function windowLeanHtml(w) {
   if (!w) return `<span style="color:#57606a;">—</span>`;
@@ -842,7 +869,7 @@ function windowLeanHtml(w) {
 }
 
 function renderCommodityLeanBar(data) {
-  for (const { sym, id } of COMMO_SYMS) {
+  for (const { sym, id } of ALL_LEAN_SYMS) {
     const cell = document.getElementById(id);
     if (!cell) continue;
     const d = data && data[sym];

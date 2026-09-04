@@ -78,20 +78,42 @@
     </footer>
   </div>
 
-  <!-- Commodity lean ticker — always visible at bottom of screen -->
-  <div id="commo-lean-bar" style="
+  <!-- Lean ticker — always visible at bottom, switchable COMMO / CRYPTO -->
+  <div id="lean-bar" style="
     position: fixed; bottom: 0; left: 0; right: 0; z-index: 999;
     background: #0d1117; border-top: 1px solid #30363d;
-    display: flex; align-items: stretch; gap: 0;
+    display: flex; flex-direction: column;
     font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
-    font-size: 12px; height: 54px; overflow: hidden;
+    font-size: 12px; overflow: hidden;
   ">
-    <div style="display:flex;align-items:center;padding:0 10px;color:#57606a;font-size:11px;white-space:nowrap;border-right:1px solid #30363d;">COMMO</div>
-    <div id="commo-lean-gold"   data-sym="GOLD"   class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 6px;border-right:1px solid #21262d;"></div>
-    <div id="commo-lean-silver" data-sym="SILVER" class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 6px;border-right:1px solid #21262d;"></div>
-    <div id="commo-lean-oil"    data-sym="OIL"    class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 6px;border-right:1px solid #21262d;"></div>
-    <div id="commo-lean-natgas" data-sym="NATGAS" class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 6px;border-right:1px solid #21262d;"></div>
-    <div id="commo-lean-copper" data-sym="COPPER" class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 6px;"></div>
+    <!-- Tab row -->
+    <div style="display:flex;height:22px;border-bottom:1px solid #21262d;">
+      <button id="lean-tab-commo" onclick="leanBarSetTab('commo')" style="
+        flex:0 0 auto;padding:0 12px;background:#10b981;border:none;color:#fff;
+        font-size:10px;font-weight:700;letter-spacing:0.5px;cursor:pointer;">COMMO</button>
+      <button id="lean-tab-crypto" onclick="leanBarSetTab('crypto')" style="
+        flex:0 0 auto;padding:0 12px;background:transparent;border:none;color:#57606a;
+        font-size:10px;font-weight:700;letter-spacing:0.5px;cursor:pointer;border-left:1px solid #21262d;">CRYPTO</button>
+      <div style="flex:1;"></div>
+    </div>
+    <!-- Symbol rows -->
+    <div id="lean-bar-commo" style="display:flex;align-items:stretch;height:46px;">
+      <div id="commo-lean-gold"   data-sym="GOLD"   class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;border-right:1px solid #21262d;"></div>
+      <div id="commo-lean-silver" data-sym="SILVER" class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;border-right:1px solid #21262d;"></div>
+      <div id="commo-lean-oil"    data-sym="OIL"    class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;border-right:1px solid #21262d;"></div>
+      <div id="commo-lean-natgas" data-sym="NATGAS" class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;border-right:1px solid #21262d;"></div>
+      <div id="commo-lean-copper" data-sym="COPPER" class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;"></div>
+    </div>
+    <div id="lean-bar-crypto" style="display:none;align-items:stretch;height:46px;">
+      <div id="commo-lean-btc"  data-sym="BTC"  class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;border-right:1px solid #21262d;"></div>
+      <div id="commo-lean-eth"  data-sym="ETH"  class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;border-right:1px solid #21262d;"></div>
+      <div id="commo-lean-sol"  data-sym="SOL"  class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;border-right:1px solid #21262d;"></div>
+      <div id="commo-lean-xrp"  data-sym="XRP"  class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;border-right:1px solid #21262d;"></div>
+      <div id="commo-lean-doge" data-sym="DOGE" class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;border-right:1px solid #21262d;"></div>
+      <div id="commo-lean-bnb"  data-sym="BNB"  class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;border-right:1px solid #21262d;"></div>
+      <div id="commo-lean-near" data-sym="NEAR" class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;border-right:1px solid #21262d;"></div>
+      <div id="commo-lean-hype" data-sym="HYPE" class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;"></div>
+    </div>
   </div>
 
   <div id="settings-overlay" class="overlay hidden">
