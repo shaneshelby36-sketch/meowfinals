@@ -873,19 +873,40 @@ function checkCommoAlarms(data) {
     if (!d || !d.ready || !d.windows) continue;
     const lastFired = _commoAlarmLastFired[sym] || 0;
     if (now - lastFired < COMMO_ALARM_COOLDOWN_MS) continue;
-    let maxLean = 0;
-    for (const wk of ['w5', 'w10', 'w15']) {
-      const w = d.windows[wk];
-      if (!w) continue;
+
+    const windows = ['w5', 'w10', 'w15'].map((k) => d.windows[k]).filter(Boolean);
+
+    // Must hit ≥80% lean (raised from 75)
+    const leans = windows.map((w) => {
       const up = Number(w.probabilityUp);
-      const lean = up >= 50 ? up : 100 - up;
-      if (lean > maxLean) maxLean = lean;
+      return up >= 50 ? up : 100 - up;
+    });
+    const maxLean = Math.max(...leans, 0);
+    if (maxLean < 80) continue;
+
+    // Check if all 3 windows agree on same side
+    const dirs = windows.map((w) => Number(w.probabilityUp) >= 50 ? 'YES' : 'NO');
+    const allAgree = dirs.length === 3 && dirs.every((v) => v === dirs[0]);
+
+    // Check if session is at least halfway through (7.5 min of 15 elapsed)
+    const closeTime = d.targetCloseTime ? Number(d.targetCloseTime) : null;
+    const SESSION_MS = 15 * 60 * 1000;
+    const halfwayMs = SESSION_MS / 2; // 7.5 min
+    const msRemaining = closeTime ? closeTime - now : null;
+    const sessionHalfDone = msRemaining != null && msRemaining <= halfwayMs;
+
+    // Fire if: session is halfway done OR all 3 windows agree (with ≥80% lean)
+    if (!sessionHalfDone && !allAgree) continue;
+
+    // Also require ≥80% avg confidence when all-agree override fires early
+    if (allAgree && !sessionHalfDone) {
+      const avgConf = windows.reduce((s, w) => s + Number(w.confidence || 0), 0) / windows.length;
+      if (avgConf < 80) continue;
     }
-    if (maxLean >= 75) {
-      _commoAlarmLastFired[sym] = now;
-      playCommoAlarm(maxLean >= 85);
-      break; // one beep per cycle max
-    }
+
+    _commoAlarmLastFired[sym] = now;
+    playCommoAlarm(maxLean >= 88);
+    break; // one beep per cycle max
   }
 }
 
