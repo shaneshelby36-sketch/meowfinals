@@ -773,6 +773,76 @@ async function fetchLatest() {
   }
 }
 
+// ── Lean bar bot overlay ─────────────────────────────────────────────────────
+let _latestBotStatus = null;
+let _lastOpenTradeIds = new Set();
+
+// Flash the lean bar briefly when a new trade opens
+function checkTradeFlash(botData) {
+  if (!botData || !Array.isArray(botData.openTrades)) return;
+  const currentIds = new Set(botData.openTrades.map((t) => t.id));
+  const newTrades = botData.openTrades.filter((t) => !_lastOpenTradeIds.has(t.id));
+  _lastOpenTradeIds = currentIds;
+  if (newTrades.length === 0) return;
+  const bar = document.getElementById('lean-bar');
+  if (!bar) return;
+  const trade = newTrades[0];
+  const sym = trade.symbol || '';
+  const side = String(trade.side || '').toUpperCase();
+  const price = trade.entryPriceCents != null ? `${trade.entryPriceCents}¢` : '';
+  bar.style.transition = 'background 0.1s';
+  bar.style.background = side === 'YES' ? '#052e16' : '#2d0a0a';
+  const flash = document.createElement('div');
+  flash.style.cssText = `position:absolute;left:0;right:0;top:0;bottom:0;display:flex;align-items:center;justify-content:center;background:${side === 'YES' ? '#16a34a' : '#dc2626'};color:#fff;font-size:13px;font-weight:700;z-index:10;pointer-events:none;`;
+  flash.textContent = `🤖 BOT OPENED ${sym} ${side} @ ${price}`;
+  bar.style.position = 'fixed';
+  bar.appendChild(flash);
+  setTimeout(() => {
+    flash.remove();
+    bar.style.background = '#0d1117';
+  }, 3000);
+}
+
+// Session P&L + open positions summary for the bar footer
+function renderLeanBarBotOverlay(botData) {
+  checkTradeFlash(botData);
+  const el = document.getElementById('lean-bar-pnl');
+  if (!el || !botData) return;
+  const netCents = botData.stats && botData.stats.netPnlCents != null ? botData.stats.netPnlCents : null;
+  const opens = Array.isArray(botData.openTrades) ? botData.openTrades : [];
+  let html = '';
+  if (netCents != null) {
+    const dollars = (netCents / 100).toFixed(2);
+    const pos = netCents >= 0;
+    html += `<span style="color:${pos ? '#22c55e' : '#ef4444'};font-weight:700;">P&L ${pos ? '+' : ''}$${dollars}</span>`;
+  }
+  if (opens.length > 0) {
+    const parts = opens.map((t) => {
+      const side = String(t.side || '').toUpperCase();
+      return `<span style="color:${side === 'YES' ? '#22c55e' : '#f97316'};">${t.symbol} ${side}</span>`;
+    });
+    html += (html ? ' · ' : '') + parts.join(' · ');
+  }
+  el.innerHTML = html || '';
+}
+
+// Kalshi series → URL path mapping
+const KALSHI_SERIES_PATHS = {
+  BTC: 'kxbtc15m/bitcoin-15minute',
+  ETH: 'kxeth15m/ethereum-15minute',
+  SOL: 'kxsol15m/solana-15minute',
+  XRP: 'kxxrp15m/xrp-15minute',
+  DOGE: 'kxdoge15m/dogecoin-15minute',
+  BNB: 'kxbnb15m/bnb-15minute',
+  NEAR: 'kxnear15m/near-15minute',
+  HYPE: 'kxhype15m/hype-15minute',
+  GOLD: 'kxgold15m/gold-15minute',
+  SILVER: 'kxsilver15m/silver-15minute',
+  OIL: 'kxwti15m/crude-oil-wti-15minute',
+  NATGAS: 'kxnatgas15m/natural-gas-15minute',
+  COPPER: 'kxcopper15m/copper-15minute',
+};
+
 // Commodity lean alarm — beeps when any window hits ≥75% lean either side.
 // Cooldown per symbol prevents repeat beeps on the same signal.
 const _commoAlarmLastFired = {};
@@ -876,12 +946,23 @@ function renderCommodityLeanBar(data) {
     if (!d || !d.ready || !d.windows) {
       cell.innerHTML = `<span style="color:#57606a;font-size:11px;font-weight:600;">${sym}</span><span style="color:#57606a;font-size:10px;">seeding…</span>`;
       cell.style.background = '';
+      cell.onclick = null;
       continue;
     }
-    const w5 = d.windows && d.windows.w5;
-    const w10 = d.windows && d.windows.w10;
-    const w15 = d.windows && d.windows.w15;
-    // Background driven by w5 (most actionable for current window)
+    const w5 = d.windows.w5;
+    const w10 = d.windows.w10;
+    const w15 = d.windows.w15;
+
+    // Stale window check — if close_time has passed, lean is from previous session
+    const closeTime = d.targetCloseTime ? Number(d.targetCloseTime) : null;
+    const isStale = closeTime && Date.now() > closeTime;
+
+    // All 3 windows agree?
+    const dirs = [w5, w10, w15].filter(Boolean).map((w) => Number(w.probabilityUp) >= 50 ? 'YES' : 'NO');
+    const allAgree = dirs.length === 3 && dirs.every((v) => v === dirs[0]);
+    const agreeDir = allAgree ? dirs[0] : null;
+
+    // Background + confidence from w5
     const up5 = w5 ? Number(w5.probabilityUp) : 50;
     const dominant5 = up5 >= 50 ? 'YES' : 'NO';
     const pct5 = up5 >= 50 ? up5 : 100 - up5;
@@ -890,9 +971,50 @@ function renderCommodityLeanBar(data) {
     cell.style.background = dominant5 === 'YES'
       ? (strong5 ? '#052e16' : moderate5 ? '#071f14' : '')
       : (strong5 ? '#2d0a0a' : moderate5 ? '#1a0a0a' : '');
+
+    // Confidence (average across windows)
+    const confs = [w5, w10, w15].filter(Boolean).map((w) => Number(w.confidence)).filter(Number.isFinite);
+    const avgConf = confs.length ? Math.round(confs.reduce((a, b) => a + b, 0) / confs.length) : null;
+
+    // Price vs strike
+    const price = d.price != null ? d.price : null;
+    const strike = d.targetPrice != null ? d.targetPrice : null;
+    let priceHtml = '';
+    if (price != null && strike != null) {
+      const above = price >= strike;
+      priceHtml = `<span style="color:#57606a;font-size:9px;">${above ? '▲' : '▼'}strike</span>`;
+    }
+
+    // Kalshi link — use kalshiTicker if available, else series path
+    const ticker = d.kalshiTicker || null;
+    const seriesPath = KALSHI_SERIES_PATHS[sym];
+    const kalshiUrl = ticker
+      ? `https://kalshi.com/markets/${seriesPath}/${ticker.toLowerCase()}`
+      : seriesPath
+        ? `https://kalshi.com/markets/${seriesPath}`
+        : null;
+    if (kalshiUrl) {
+      cell.style.cursor = 'pointer';
+      cell.onclick = () => window.open(kalshiUrl, '_blank');
+    } else {
+      cell.style.cursor = 'default';
+      cell.onclick = null;
+    }
+
+    // Agree dot
+    const agreeDot = allAgree
+      ? `<span style="color:${agreeDir === 'YES' ? '#22c55e' : '#ef4444'};font-size:13px;line-height:1;" title="All 3 windows agree">●</span>`
+      : `<span style="color:#30363d;font-size:13px;line-height:1;" title="Windows disagree">○</span>`;
+
     cell.innerHTML = `
-      <span style="color:#c9d1d9;font-size:11px;font-weight:700;letter-spacing:0.3px;">${sym}</span>
-      <div style="display:flex;gap:4px;align-items:center;font-size:10px;">
+      <div style="display:flex;align-items:center;gap:3px;">
+        ${agreeDot}
+        <span style="color:${isStale ? '#57606a' : '#c9d1d9'};font-size:11px;font-weight:700;">${sym}</span>
+        ${isStale ? `<span style="color:#f97316;font-size:9px;" title="Window closed — awaiting new market">⏳</span>` : ''}
+        ${!isStale && avgConf != null ? `<span style="color:#57606a;font-size:9px;">c${avgConf}%</span>` : ''}
+        ${!isStale ? priceHtml : ''}
+      </div>
+      <div style="display:flex;gap:3px;align-items:center;font-size:10px;">
         <span style="color:#57606a;">5m</span>${windowLeanHtml(w5)}
         <span style="color:#30363d;">│</span>
         <span style="color:#57606a;">10m</span>${windowLeanHtml(w10)}
@@ -1224,6 +1346,9 @@ async function refreshBotStatus() {
     renderModelAutoSwitchNote(data.modelAutoSwitch);
     renderBotPerfGrid(data.assetStats);
     renderBotDashboard(data);
+    // Cache for lean bar
+    _latestBotStatus = data;
+    renderLeanBarBotOverlay(data);
   } catch (err) {
     modeLine.textContent = 'Could not reach the engine to check bot status.';
     body.innerHTML = '';
