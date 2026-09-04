@@ -763,7 +763,7 @@ async function fetchLatest() {
     }
     renderAssetTabs(assetSymbols, data);
     renderCommodityLeanBar(data);
-    checkCommoAlarms(data);
+    checkCommoAlerts(data);
     refreshBotStatus();
     renderUpdatedTime();
     setStatus('live', 'Live');
@@ -848,22 +848,8 @@ const KALSHI_SERIES_PATHS = {
 const _commoAlarmLastFired = {};
 const COMMO_ALARM_COOLDOWN_MS = 60_000; // 1 minute between beeps per symbol
 
-function playCommoAlarm(strong) {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(strong ? 880 : 660, ctx.currentTime);
-    osc.frequency.setValueAtTime(strong ? 1100 : 880, ctx.currentTime + 0.12);
-    gain.gain.setValueAtTime(0.18, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + 0.35);
-    osc.onended = () => ctx.close();
-  } catch (_) {}
+function playCommoAlarm(_strong) {
+  // Muted — replaced by the GO alert below
 }
 
 function checkCommoAlarms(data) {
@@ -925,6 +911,95 @@ function leanBarSetTab(tab) {
   if (commoBtn) { commoBtn.style.background = tab === 'commo' ? '#10b981' : 'transparent'; commoBtn.style.color = tab === 'commo' ? '#fff' : '#57606a'; }
   if (cryptoBtn) { cryptoBtn.style.background = tab === 'crypto' ? '#3b82f6' : 'transparent'; cryptoBtn.style.color = tab === 'crypto' ? '#fff' : '#57606a'; }
 }
+
+// ── GO alert — loud 3-tone chime when a symbol transitions to GO ─────────────
+const _goAlertLastState = {};   // sym → last goSignal string
+const _goAlertLastFired = {};   // sym → timestamp last fired
+const GO_ALERT_COOLDOWN_MS = 2 * 60 * 1000; // 2 min cooldown per symbol
+
+function playGoAlert(sym, dir) {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const now = ctx.currentTime;
+    // Three ascending tones: C5 → E5 → G5 (523 → 659 → 784 Hz)
+    const notes = [523, 659, 784];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + i * 0.18);
+      gain.gain.setValueAtTime(0.0001, now + i * 0.18);
+      gain.gain.exponentialRampToValueAtTime(0.55, now + i * 0.18 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.18 + 0.22);
+      osc.start(now + i * 0.18);
+      osc.stop(now + i * 0.18 + 0.25);
+      if (i === notes.length - 1) osc.onended = () => ctx.close();
+    });
+    console.log(`[GO alert] ${sym} → ${dir}`);
+  } catch (_) {}
+}
+
+function checkGoAlerts(data) {
+  const now = Date.now();
+  for (const { sym } of ALL_LEAN_SYMS) {
+    const d = data && data[sym];
+    if (!d || !d.ready || !d.windows) {
+      _goAlertLastState[sym] = 'none';
+      continue;
+    }
+    const w5 = d.windows.w5; const w10 = d.windows.w10; const w15 = d.windows.w15;
+    const closeTime = d.targetCloseTime ? Number(d.targetCloseTime) : null;
+    const isStale = closeTime && now > closeTime;
+    if (isStale) { _goAlertLastState[sym] = 'stale'; continue; }
+
+    const SESSION_MS = 15 * 60 * 1000;
+    const msLeft = closeTime ? closeTime - now : null;
+    const tooEarly = msLeft != null && msLeft > SESSION_MS - 3 * 60 * 1000;
+    const tooLate  = msLeft != null && msLeft < 2 * 60 * 1000;
+
+    const dirs = [w5, w10, w15].filter(Boolean).map((w) => Number(w.probabilityUp) >= 50 ? 'YES' : 'NO');
+    const allAgree = dirs.length === 3 && dirs.every((v) => v === dirs[0]);
+    const agreeDir = allAgree ? dirs[0] : null;
+
+    const leans = [w5, w10, w15].filter(Boolean).map((w) => {
+      const u = Number(w.probabilityUp); return u >= 50 ? u : 100 - u;
+    });
+    const allLeanOk = leans.length === 3 && leans.every((l) => l >= 78);
+
+    const confs = [w5, w10, w15].filter(Boolean).map((w) => Number(w.confidence)).filter(Number.isFinite);
+    const avgConf = confs.length ? confs.reduce((a, b) => a + b, 0) / confs.length : null;
+    const confOk = avgConf != null && avgConf >= 70;
+
+    const trends = [w5, w10, w15].filter(Boolean).map((w) => w.signalScore && w.signalScore.trend);
+    const weakeningCount = trends.filter((t) => t === 'weakening').length;
+
+    let signal = 'WAIT';
+    if (!tooEarly && !tooLate && allAgree && allLeanOk && confOk && weakeningCount < 2) {
+      signal = 'GO';
+    }
+
+    const prev = _goAlertLastState[sym];
+    _goAlertLastState[sym] = signal;
+
+    // Fire alert only on transition TO go, with cooldown
+    if (signal === 'GO' && prev !== 'GO' && prev !== undefined) {
+      const lastFired = _goAlertLastFired[sym] || 0;
+      if (now - lastFired >= GO_ALERT_COOLDOWN_MS) {
+        _goAlertLastFired[sym] = now;
+        const isFade = _latestBotStatus && _latestBotStatus.config &&
+          (_latestBotStatus.config.modelInvertSide === true ||
+           _latestBotStatus.config.modelInvertSide === 'on' ||
+           _latestBotStatus.config.modelInvertSide === 1);
+        const tradeDir = agreeDir ? (isFade ? (agreeDir === 'YES' ? 'NO' : 'YES') : agreeDir) : '?';
+        playGoAlert(sym, tradeDir);
+      }
+    }
+  }
+}
+
+
 
 const COMMO_SYMS = [
   { sym: 'GOLD',   id: 'commo-lean-gold' },
@@ -1070,7 +1145,11 @@ function renderCommodityLeanBar(data) {
       const strengtheningCount = trends.filter((t) => t === 'strengthening').length;
 
       // All leans ≥78%
-      const allLeanOk = leans.every((l) => l >= 78);
+      const leans = [w5, w10, w15].filter(Boolean).map((w) => {
+        const u = Number(w.probabilityUp);
+        return u >= 50 ? u : 100 - u;
+      });
+      const allLeanOk = leans.length === 3 && leans.every((l) => l >= 78);
       // Conf ok
       const confOk = avgConf != null && avgConf >= 70;
 
@@ -1101,7 +1180,23 @@ function renderCommodityLeanBar(data) {
       }
     }
 
-    const goHtml = isStale ? '' : `<span style="color:${goColor};font-size:10px;font-weight:800;letter-spacing:0.5px;" title="${goTitle}">${goSignal}</span>`;
+    // Check if bot fade (modelInvertSide) is on — flip the displayed trade direction
+    const isFade = _latestBotStatus &&
+      _latestBotStatus.config &&
+      (_latestBotStatus.config.modelInvertSide === true ||
+       _latestBotStatus.config.modelInvertSide === 'on' ||
+       _latestBotStatus.config.modelInvertSide === 1);
+    const tradeDir = agreeDir
+      ? (isFade ? (agreeDir === 'YES' ? 'NO' : 'YES') : agreeDir)
+      : null;
+    const fadeHtml = isFade
+      ? `<span style="color:#a855f7;font-size:9px;font-weight:700;letter-spacing:0.3px;" title="Bot fade mode is ON — trades opposite to lean">FADE</span>`
+      : '';
+    if (goSignal === 'GO' && tradeDir) {
+      goTitle = `All systems OK — bot will trade ${tradeDir}${isFade ? ' (fade mode)' : ''}`;
+    }
+
+    const goHtml = isStale ? '' : `<span style="color:${goColor};font-size:10px;font-weight:800;letter-spacing:0.5px;" title="${goTitle}">${goSignal}${goSignal === 'GO' && tradeDir ? ' ' + tradeDir : ''}</span>`;
 
     cell.innerHTML = `
       <div style="display:flex;align-items:center;gap:3px;">
@@ -1110,6 +1205,7 @@ function renderCommodityLeanBar(data) {
         ${isStale ? `<span style="color:#f97316;font-size:9px;" title="Window closed — awaiting new market">⏳</span>` : ''}
         ${!isStale && avgConf != null ? `<span style="color:#57606a;font-size:9px;">c${avgConf}%</span>` : ''}
         ${!isStale ? priceHtml : ''}
+        ${fadeHtml}
         ${goHtml}
       </div>
       <div style="display:flex;gap:3px;align-items:center;font-size:10px;">
@@ -1301,8 +1397,9 @@ function playExitChime(kind) {
     osc.frequency.setValueAtTime(660, now);
   }
 
+  // Exit chime kept quiet so it doesn't compete with the GO alert
   gain.gain.setValueAtTime(0.0001, now);
-  gain.gain.exponentialRampToValueAtTime(0.12, now + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.03, now + 0.015);
   gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
   osc.start(now);
   osc.stop(now + 0.2);
