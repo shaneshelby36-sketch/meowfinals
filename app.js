@@ -974,7 +974,7 @@ function checkGoAlerts(data) {
 
     const SESSION_MS = 15 * 60 * 1000;
     const msLeft = closeTime ? closeTime - now : null;
-    const tooEarly = msLeft != null && msLeft > 8 * 60 * 1000; // must have ≤8 min left
+    const tooEarly = msLeft != null && msLeft > 6.5 * 60 * 1000; // must have ≤6.5 min left
     const tooLate  = msLeft != null && msLeft < 2 * 60 * 1000; // must have ≥2 min left
 
     const dirs = [w5, w10, w15].filter(Boolean).map((w) => Number(w.probabilityUp) >= 50 ? 'YES' : 'NO');
@@ -1163,7 +1163,7 @@ function renderCommodityLeanBar(data) {
       // Entry window: 7–8 min left to settlement
       const ct = d.targetCloseTime ? Number(d.targetCloseTime) : null;
       const msLeft = ct ? ct - Date.now() : null;
-      const tooEarly = msLeft != null && msLeft > 8 * 60 * 1000; // must have ≤8 min left
+      const tooEarly = msLeft != null && msLeft > 6.5 * 60 * 1000; // must have ≤6.5 min left
       const tooLate  = msLeft != null && msLeft < 2 * 60 * 1000; // must have ≥2 min left
 
       // Signal trends — count weakening windows
