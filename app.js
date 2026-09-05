@@ -1237,7 +1237,7 @@ function renderCommodityLeanBar(data) {
         ${agreeDot}
         <span style="color:${isStale ? '#57606a' : '#c9d1d9'};font-size:11px;font-weight:700;">${sym}</span>
         ${isStale ? `<span style="color:#f97316;font-size:9px;" title="Window closed — awaiting new market">⏳</span>` : ''}
-        ${!isStale && avgConf != null ? `<span style="color:#57606a;font-size:9px;">c${avgConf}%</span>` : ''}
+        ${!isStale && avgConf != null ? `<span style="color:${avgConf >= 70 ? '#22c55e' : avgConf >= 60 ? '#f59e0b' : '#ef4444'};font-size:10px;font-weight:700;" title="Avg confidence across 3 windows (need ≥70%)">c${avgConf}%</span>` : ''}
         ${!isStale ? priceHtml : ''}
         ${fadeHtml}
         ${goHtml}
