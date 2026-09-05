@@ -1214,23 +1214,37 @@ function renderCommodityLeanBar(data) {
       }
     }
 
-    // Check if bot fade (modelInvertSide) is on — flip the displayed trade direction
-    const isFade = _latestBotStatus &&
+    // Auto-detect model vs Kalshi agreement.
+    // kalshiDir: which side Kalshi is pricing above 50¢ (YES if ≥50, NO if <50)
+    const kalshiCentsDisplay = d.kalshiPriceCents != null ? Number(d.kalshiPriceCents) : null;
+    const kalshiDir = kalshiCentsDisplay != null ? (kalshiCentsDisplay >= 50 ? 'YES' : 'NO') : null;
+    // Auto-fade when model and Kalshi disagree — trade Kalshi direction
+    const autoFade = kalshiDir != null && agreeDir != null && kalshiDir !== agreeDir;
+    // Also check manual bot fade setting
+    const manualFade = _latestBotStatus &&
       _latestBotStatus.config &&
       (_latestBotStatus.config.modelInvertSide === true ||
        _latestBotStatus.config.modelInvertSide === 'on' ||
        _latestBotStatus.config.modelInvertSide === 1);
+    const isFade = autoFade || manualFade;
     const tradeDir = agreeDir
       ? (isFade ? (agreeDir === 'YES' ? 'NO' : 'YES') : agreeDir)
       : null;
     const fadeHtml = isFade
-      ? `<span style="color:#a855f7;font-size:9px;font-weight:700;letter-spacing:0.3px;" title="Bot fade mode is ON — trades opposite to lean">FADE</span>`
+      ? `<span style="color:#a855f7;font-size:10px;font-weight:800;letter-spacing:0.3px;" title="${autoFade ? `Model says ${agreeDir} but Kalshi prices ${kalshiDir} — fading model, trade ${tradeDir}` : 'Bot fade mode ON — trades opposite to lean'}">FADE→${tradeDir}</span>`
       : '';
     if (goSignal === 'GO' && tradeDir) {
-      goTitle = `All systems OK — bot will trade ${tradeDir}${isFade ? ' (fade mode)' : ''}`;
+      goTitle = isFade
+        ? `${autoFade ? 'Model/Kalshi disagree' : 'Fade mode'} — trade ${tradeDir}`
+        : `All systems OK — trade ${tradeDir}`;
     }
 
-    const goHtml = isStale ? '' : `<span style="color:${goColor};font-size:10px;font-weight:800;letter-spacing:0.5px;" title="${goTitle}">${goSignal}${goSignal === 'GO' && tradeDir ? ' ' + tradeDir : ''}</span>`;
+    // Show Kalshi price in cents if available
+    const kalshiPriceHtml = kalshiCentsDisplay != null && !isStale
+      ? `<span style="color:${kalshiCentsDisplay >= 70 ? '#22c55e' : kalshiCentsDisplay >= 50 ? '#c9d1d9' : '#ef4444'};font-size:10px;font-weight:700;" title="Kalshi YES ask price">${kalshiCentsDisplay}¢</span>`
+      : '';
+
+    const goHtml = isStale ? '' : `<span style="color:${goColor};font-size:10px;font-weight:800;letter-spacing:0.5px;" title="${goTitle}">${goSignal}${goSignal === 'GO' && tradeDir && !isFade ? ' ' + tradeDir : ''}</span>`;
 
     cell.innerHTML = `
       <div style="display:flex;align-items:center;gap:3px;">
@@ -1238,7 +1252,7 @@ function renderCommodityLeanBar(data) {
         <span style="color:${isStale ? '#57606a' : '#c9d1d9'};font-size:11px;font-weight:700;">${sym}</span>
         ${isStale ? `<span style="color:#f97316;font-size:9px;" title="Window closed — awaiting new market">⏳</span>` : ''}
         ${!isStale && avgConf != null ? `<span style="color:${avgConf >= 70 ? '#22c55e' : avgConf >= 60 ? '#f59e0b' : '#ef4444'};font-size:10px;font-weight:700;" title="Avg confidence across 3 windows (need ≥70%)">c${avgConf}%</span>` : ''}
-        ${!isStale ? priceHtml : ''}
+        ${kalshiPriceHtml}
         ${fadeHtml}
         ${goHtml}
       </div>

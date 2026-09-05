@@ -11976,7 +11976,20 @@ class TradingBot {
       return null;
     }
     const invert = isModelInvertSide(this.config);
-    const side = invert ? flipKalshiSide(signalSide) : signalSide;
+
+    // Auto-fade: if Kalshi price disagrees with the model signal, trade the
+    // Kalshi direction instead. YES ask ≥50¢ means Kalshi favors YES; <50¢ means NO.
+    const _yesAskForFade = Number(market.yes_ask);
+    const kalshiFavorsYes = Number.isFinite(_yesAskForFade) && _yesAskForFade >= 1 && _yesAskForFade <= 99
+      ? _yesAskForFade >= 50
+      : null;
+    const kalshiSignalSide = kalshiFavorsYes != null ? (kalshiFavorsYes ? 'yes' : 'no') : null;
+    const autoFade = kalshiSignalSide != null && kalshiSignalSide !== signalSide;
+    if (autoFade) {
+      this.lastDecision = `${symbol}: model says ${signalSide.toUpperCase()} but Kalshi prices ${kalshiSignalSide.toUpperCase()} — auto-fading model, trading ${kalshiSignalSide.toUpperCase()}`;
+    }
+    const effectiveInvert = invert || autoFade;
+    const side = effectiveInvert ? flipKalshiSide(signalSide) : signalSide;
     if (this._hasRecentEntryMiss(symbol, closeTime, side)) {
       say(
         `Waiting: ${symbol} ${side.toUpperCase()} fill-miss cool-down (~${Math.round(ENTRY_MISS_COOLDOWN_MS / 1000)}s) — trying other cryptos.`
@@ -12245,7 +12258,8 @@ class TradingBot {
         (assetPrediction.consensus && assetPrediction.consensus.unanimous ? 1.15 : 1) *
         (calGate.winRatePct != null ? Math.min(1.2, calGate.winRatePct / 55) : 1),
       uncertain,
-      invert,
+      invert: effectiveInvert,
+      autoFade,
       signalSide,
       signalPriceCents: signalSide === 'yes' ? yesAsk : noAsk,
       confirmCrossAsk: confirmGate.crossAsk != null ? confirmGate.crossAsk : null,
