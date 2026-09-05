@@ -836,6 +836,7 @@ const KALSHI_SERIES_PATHS = {
   BNB: 'kxbnb15m/bnb-15minute',
   NEAR: 'kxnear15m/near-15minute',
   HYPE: 'kxhype15m/hype-15minute',
+  ZEC: 'kxzec15m/zcash-15minute',
   GOLD: 'kxgold15m/gold-15minute',
   SILVER: 'kxsilver15m/silver-15minute',
   OIL: 'kxwti15m/crude-oil-wti-15minute',
@@ -1044,8 +1045,9 @@ const CRYPTO_SYMS = [
   { sym: 'ETH',  id: 'commo-lean-eth' },
   { sym: 'SOL',  id: 'commo-lean-sol' },
   { sym: 'XRP',  id: 'commo-lean-xrp' },
-  { sym: 'DOGE', id: 'commo-lean-doge' },
   { sym: 'BNB',  id: 'commo-lean-bnb' },
+  { sym: 'HYPE', id: 'commo-lean-hype' },
+  { sym: 'ZEC',  id: 'commo-lean-zec' },
 ];
 
 const ALL_LEAN_SYMS = [...COMMO_SYMS, ...CRYPTO_SYMS];
