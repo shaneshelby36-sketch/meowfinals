@@ -186,7 +186,7 @@ function applyWindowConsensus(windows) {
 function windowConsensusSupportsSide(windows, side) {
   if (!windows || !windows.w5 || !windows.w10 || !windows.w15) return true;
   const c = windows.w5.consensus || applyWindowConsensus(windows);
-  if (!c || c.agreeCount < 2) return false;
+  if (!c || c.agreeCount < 3) return false; // all 3 windows must agree
   if (side === 'yes') return c.majorityDirection === 'UP';
   if (side === 'no') return c.majorityDirection === 'DOWN';
   return false;
