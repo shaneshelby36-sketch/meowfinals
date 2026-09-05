@@ -1046,7 +1046,7 @@ const CRYPTO_SYMS = [
   { sym: 'SOL',  id: 'commo-lean-sol' },
   { sym: 'XRP',  id: 'commo-lean-xrp' },
   { sym: 'BNB',  id: 'commo-lean-bnb' },
-  { sym: 'HYPE', id: 'commo-lean-hype' },
+  { sym: 'NEAR', id: 'commo-lean-near' },
   { sym: 'ZEC',  id: 'commo-lean-zec' },
 ];
 
