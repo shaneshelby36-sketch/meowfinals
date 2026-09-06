@@ -39,7 +39,7 @@
   "modelPreCloseForceMinutes": 0.25,
   "modelLateExtendMinConfidence": 78,
   "modelMomentumStallSeconds": 3,
-  "modelMomentumPullbackCents": 2,
+  "modelMomentumPullbackCents": 4,
   "modelStagnationSeconds": 120,
   "modelStagnationMinProgressCents": 8,
   "modelRapidAdverseCents": 0,
