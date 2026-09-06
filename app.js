@@ -834,7 +834,7 @@ const KALSHI_SERIES_PATHS = {
   XRP: 'kxxrp15m/xrp-15minute',
   DOGE: 'kxdoge15m/dogecoin-15minute',
   BNB: 'kxbnb15m/bnb-15minute',
-  NEAR: 'kxnear15m/near-15minute',
+  NEAR: 'kxnear15m/near-15m',
   HYPE: 'kxhype15m/hype-15minute',
   ZEC: 'kxzec15m/zcash-15minute',
   GOLD: 'kxgold15m/gold-15minute',

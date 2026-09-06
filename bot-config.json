@@ -3,7 +3,7 @@
   "symbol": "AUTO",
   "strategyMode": "model",
   "activeSetupId": "tight",
-  "autoTradeSymbols": "BTC,ETH,SOL,XRP,BNB,HYPE,ZEC,GOLD,SILVER,OIL,NATGAS,COPPER",
+  "autoTradeSymbols": "BTC,ETH,SOL,XRP,BNB,NEAR,HYPE,ZEC,GOLD,SILVER,OIL,NATGAS,COPPER",
   "modelMinConfidence": 70,
   "modelMinEntryCents": 65,
   "commodityMinEntryCents": 70,

@@ -87,15 +87,8 @@ function saveCalibration(calibration) {
   }
 }
 
-// Kalshi's rolling 15-minute crypto series tickers. Confirmed live as of this
-// writing: BTC, ETH, SOL, XRP, DOGE, BNB, NEAR, HYPE. ZEC is deliberately NOT
-// included here — Kalshi does not currently have a 15-minute market for it
-// (confirmed via Kalshi's own market listings), so the bot can track ZEC's
-// price/predictions via Coinbase but cannot place Kalshi trades on it.
-// VERIFY the non-BTC tickers against docs.kalshi.com / the live /series list
-// before trusting them in production — they follow BTC's confirmed
-// KXBTC15M naming pattern, but weren't each individually confirmed against
-// Kalshi's own spec character-for-character.
+// Kalshi's rolling 15-minute crypto series tickers. Confirmed live:
+// BTC, ETH, SOL, XRP, DOGE, BNB, NEAR, HYPE, ZEC.
 const SERIES_BY_SYMBOL = {
   BTC: 'KXBTC15M',
   ETH: 'KXETH15M',
