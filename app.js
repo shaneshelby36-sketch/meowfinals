@@ -1217,6 +1217,46 @@ function renderCommodityLeanBar(data) {
       }
     }
 
+    // ── Unstable-market warning ────────────────────────────────────────────────
+    // Two independent sources:
+    //   A) Signal instability: inside the GO window but signal ≠ GO
+    //      (weakening, disagreeing windows, low confidence, etc.)
+    //   B) Raw market volatility: elevated vol or ATR at any time in the session,
+    //      sourced from indicatorsSnapshot (same data that docks engine confidence)
+    const ct2 = d.targetCloseTime ? Number(d.targetCloseTime) : null;
+    const msLeft2 = ct2 ? ct2 - Date.now() : null;
+    const inGoWindow = msLeft2 != null && msLeft2 <= 6.5 * 60 * 1000 && msLeft2 >= 2 * 60 * 1000;
+    // A) Signal instability — only meaningful inside the tradeable window
+    const isSignalUnstable = !isStale && inGoWindow && goSignal !== 'GO';
+    // B) Volatility instability — same thresholds prediction.js uses to dock confidence:
+    //    vol > 0.35% → elevated (docks 14pts), vol > 0.2% → moderate (docks 7pts)
+    //    atrPct > 0.5% → unusually wide intrabar range
+    const snap = d.indicatorsSnapshot;
+    const vol = snap ? Number(snap.volatilityPct) : NaN;
+    const atrPct = snap ? Number(snap.atrPct) : NaN;
+    const volElevated = Number.isFinite(vol) && vol > 0.35;
+    const volModerate = Number.isFinite(vol) && vol > 0.2;
+    const atrHigh = Number.isFinite(atrPct) && atrPct > 0.5;
+    const isVolUnstable = !isStale && (volElevated || atrHigh);
+    // Combined: either source triggers the warning
+    const isUnstable = isSignalUnstable || isVolUnstable;
+    // Pick the most severe colour: red if signal NO or elevated vol; amber otherwise
+    const unstableSevere = (isSignalUnstable && goSignal === 'NO') || volElevated || atrHigh;
+    // Build the reason text
+    let unstableReason = '';
+    if (isSignalUnstable) {
+      unstableReason = goTitle;
+    } else if (volElevated) {
+      unstableReason = `Elevated vol ${vol.toFixed(2)}% — engine docking confidence`;
+    } else if (atrHigh) {
+      unstableReason = `Wide range (ATR ${atrPct.toFixed(2)}% of price) — choppy`;
+    }
+    if (isVolUnstable && isSignalUnstable) {
+      // Both firing — prepend vol info to the signal reason
+      const volTag = volElevated ? `vol ${vol.toFixed(2)}%` : `ATR ${atrPct.toFixed(2)}%`;
+      unstableReason = `${volTag} + ${goTitle}`;
+    }
+
     // Auto-detect model vs Kalshi agreement.
     // kalshiDir: which side Kalshi is pricing above 50¢ (YES if ≥50, NO if <50)
     const kalshiCentsDisplay = d.kalshiPriceCents != null ? Number(d.kalshiPriceCents) : null;
@@ -1249,6 +1289,20 @@ function renderCommodityLeanBar(data) {
 
     const goHtml = isStale ? '' : `<span style="color:${goColor};font-size:10px;font-weight:800;letter-spacing:0.5px;" title="${goTitle}">${goSignal}${goSignal === 'GO' && tradeDir && !isFade ? ' ' + tradeDir : ''}</span>`;
 
+    // Unstable warning banner — shown as a third row inside the cell
+    const unstableHtml = isUnstable
+      ? `<div style="display:flex;align-items:center;gap:3px;background:${unstableSevere ? '#3d0a0a' : '#2d1a00'};border-top:1px solid ${unstableSevere ? '#ef4444' : '#d97706'};padding:1px 3px;margin-top:1px;border-radius:2px;overflow:hidden;" title="${unstableReason}">
+           <span style="color:${unstableSevere ? '#ef4444' : '#f59e0b'};font-size:9px;font-weight:800;letter-spacing:0.3px;white-space:nowrap;">⚠ UNSTABLE — skip trade</span>
+           <span style="color:${unstableSevere ? '#fca5a5' : '#fde68a'};font-size:9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0;">${unstableReason}</span>
+         </div>`
+      : '';
+
+    if (isUnstable) {
+      cell.style.outline = `1px solid ${unstableSevere ? '#ef444466' : '#d9770666'}`;
+    } else {
+      cell.style.outline = '';
+    }
+
     cell.innerHTML = `
       <div style="display:flex;align-items:center;gap:3px;">
         ${agreeDot}
@@ -1266,6 +1320,7 @@ function renderCommodityLeanBar(data) {
         <span style="color:#30363d;">│</span>
         <span style="color:#57606a;">15m</span>${windowLeanHtml(w15)}
       </div>
+      ${unstableHtml}
     `;
   }
 }
