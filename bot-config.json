@@ -27,6 +27,7 @@
   "commodityLateBarrierMinutes": 7,
   "modelLateExtendMinConfidence": 75,
   "modelConfirmCrossCents": 0,
+  "modelStagnationSeconds": 90,
   "modelDumpPullbackCents": 6,
   "modelFastRedCents": 2,
   "maxOpenPositions": 1,
