@@ -2152,7 +2152,15 @@ function modelEngineHardAgainst({
   config = {},
 } = {}) {
   if (!window || !side) return false;
-  if (direction && modelDirectionAgainstHeld(direction, side)) return true;
+  // Direction flip: only treat as hard-against when the live lean probability
+  // has also moved against us. A direction flip while lean is still clearly
+  // with us (e.g. YES 76%) means the engine recalculated on one noisy tick —
+  // the market hasn't confirmed the move. Require lean to have dropped below
+  // the soft-lean margin before cutting on direction alone.
+  if (direction && modelDirectionAgainstHeld(direction, side)) {
+    if (!modelLiveLeanStillFavors(window, side, modelSoftLeanMarginPct(config))) return true;
+    return false;
+  }
   const hardMargin = Math.max(
     MODEL_HARD_LEAN_AGAINST_MARGIN_DEFAULT,
     modelLiveLeanMarginPct(config)
