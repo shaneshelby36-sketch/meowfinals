@@ -927,6 +927,13 @@
             </div>
             <span class="field-hint">Default <strong>88¢</strong>. Won't buy richer asks.</span>
           </label>
+          <label>MODEL Kalshi favorite floor (¢)
+            <div class="slider-row">
+              <input id="bot-model-kalshi-favorite" type="range" min="60" max="95" step="1" />
+              <span class="slider-value" id="bot-model-kalshi-favorite-value">—</span>
+            </div>
+            <span class="field-hint">If Kalshi prices one side at <strong>≥ this ¢</strong>, that side is the "favorite" — trading the underdog longshot is blocked. Default <strong>75¢</strong>. Raise to <strong>88¢</strong> to only block true longshots.</span>
+          </label>
           <p class="field-hint">MODEL stake is <strong>full size</strong> at all asks (under-70¢ half-stake is off).</p>
 
           <h4 class="bot-panel-subhead">Exit &amp; recycle</h4>

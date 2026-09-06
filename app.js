@@ -2495,6 +2495,7 @@ const SLIDER_UNITS = {
   'bot-model-min-entry': (v) => `${Math.round(v)}¢`,
   'bot-model-low-ask-conf': (v) => (Number(v) <= 0 ? 'off' : `≤69¢ need ≥${Math.round(v)}%`),
   'bot-model-max-entry': (v) => `${Math.round(v)}¢`,
+  'bot-model-kalshi-favorite': (v) => `${Math.round(v)}¢`,
   'bot-model-bank-green': (v) => `+${Math.round(v)}¢`,
   'bot-model-near-target-bank': (v) => `+${Math.round(v)}¢`,
   'bot-model-stagnation-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
@@ -3108,6 +3109,7 @@ function wireSliderDisplays() {
     'bot-model-min-room-floor',
     'bot-model-low-ask-conf',
     'bot-model-max-entry',
+    'bot-model-kalshi-favorite',
     'bot-model-bank-green',
     'bot-model-near-target-bank',
     'bot-model-stall-sec',
@@ -3311,6 +3313,7 @@ function wireBotConfigAutoSave() {
     'bot-model-min-room-floor',
     'bot-model-low-ask-conf',
     'bot-model-max-entry',
+    'bot-model-kalshi-favorite',
     'bot-model-bank-green',
     'bot-model-near-target-bank',
     'bot-model-stall-sec',
@@ -3604,6 +3607,8 @@ async function loadBotConfigIntoForm() {
     }
     const modelMaxEntry = document.getElementById('bot-model-max-entry');
     if (modelMaxEntry) modelMaxEntry.value = c.modelMaxEntryCents != null ? c.modelMaxEntryCents : 88;
+    const modelKalshiFavorite = document.getElementById('bot-model-kalshi-favorite');
+    if (modelKalshiFavorite) modelKalshiFavorite.value = c.modelKalshiFavoriteCents != null ? c.modelKalshiFavoriteCents : 75;
     const modelBankGreen = document.getElementById('bot-model-bank-green');
     if (modelBankGreen) modelBankGreen.value = c.modelBankGreenCents != null ? c.modelBankGreenCents : 11;
     const modelNearTargetBank = document.getElementById('bot-model-near-target-bank');
@@ -3906,6 +3911,7 @@ async function loadBotConfigIntoForm() {
     'bot-model-min-room-floor',
       'bot-model-low-ask-conf',
       'bot-model-max-entry',
+      'bot-model-kalshi-favorite',
       'bot-model-bank-green',
     'bot-model-near-target-bank',
     'bot-model-stall-sec',
@@ -4162,6 +4168,7 @@ async function saveBotConfig(opts = {}) {
     ),
     modelLowAskMinConfidence: parseFloat(document.getElementById('bot-model-low-ask-conf')?.value || '0'),
     modelMaxEntryCents: parseFloat(document.getElementById('bot-model-max-entry')?.value || '88'),
+    modelKalshiFavoriteCents: parseFloat(document.getElementById('bot-model-kalshi-favorite')?.value || '75'),
     modelLowPriceMaxCents: 70,
     modelLowPriceStakeQuarters: 2,
     modelBankGreenCents: parseFloat(document.getElementById('bot-model-bank-green')?.value || '11'),
