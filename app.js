@@ -2512,6 +2512,7 @@ const SLIDER_UNITS = {
   'bot-model-prob-drift': (v) => `${Math.round(v)}pts`,
   'bot-model-live-lean-margin': (v) => `${Math.round(v)}%`,
   'bot-model-stall-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
+  'bot-model-stall-pullback': (v) => `${Math.round(v)}¢`,
   'bot-model-decay-drop': (v) => `${Math.round(v)}pts`,
   'bot-model-decay-stall': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
   'bot-model-decay-floor': (v) => `${Math.round(v)}%`,
@@ -3110,6 +3111,7 @@ function wireSliderDisplays() {
     'bot-model-bank-green',
     'bot-model-near-target-bank',
     'bot-model-stall-sec',
+    'bot-model-stall-pullback',
     'bot-model-stagnation-sec',
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
@@ -3312,6 +3314,7 @@ function wireBotConfigAutoSave() {
     'bot-model-bank-green',
     'bot-model-near-target-bank',
     'bot-model-stall-sec',
+    'bot-model-stall-pullback',
     'bot-model-stagnation-sec',
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
@@ -3614,6 +3617,11 @@ async function loadBotConfigIntoForm() {
       modelStallSec.value =
         c.modelMomentumStallSeconds != null ? c.modelMomentumStallSeconds : 4;
     }
+    const modelStallPullback = document.getElementById('bot-model-stall-pullback');
+    if (modelStallPullback) {
+      modelStallPullback.value =
+        c.modelMomentumPullbackCents != null ? c.modelMomentumPullbackCents : 2;
+    }
     const modelStagnationSec = document.getElementById('bot-model-stagnation-sec');
     if (modelStagnationSec) {
       modelStagnationSec.value =
@@ -3901,6 +3909,7 @@ async function loadBotConfigIntoForm() {
       'bot-model-bank-green',
     'bot-model-near-target-bank',
     'bot-model-stall-sec',
+    'bot-model-stall-pullback',
     'bot-model-stagnation-sec',
     'bot-model-stagnation-sensitivity',
     'bot-model-be-chase-sec',
@@ -4161,6 +4170,7 @@ async function saveBotConfig(opts = {}) {
       document.getElementById('bot-model-near-target-bank')?.value || '8'
     ),
     modelMomentumStallSeconds: parseFloat(document.getElementById('bot-model-stall-sec')?.value || '4'),
+    modelMomentumPullbackCents: parseFloat(document.getElementById('bot-model-stall-pullback')?.value || '2'),
     modelStagnationSeconds: parseFloat(document.getElementById('bot-model-stagnation-sec')?.value || '60'),
     modelStagnationMinProgressCents: parseFloat(
       document.getElementById('bot-model-stagnation-sensitivity')?.value || '3'

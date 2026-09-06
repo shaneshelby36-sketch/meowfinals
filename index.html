@@ -949,7 +949,14 @@
               <input id="bot-model-stall-sec" type="range" min="3" max="60" step="1" value="4" />
               <span class="slider-value" id="bot-model-stall-sec-value">—</span>
             </div>
-            <span class="field-hint">While green (trail armed), bank at the <strong>live bid</strong> if peak is flat this long or pulls back <strong>2¢</strong> — even if under the TP target above. Default <strong>4s</strong>.</span>
+            <span class="field-hint">While green (trail armed), bank at the <strong>live bid</strong> if peak is flat this long or pulls back N¢ (see pullback slider below) — even if under the TP target above. Default <strong>4s</strong>.</span>
+          </label>
+          <label>MODEL stall pullback (¢ from peak)
+            <div class="slider-row">
+              <input id="bot-model-stall-pullback" type="range" min="1" max="10" step="1" />
+              <span class="slider-value" id="bot-model-stall-pullback-value">—</span>
+            </div>
+            <span class="field-hint">While green (trail armed), bank if bid pulls back this many ¢ from its peak — triggers stall-bank even before the timer. Default <strong>2¢</strong>.</span>
           </label>
           <label>MODEL stagnation check (sec)
             <div class="slider-row">
