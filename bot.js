@@ -347,7 +347,6 @@ const MODEL_SETUPS = [
     modelMinTpCents: 7,
     maxOpenPositions: 1,
     modelConfirmCrossCents: 0,
-    modelDumpPullbackCents: 2,
     modelFastRedCents: 2,
     modelMinEntryCents: 62,
   },
@@ -388,7 +387,6 @@ const MODEL_SETUPS = [
     maxOpenPositions: 2,
     modelConfirmCrossCents: 0,
     modelStagnationSeconds: 45,
-    modelDumpPullbackCents: 2,
     modelFastRedCents: 2,
     modelLeanStopBarrierCents: 50,
   },
@@ -900,7 +898,7 @@ const MODEL_GLOBAL_POST_EXIT_COOLDOWN_MS_DEFAULT = 20_000;
 /** After MODEL lean/dip stop (red), longer sit-out — stops knife-catch churn. */
 const MODEL_POST_LEAN_STOP_COOLDOWN_MS_DEFAULT = 120_000;
 /** After open grace: when model is not firm, wait this long then BE/cut (avoid ask→bid flicker). */
-const MODEL_LEAN_AGAINST_BE_MS_DEFAULT = 5_000;
+const MODEL_LEAN_AGAINST_BE_MS_DEFAULT = 12_000;
 /** First N ms after open: only hard lean-turning exits (ignore soft + ask/bid haircut). */
 const MODEL_OPEN_GRACE_MS_DEFAULT = 4_000;
 /** Lean-exit / momentum TP floor — no micro-banks under this. */
@@ -918,7 +916,7 @@ const MODEL_RED_GIVEUP_MS_DEFAULT = 8_000;
 /** Soft lean + still green: bank after this (preemptive — don't wait for the dump). */
 const MODEL_SOFT_BANK_MS_DEFAULT = 0;
 /** Kalshi bid slide from peak — cut before engine probs catch up (predict the dump). */
-const MODEL_DUMP_PULLBACK_CENTS_DEFAULT = 3;
+const MODEL_DUMP_PULLBACK_CENTS_DEFAULT = 6;
 /** Underwater this many ¢ → candidate for stop only if also on pace toward ≤50. */
 const MODEL_FAST_RED_CENTS_DEFAULT = 2;
 /** Min |netDominance| when trend is weakening before signalScore counts as turning. 0 = off. */

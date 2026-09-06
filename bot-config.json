@@ -188,5 +188,6 @@
   "modelProbDriftPts": 35,
   "modelLeanDecayDropPts": 5,
   "modelLeanDecayStallSeconds": 0,
-  "modelLeanDecayFloor": 70
+  "modelLeanDecayFloor": 70,
+  "modelLeanAgainstBeSeconds": 12
 }
