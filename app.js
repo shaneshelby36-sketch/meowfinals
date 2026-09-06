@@ -986,6 +986,7 @@ function checkGoAlerts(data) {
       const u = Number(w.probabilityUp); return u >= 50 ? u : 100 - u;
     });
     const allLeanOk = leans.length === 3 && leans.every((l) => l >= 78);
+    const allLeanStrong = leans.length === 3 && leans.every((l) => l >= 80);
 
     const confs = [w5, w10, w15].filter(Boolean).map((w) => Number(w.confidence)).filter(Number.isFinite);
     const avgConf = confs.length ? confs.reduce((a, b) => a + b, 0) / confs.length : null;
@@ -998,11 +999,13 @@ function checkGoAlerts(data) {
     const priceGate = kalshiCents != null && kalshiCents >= 70;
 
     let signal = 'WAIT';
-    if (!tooEarly && !tooLate && weakeningCount < 2 && allAgree) {
-      if (allLeanOk && confOk) {
+    if (!tooLate && weakeningCount < 2 && allAgree) {
+      if (!tooEarly && allLeanOk && confOk) {
         signal = 'GO';
-      } else if (priceGate) {
+      } else if (!tooEarly && priceGate) {
         signal = 'GO';
+      } else if (tooEarly && allLeanStrong && confOk && weakeningCount === 0) {
+        signal = 'EARLY GO';
       }
     }
 
@@ -1014,7 +1017,7 @@ function checkGoAlerts(data) {
     // Fire on transition TO GO. On very first load (prev===undefined) we skip
     // silently so we don't blast the user immediately on page load —
     // but on the second cycle (prev is now set) transitions work normally.
-    if (!firedThisCycle && signal === 'GO' && prev !== 'GO' && prev !== undefined && prev !== 'init') {
+    if (!firedThisCycle && (signal === 'GO' || signal === 'EARLY GO') && prev !== signal && prev !== undefined && prev !== 'init') {
       const lastFired = _goAlertLastFired[sym] || 0;
       if (now - lastFired >= GO_ALERT_COOLDOWN_MS) {
         _goAlertLastFired[sym] = now;
@@ -1174,21 +1177,28 @@ function renderCommodityLeanBar(data) {
       const weakeningCount = trends.filter((t) => t === 'weakening').length;
       const strengtheningCount = trends.filter((t) => t === 'strengthening').length;
 
-      // All leans ≥78%
+      // All leans ≥78% (normal gate) / ≥80% (early-entry gate)
       const leans = [w5, w10, w15].filter(Boolean).map((w) => {
         const u = Number(w.probabilityUp);
         return u >= 50 ? u : 100 - u;
       });
       const allLeanOk = leans.length === 3 && leans.every((l) => l >= 78);
+      const allLeanStrong = leans.length === 3 && leans.every((l) => l >= 80);
       // Conf ok
       const confOk = avgConf != null && avgConf >= 70;
       // ≥70¢ gate — if Kalshi price is already this high, likely holds to settle
       const kalshiCents = d.kalshiPriceCents != null ? Number(d.kalshiPriceCents) : null;
       const priceGate = kalshiCents != null && kalshiCents >= 70;
+      // Early-entry edge: all 3 leans ≥80%, all agree, not weakening — strong enough
+      // to consider entering before the normal 6.5-min window opens
+      const earlyEdge = tooEarly && allLeanStrong && allAgree && weakeningCount === 0 && confOk;
 
-      if (tooEarly) {
+      if (tooEarly && !earlyEdge) {
         goSignal = 'EARLY'; goColor = '#57606a';
-        goTitle = 'Too early — wait until 12 min or less remain';
+        goTitle = 'Too early — wait until 6.5 min or less remain';
+      } else if (earlyEdge) {
+        goSignal = 'EARLY GO'; goColor = '#06b6d4';
+        goTitle = `All 3 windows ≥80% lean + conf ${avgConf}% — possible early edge (${agreeDir})`;
       } else if (tooLate) {
         goSignal = 'LATE'; goColor = '#57606a';
         goTitle = 'Too late — less than 2 min left';
