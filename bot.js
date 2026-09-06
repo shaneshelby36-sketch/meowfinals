@@ -2100,6 +2100,32 @@ function modelProbDriftPts(config = {}) {
   return MODEL_PROB_DRIFT_PTS_DEFAULT;
 }
 
+/** Rising-lean hold: true when feature is enabled (on/off toggle). */
+function modelLeanRisingHoldEnabled(config = {}) {
+  const v = config.modelLeanRisingHold;
+  if (v === 'on' || v === true || v === 1) return true;
+  return false;
+}
+
+/** Minimum pts lean must have risen above entry value to suppress MODEL_AGAINST / stall-bank exits. */
+function modelLeanRisingMinPts(config = {}) {
+  const n = Number(config.modelLeanRisingMinPts);
+  if (Number.isFinite(n) && n > 0) return n;
+  return 1;
+}
+
+/**
+ * Returns true when lean is actively rising vs entry by at least minPts.
+ * liveHeldProb and entryHeldProb are the held-side probability (0–100).
+ */
+function modelLeanIsRising(liveHeldProb, entryHeldProb, config = {}) {
+  if (!modelLeanRisingHoldEnabled(config)) return false;
+  const live = Number(liveHeldProb);
+  const entry = Number(entryHeldProb);
+  if (!Number.isFinite(live) || !Number.isFinite(entry)) return false;
+  return live >= entry + modelLeanRisingMinPts(config);
+}
+
 /** Held-side live prob fell this many pts since entry — model fading before the bid. */
 function modelProbDriftAgainst(window, side, entryHeldProb, driftPts = MODEL_PROB_DRIFT_PTS_DEFAULT) {
   const entry = Number(entryHeldProb);
@@ -2502,6 +2528,8 @@ function modelStallBankReady(
     window = null,
     side = null,
     config = {},
+    liveHeldProb = null,
+    entryHeldProb = null,
   } = {}
 ) {
   if (!armed || !priceStalled || upwardMomentum) return { ready: false };
@@ -2514,6 +2542,11 @@ function modelStallBankReady(
   const nearTargetBank = modelNearTargetBankCentsForTrade(trade, config);
   const arm = modelTrailArmCentsForTrade(trade, config);
   if (green < arm) return { ready: false };
+
+  // If lean is actively rising above entry value, hold — don't bank on a stall.
+  if (modelLeanIsRising(liveHeldProb, entryHeldProb, config)) {
+    return { ready: false, heldByRisingLean: true };
+  }
 
   // If the lean is still clearly firm and favoring, let it ride to full TP —
   // only bank on stall when the lean is soft, weakening, or against.
@@ -3848,6 +3881,8 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelStagnationSeconds',
   'modelStagnationMinProgressCents',
   'modelProbDriftPts',
+  'modelLeanRisingHold',
+  'modelLeanRisingMinPts',
   'modelRapidAdverseCents',
   'modelUnderwaterWindowSeconds',
   'modelUnderwaterRatioPct',
@@ -9051,6 +9086,8 @@ class TradingBot {
       const entryHeldProb = Number.isFinite(entryHeldProbRaw)
         ? entryHeldProbRaw
         : Number(trade.engineProbability);
+      // Rising lean: lean has climbed above entry — suppress soft exits while it climbs.
+      const leanRising = modelLeanIsRising(liveHeldProb, entryHeldProb, this.config);
       const engineTurning =
         picked &&
         picked.window &&
@@ -9104,8 +9141,9 @@ class TradingBot {
       const leanExit = faded
         ? !!weakConf
         : !!(
-            engineSoftTurning ||
-            (!inOpenGrace && picked && picked.window && !engineClearlyWithUs)
+            !leanRising &&
+            (engineSoftTurning ||
+            (!inOpenGrace && picked && picked.window && !engineClearlyWithUs))
           );
 
       const minHold = modelMinHoldMs(this.config);
@@ -9700,6 +9738,8 @@ class TradingBot {
         window: picked && picked.window ? picked.window : null,
         side: trade.side,
         config: this.config,
+        liveHeldProb,
+        entryHeldProb,
       });
       const stallBankHoldOk =
         heldForBank ||
@@ -9720,6 +9760,17 @@ class TradingBot {
           liveSellPriceCents: heldSideBidCents,
           stallBank: true,
         });
+        return;
+      }
+      if (bidOk && stallBank.heldByRisingLean) {
+        const risePts = Number.isFinite(Number(liveHeldProb)) && Number.isFinite(Number(entryHeldProb))
+          ? `+${(Number(liveHeldProb) - Number(entryHeldProb)).toFixed(1)}pts`
+          : '';
+        const holdMsg =
+          `Holding ${trade.symbol} +${greenCents}¢ — lean rising${risePts ? ' ' + risePts : ''} vs entry; riding to +${bankGreen}¢ TP.`;
+        trade.holdReason = holdMsg;
+        this.lastDecision = holdMsg;
+        this._persist();
         return;
       }
       if (bidOk && stallBank.heldByLean) {
@@ -13137,6 +13188,9 @@ module.exports = {
   MODEL_SIGNAL_DOMINANCE_MIN_DEFAULT,
   modelProbDriftAgainst,
   modelProbDriftPts,
+  modelLeanRisingHoldEnabled,
+  modelLeanRisingMinPts,
+  modelLeanIsRising,
   modelEngineTurningAgainst,
   modelEngineHardAgainst,
   modelEntryDumpRisk,

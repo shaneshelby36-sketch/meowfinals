@@ -101,6 +101,8 @@
         title="Test GO alert sound">🔔</button>
       <div id="lean-bar-pnl" style="display:flex;align-items:center;padding:0 10px;font-size:10px;gap:6px;"></div>
     </div>
+    <!-- Instability warning bar — shown when any visible symbol is in GO window + unstable -->
+    <div id="lean-bar-warning" style="display:none;"></div>
     <!-- Symbol rows -->
     <div id="lean-bar-commo" style="display:flex;align-items:stretch;min-height:46px;">
       <div id="commo-lean-gold"   data-sym="GOLD"   class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;border-right:1px solid #21262d;"></div>
@@ -1039,6 +1041,21 @@
               <span class="slider-value" id="bot-model-prob-drift-value">—</span>
             </div>
             <span class="field-hint">How many probability points the held-side lean must drop from its entry value before the model is considered "soft turning." Default <strong>15pts</strong>. Lower = more sensitive to any lean drift; higher = ignores small wobbles on high-confidence entries (e.g. 99%→84% is fine at 15pts).</span>
+          </label>
+          <label>MODEL rising lean hold
+            <div class="slider-row">
+              <select id="bot-model-lean-rising-hold">
+                <option value="off">Off (default)</option>
+                <option value="on">On — hold while lean is climbing</option>
+              </select>
+            </div>
+            <span class="field-hint">When <strong>on</strong>, suppresses MODEL_AGAINST exits and stall-bank TPs while the held-side lean is actively rising above its entry value. Lets winning trades run longer when the model is gaining conviction mid-trade.</span>
+          </label>
+          <label>MODEL rising lean min pts
+            <div class="slider-row">
+              <input id="bot-model-lean-rising-min-pts" type="number" min="1" max="20" step="1" style="width:70px;" />
+            </div>
+            <span class="field-hint">How many pts above entry lean counts as "rising" (e.g. <strong>1</strong> = any increase holds; <strong>3</strong> = needs a 3pt climb). Default <strong>1</strong>. Only active when rising lean hold is <strong>on</strong>.</span>
           </label>
           <label>MODEL lean sensitivity (hold margin %)
             <div class="slider-row">
