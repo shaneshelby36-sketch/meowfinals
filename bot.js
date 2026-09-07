@@ -889,6 +889,8 @@ const MODEL_COMMODITY_TRAIL_CENTS_DEFAULT = 0; // ¢ pullback from peak to trail
  */
 const MODEL_COMMODITY_LATE_BARRIER_MINUTES_DEFAULT = 7;
 const MODEL_COMMODITY_SETTLE_CLOSE_MINUTES_DEFAULT = 6;
+/** Long-hold TP: bank any green on a commodity after holding this long before the late barrier. */
+const MODEL_COMMODITY_LONG_HOLD_TP_MS_DEFAULT = 5 * 60 * 1000; // 5 minutes
 /** Don't early-exit a Model hold until it's been open at least this long. */
 const MODEL_MIN_HOLD_MS_DEFAULT = 4_000;
 /** After Model BE/TP, sit out that coin this long before rebuy. */
@@ -9625,6 +9627,42 @@ class TradingBot {
         if (modelHardAgainst && againstBeReady && hardAgainstConfirmed) {
           if (await exitModelAgainst()) return;
         } else if ((isBankableGreen || isDecentGreen) && heldForBank) {
+          await this._closePosition(trade, heldSideBidCents, 'take_profit', {
+            liveSellPriceCents: heldSideBidCents,
+          });
+          return;
+        }
+      }
+
+      // Long-hold / peak-decay TP for commodities: bank any remaining green before
+      // the late barrier when either:
+      //   (a) held ≥5 minutes — slow markets can hold to the 5-min mark without
+      //       hitting the TP target; collect profit rather than riding it back down.
+      //   (b) peak-pullback: peaked ≥3¢ green and has since pulled back ≥3¢ from
+      //       that peak while still green — price has reversed off the high; don't
+      //       wait for the full TP target, bank what's left.
+      // Both cases require a minimum hold (open grace + 60s buffer) and green ≥1¢.
+      // Skip when commodityRideToSettle (override 99) — those hold to settlement only.
+      if (
+        bidOk &&
+        !inLateBarrier &&
+        isCommoditySymbol(trade.symbol) &&
+        !commodityRideToSettle &&
+        flatOrGreen &&
+        greenCents >= 1 &&
+        heldMs >= openGraceMs + 60_000
+      ) {
+        const longHold = heldMs >= MODEL_COMMODITY_LONG_HOLD_TP_MS_DEFAULT;
+        const peakPullbackTp =
+          peakProgress >= 3 &&
+          pullback >= 3 &&
+          greenCents < peakProgress; // bid has reversed off the peak
+        if (longHold || peakPullbackTp) {
+          const reason = longHold
+            ? `held ${Math.round(heldMs / 60000)}m before late barrier`
+            : `peak +${peakProgress}¢ → pulled back ${pullback}¢, now +${greenCents}¢`;
+          this.lastDecision =
+            `Commodity ${trade.symbol} ${reason} — banking +${greenCents}¢ at bid.`;
           await this._closePosition(trade, heldSideBidCents, 'take_profit', {
             liveSellPriceCents: heldSideBidCents,
           });
