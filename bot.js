@@ -3941,6 +3941,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'commodityMinEntryCentsNatgas',
   'commodityMinEntryCentsCopper',
   'commodityMaxEntryCents',
+  'commodityMinConfidence',
   'commoditySettleCloseMinutes',
   'commodityLateBarrierMinutes',
   'commodityMaxOpenPositions',
@@ -12012,9 +12013,15 @@ class TradingBot {
       say(switchGate.reason);
       return null;
     }
-    const minConf = Number.isFinite(Number(this.config.modelMinConfidence))
+    const globalMinConf = Number.isFinite(Number(this.config.modelMinConfidence))
       ? Number(this.config.modelMinConfidence)
       : MODEL_MIN_CONFIDENCE_DEFAULT;
+    const commodityConfOverride = isCommoditySymbol(symbol)
+      ? Number(this.config.commodityMinConfidence)
+      : NaN;
+    const minConf = isCommoditySymbol(symbol) && Number.isFinite(commodityConfOverride) && commodityConfOverride > 0
+      ? commodityConfOverride
+      : globalMinConf;
     if (!Number.isFinite(window.confidence) || window.confidence < minConf) {
       const confidence = Number.isFinite(window.confidence) ? window.confidence : 'unavailable';
       say(`Waiting: ${symbol} ${windowKey} confidence is ${confidence}% (minimum ${minConf}%).`);

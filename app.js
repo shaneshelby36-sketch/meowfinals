@@ -2524,6 +2524,7 @@ const SLIDER_UNITS = {
   'bot-model-entry-momentum-block': (v) => (Number(v) <= 0 ? 'off' : `${(+v * 100).toFixed(0)}%`),
   'bot-model-settle-close': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
   'bot-model-late-barrier': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
+  'bot-commodity-min-confidence': (v) => (Number(v) <= 0 ? 'global' : `≥${Math.round(v)}%`),
   'bot-commodity-settle-close': (v) => (Number(v) <= 0 ? 'default (6m)' : `${(+v).toFixed(1)} min`),
   'bot-commodity-late-barrier': (v) => (Number(v) <= 0 ? 'default (7m)' : `${(+v).toFixed(1)} min`),
   'bot-model-preclose-force': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(2)} min`),
@@ -3138,6 +3139,7 @@ function wireSliderDisplays() {
     'bot-model-entry-momentum-block',
     'bot-model-settle-close',
     'bot-model-late-barrier',
+    'bot-commodity-min-confidence',
     'bot-commodity-settle-close',
     'bot-commodity-late-barrier',
     'bot-model-preclose-force',
@@ -3342,6 +3344,7 @@ function wireBotConfigAutoSave() {
     'bot-model-entry-momentum-block',
     'bot-model-settle-close',
     'bot-model-late-barrier',
+    'bot-commodity-min-confidence',
     'bot-commodity-settle-close',
     'bot-commodity-late-barrier',
     'bot-model-preclose-force',
@@ -3721,6 +3724,8 @@ async function loadBotConfigIntoForm() {
       modelLateBarrier.value =
         c.modelLateBarrierMinutes != null ? c.modelLateBarrierMinutes : 2;
     }
+    const commodityMinConf = document.getElementById('bot-commodity-min-confidence');
+    if (commodityMinConf) commodityMinConf.value = c.commodityMinConfidence != null ? c.commodityMinConfidence : 0;
     const commoditySettleClose = document.getElementById('bot-commodity-settle-close');
     if (commoditySettleClose) commoditySettleClose.value = c.commoditySettleCloseMinutes != null ? c.commoditySettleCloseMinutes : 0;
     const commodityLateBarrier = document.getElementById('bot-commodity-late-barrier');
@@ -3940,6 +3945,7 @@ async function loadBotConfigIntoForm() {
       'bot-model-entry-momentum-block',
       'bot-model-settle-close',
       'bot-model-late-barrier',
+      'bot-commodity-min-confidence',
       'bot-commodity-settle-close',
       'bot-commodity-late-barrier',
       'bot-model-preclose-force',
@@ -4206,6 +4212,7 @@ async function saveBotConfig(opts = {}) {
     modelEntryMomentumBlockPct: parseFloat(document.getElementById('bot-model-entry-momentum-block')?.value || '0'),
     modelSettleCloseMinutes: parseFloat(document.getElementById('bot-model-settle-close')?.value || '2.5'),
     modelLateBarrierMinutes: parseFloat(document.getElementById('bot-model-late-barrier')?.value || '2'),
+    commodityMinConfidence: parseFloat(document.getElementById('bot-commodity-min-confidence')?.value || '0'),
     commoditySettleCloseMinutes: parseFloat(document.getElementById('bot-commodity-settle-close')?.value || '0'),
     commodityLateBarrierMinutes: parseFloat(document.getElementById('bot-commodity-late-barrier')?.value || '0'),
     modelPreCloseForceMinutes: parseFloat(

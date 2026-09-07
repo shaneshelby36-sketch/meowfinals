@@ -856,6 +856,13 @@
             <span class="field-hint">Once +trailArm¢ green, exit if bid drops this far from peak. <strong>0</strong> = use global modelTrailCents.</span>
           </label>
 
+          <label style="border: 2px solid #f59e0b; border-radius: 6px; padding: 8px; background: #fffbeb;">⚙️ Commodity — min confidence override (%)
+            <div class="slider-row">
+              <input id="bot-commodity-min-confidence" type="range" min="50" max="85" step="1" style="border:2px solid #f59e0b;" />
+              <span class="slider-value" id="bot-commodity-min-confidence-value">—</span>
+            </div>
+            <span class="field-hint">⚠️ <strong>Commodity-only confidence floor.</strong> Set lower than the global 70% to allow more commodity entries. Crypto is unaffected. <strong>0 = use global</strong>. Try <strong>62–65%</strong> to open up Gold/Silver/Oil entries.</span>
+          </label>
           <label>🎯 Commodity — cash out before settle (min left)
             <div class="slider-row">
               <input id="bot-commodity-settle-close" type="range" min="0" max="14" step="0.5" style="border:2px solid #10b981;" />
@@ -1023,7 +1030,7 @@
           </label>
           <label style="border: 2px solid #f59e0b; border-radius: 6px; padding: 8px;">⏱ UNDERWATER RATIO CUT — window (seconds)
             <div class="slider-row">
-              <input id="bot-model-underwater-window" type="range" min="0" max="180" step="5" />
+              <input id="bot-model-underwater-window" type="range" min="0" max="300" step="5" />
               <span class="slider-value" id="bot-model-underwater-window-value">—</span>
             </div>
             <span class="field-hint">How many seconds to observe before checking the ratio. <strong>0 = off entirely</strong>. Default <strong>90s</strong>. If bid spends too much time underwater during this window, cut immediately.</span>
