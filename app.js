@@ -4408,6 +4408,32 @@ async function resetPaperHistory() {
   }
 }
 
+async function resetPaperHistoryFull() {
+  if (
+    !window.confirm(
+      'FULL RESET — wipe everything?\n\n' +
+        'This clears ALL trade history including the past 40 trades, resets P&L, reserve, and open trades to zero, and wipes calibration stats completely. The history is archived to disk first. This cannot be undone.'
+    )
+  ) {
+    return;
+  }
+  const { engineUrl } = loadSettings();
+  const feedback = document.getElementById('bot-settings-feedback');
+  try {
+    const res = await fetch(`${engineUrl}/api/bot/reset-paper-full`, { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.message || 'Reset failed.');
+    feedback.textContent = data.message;
+    feedback.style.color = 'var(--up)';
+    resetExitSoundSeenCloses();
+    await refreshBotStatus();
+    await loadCalibration();
+  } catch (err) {
+    feedback.textContent = `Could not reset paper history: ${err.message}`;
+    feedback.style.color = 'var(--down)';
+  }
+}
+
 function readBacktestSettingsFromForm() {
   const skimMode = document.getElementById('bot-skim-mode')?.value;
   const skimAmount = parseFloat(document.getElementById('bot-skim-amount')?.value);
@@ -4934,6 +4960,7 @@ function wireBotUI() {
   document.getElementById('bot-dashboard-toggle').addEventListener('click', (event) => setBotRunning(event.currentTarget.dataset.running === 'true'));
   document.getElementById('bot-dashboard-open').addEventListener('click', openBotOverlay);
   document.getElementById('bot-reset-paper').addEventListener('click', resetPaperHistory);
+  document.getElementById('bot-reset-paper-full').addEventListener('click', resetPaperHistoryFull);
   document.getElementById('bot-commodity-fetch-candles')?.addEventListener('click', refreshCommodityCandles);
   document.getElementById('daily-loss-reset-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('daily-loss-reset-btn');

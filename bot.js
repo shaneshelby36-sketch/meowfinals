@@ -5896,17 +5896,20 @@ class TradingBot {
     };
   }
 
-  resetPaperState() {
+  resetPaperState({ fullReset = false } = {}) {
     if (this.config.mode !== 'paper') {
       return { ok: false, message: 'Paper history can only be reset while the bot is in paper mode.' };
     }
-    // Keep the newest closed samples so calibration isn't wiped to empty.
-    const keepN = PAPER_RESET_KEEP_SAMPLES;
-    const merged = pickRecentClosedTradeSamples(
-      [...(this.ledger.trades || []), ...loadTradeLog()],
-      keepN
-    );
-    const kept = pickRecentClosedTradeSamples(merged, keepN);
+    // Full reset keeps nothing; normal reset retains the newest closed samples
+    // so calibration isn't wiped to zero.
+    const keepN = fullReset ? 0 : PAPER_RESET_KEEP_SAMPLES;
+    const merged = keepN > 0
+      ? pickRecentClosedTradeSamples(
+          [...(this.ledger.trades || []), ...loadTradeLog()],
+          keepN
+        )
+      : [];
+    const kept = keepN > 0 ? pickRecentClosedTradeSamples(merged, keepN) : [];
 
     this.ledger = {
       trades: [],
@@ -5923,12 +5926,12 @@ class TradingBot {
     const keptMsg =
       kept.length > 0
         ? ` Kept last ${kept.length} closed trade${kept.length === 1 ? '' : 's'} for calibration.`
-        : '';
+        : ' Full history wiped.';
     this.lastDecision =
       `Paper P&L, reserve, and open book were reset.${keptMsg}`;
     clearTradeLog({ archive: true, keepTrades: kept });
     this._clearAllShadowBooks();
-    this._logActivity(this.lastDecision, { kind: 'reset', keptSamples: kept.length });
+    this._logActivity(this.lastDecision, { kind: 'reset', keptSamples: kept.length, fullReset });
     this._persist();
     this._persistShadowBooks();
     saveCalibration(this.calibration);

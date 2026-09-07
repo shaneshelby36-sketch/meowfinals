@@ -951,6 +951,15 @@ app.get("/", (req, res) => {
     res.status(result.ok ? 200 : 400).json(result);
   });
 
+  app.post('/api/bot/reset-paper-full', (req, res) => {
+    if (!bot) {
+      res.status(404).json({ enabled: false, message: 'Bot is not enabled (set KALSHI_ENABLED=true).' });
+      return;
+    }
+    const result = bot.resetPaperState({ fullReset: true });
+    res.status(result.ok ? 200 : 400).json(result);
+  });
+
   app.post('/api/bot/insurance/deposit', (req, res) => {
     if (!bot) {
       res.status(404).json({ enabled: false, message: 'Bot is not enabled (set KALSHI_ENABLED=true).' });
