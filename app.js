@@ -3473,7 +3473,7 @@ async function loadBotConfigIntoForm() {
     const modelMinEntryLean = document.getElementById('bot-model-min-entry-lean');
     if (modelMinEntryLean) {
       modelMinEntryLean.value =
-        c.modelMinEntryLeanPct != null ? c.modelMinEntryLeanPct : 65;
+        c.modelMinEntryLeanPct != null ? c.modelMinEntryLeanPct : 70;
     }
     const modelMinEntryLeanSOL = document.getElementById('bot-model-min-entry-lean-sol');
     if (modelMinEntryLeanSOL) {

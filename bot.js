@@ -859,7 +859,7 @@ const FORCE_EXIT_ESCALATE_MS_DEFAULT = 8_000;
 /** Entry: live lean must favor the locked side by at least this many pts (0 = any lead). */
 const MODEL_ENTRY_LIVE_LEAN_MARGIN_DEFAULT = 2;
 /** Entry: held-side live prob must be at least this % (0 = off). */
-const MODEL_MIN_ENTRY_LEAN_PCT_DEFAULT = 65;
+const MODEL_MIN_ENTRY_LEAN_PCT_DEFAULT = 70;
 /** Per-asset entry lean overrides — 0 = fall back to global modelMinEntryLeanPct. */
 const MODEL_MIN_ENTRY_LEAN_SOL_DEFAULT = 0;
 const MODEL_MIN_ENTRY_LEAN_BTC_DEFAULT = 0;
@@ -1777,24 +1777,20 @@ function modelTrailCentsForTrade(trade, config = {}) {
 function modelMinEntryLeanGate({ window, side, config = {}, symbol, priceCents } = {}) {
   const need = modelMinEntryLeanPctForSymbol(symbol, config);
   if (!(need > 0)) return { ok: true, skipped: true };
-  // Lean requirement only applies below a price threshold.
-  // For commodities: threshold = commodityMinEntryCents (e.g. 70¢).
-  // For crypto: threshold = modelLeanSkipAboveCents if set (e.g. 80¢),
-  //   otherwise falls back to modelMinEntryCents.
-  // At or above the threshold the lean gate is skipped entirely.
+  // For commodities: lean gate only applies below the commodity min-entry threshold.
+  // For crypto: lean gate applies at ALL prices unless modelLeanSkipAboveCents is
+  //   explicitly configured (intentional override). Falling back to modelMinEntryCents
+  //   was silently skipping the gate for any above-floor entry (e.g. 82¢ with 65% lean).
   if (priceCents != null) {
-    let skipAbove;
     if (symbol && isCommoditySymbol(symbol)) {
-      skipAbove = modelCommodityMinEntryCents(symbol, config);
+      const skipAbove = modelCommodityMinEntryCents(symbol, config);
+      if (Number(priceCents) >= skipAbove) return { ok: true, skipped: true };
     } else {
       const cryptoSkip = Number(config.modelLeanSkipAboveCents);
-      skipAbove = Number.isFinite(cryptoSkip) && cryptoSkip > 0
-        ? cryptoSkip
-        : Number.isFinite(Number(config.modelMinEntryCents))
-          ? Number(config.modelMinEntryCents)
-          : MODEL_MIN_ENTRY_DEFAULT_CENTS;
+      if (Number.isFinite(cryptoSkip) && cryptoSkip > 0 && Number(priceCents) >= cryptoSkip) {
+        return { ok: true, skipped: true };
+      }
     }
-    if (Number(priceCents) >= skipAbove) return { ok: true, skipped: true };
   }
   const held = modelHeldSideProb(window, side);
   if (!Number.isFinite(held)) {
