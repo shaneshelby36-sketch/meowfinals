@@ -454,6 +454,9 @@ function pausedEngineStub(symbol, prevAsset) {
     enginePaused: true,
     price: Number.isFinite(Number(price)) ? Number(price) : null,
     message: 'Engine paused — not in AUTO / no open position',
+    // Carry forward the last indicatorsSnapshot so micro-momentum stays visible
+    // even when the symbol isn't actively being traded.
+    indicatorsSnapshot: (prevAsset && prevAsset.indicatorsSnapshot) || null,
   };
 }
 
@@ -478,8 +481,11 @@ async function recompute() {
     }
 
     const active = activeEngineSymbols();
+    // Always include commodity symbols in buildPredictions so indicatorsSnapshot
+    // (including microMomentumPct) is computed for the lean bar even when not trading them.
+    const inputSymbols = new Set([...active, ...COMMODITY_PRODUCT_SYMBOLS.filter((s) => state[s])]);
     const input = {};
-    for (const symbol of active) {
+    for (const symbol of inputSymbols) {
       const s = state[symbol];
       if (!s) continue;
       input[symbol] = { series: s.series, book: s.book };

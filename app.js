@@ -1229,7 +1229,17 @@ function renderCommodityLeanBar(data) {
     if (!cell) continue;
     const d = data && data[sym];
     if (!d || !d.ready || !d.windows) {
-      cell.innerHTML = `<span style="color:#57606a;font-size:11px;font-weight:600;">${sym}</span><span style="color:#57606a;font-size:10px;">seeding…</span>`;
+      const snapMicro = d && d.indicatorsSnapshot && d.indicatorsSnapshot.microMomentumPct != null
+        ? d.indicatorsSnapshot.microMomentumPct : null;
+      const microBit = snapMicro != null
+        ? (() => {
+            const bps = (snapMicro * 10000).toFixed(1);
+            const sign = snapMicro >= 0 ? '+' : '';
+            const col = snapMicro > 0.0001 ? '#34d399' : snapMicro < -0.0001 ? '#f87171' : '#8b949e';
+            return `<span style="color:${col};font-size:9px;font-weight:700;" title="30s micro-momentum (VWAP)">${sign}${bps}bp</span>`;
+          })()
+        : `<span style="color:#30363d;font-size:9px;" title="30s micro-momentum — warming up">~</span>`;
+      cell.innerHTML = `<span style="color:#57606a;font-size:11px;font-weight:600;">${sym}</span>${microBit}<span style="color:#57606a;font-size:10px;">seeding…</span>`;
       cell.style.background = '';
       cell.onclick = null;
       continue;
@@ -1445,14 +1455,16 @@ function renderCommodityLeanBar(data) {
     }
 
     const microPct = snap && snap.microMomentumPct != null ? snap.microMomentumPct : null;
-    const microHtml = microPct != null && !isStale
-      ? (() => {
-          const bps = (microPct * 10000).toFixed(1);
-          const sign = microPct >= 0 ? '+' : '';
-          const col = microPct > 0.0001 ? '#34d399' : microPct < -0.0001 ? '#f87171' : '#8b949e';
-          return `<span style="color:${col};font-size:9px;font-weight:700;" title="30s micro-momentum (VWAP)">${sign}${bps}bp</span>`;
-        })()
-      : '';
+    const microHtml = (() => {
+      if (isStale) return '';
+      if (microPct != null) {
+        const bps = (microPct * 10000).toFixed(1);
+        const sign = microPct >= 0 ? '+' : '';
+        const col = microPct > 0.0001 ? '#34d399' : microPct < -0.0001 ? '#f87171' : '#8b949e';
+        return `<span style="color:${col};font-size:9px;font-weight:700;" title="30s micro-momentum (VWAP)">${sign}${bps}bp</span>`;
+      }
+      return `<span style="color:#30363d;font-size:9px;" title="30s micro-momentum — warming up">~</span>`;
+    })();
 
     cell.innerHTML = `
       <div style="display:flex;align-items:center;gap:3px;">
