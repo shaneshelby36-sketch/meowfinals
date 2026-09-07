@@ -12,10 +12,13 @@ const MAX_CANDLES = 300; // enough history for EMA200 + lookback
  * seeded from Coinbase's public REST candle endpoint and then kept live
  * by folding in individual trade prints from the WebSocket feed.
  */
+const RECENT_TICKS_WINDOW_MS = 90 * 1000; // keep 90 seconds of raw ticks
+
 class CandleSeries {
   constructor(productId) {
     this.productId = productId;
     this.candles = []; // oldest -> newest, each {time, open, high, low, close, volume}
+    this._recentTicks = []; // rolling 90s buffer of {price, size, time}
   }
 
   async seed() {
@@ -46,8 +49,27 @@ class CandleSeries {
     }
   }
 
+  /**
+   * Latest sub-minute price ticks for micro-momentum calculation.
+   * Returns array of {price, size, time} sorted oldest→newest, within the last windowMs.
+   */
+  recentTicks(windowMs = RECENT_TICKS_WINDOW_MS) {
+    const cutoff = Date.now() - windowMs;
+    // Prune expired ticks lazily on read
+    while (this._recentTicks.length && this._recentTicks[0].time < cutoff) {
+      this._recentTicks.shift();
+    }
+    return this._recentTicks;
+  }
+
   // Fold a live trade (price, size, timestamp ms) into the current or a new candle
   addTrade(price, size, timeMs) {
+    // Append to recent ticks buffer, pruning anything older than the window
+    const cutoff = timeMs - RECENT_TICKS_WINDOW_MS;
+    while (this._recentTicks.length && this._recentTicks[0].time < cutoff) {
+      this._recentTicks.shift();
+    }
+    this._recentTicks.push({ price, size, time: timeMs });
     const bucketStart = Math.floor(timeMs / (CANDLE_SECONDS * 1000)) * (CANDLE_SECONDS * 1000);
     const last = this.candles[this.candles.length - 1];
 
@@ -92,7 +114,7 @@ class CandleSeries {
   }
 }
 
-module.exports = { CandleSeries, CANDLE_SECONDS };
+module.exports = { CandleSeries, CANDLE_SECONDS, RECENT_TICKS_WINDOW_MS };
 
 /**
  * Fetches up to `hours` of 1-minute candles for a product, paginating

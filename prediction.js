@@ -440,6 +440,32 @@ function buildPredictions(data, kalshiTargets = {}, accumulatorManager = null, o
     correlations[symbol] = correlation(closesBySymbol['BTC'], closesBySymbol[symbol], 30);
   }
 
+  // Compute micro-momentum from sub-minute ticks for each symbol.
+  // microMomentumPct: % price change over the last 30s vs the price 30–60s ago.
+  // Positive = rising, negative = falling. null = not enough ticks yet.
+  const microMomentum = {};
+  for (const symbol of symbols) {
+    const series = data[symbol].series;
+    if (typeof series.recentTicks !== 'function') { microMomentum[symbol] = null; continue; }
+    const ticks = series.recentTicks(90 * 1000);
+    if (ticks.length < 2) { microMomentum[symbol] = null; continue; }
+    const nowMs = now;
+    const recentCutoff = nowMs - 30_000;  // last 30s
+    const olderCutoff  = nowMs - 60_000;  // 30–60s ago
+    const recentTicks  = ticks.filter(t => t.time >= recentCutoff);
+    const olderTicks   = ticks.filter(t => t.time >= olderCutoff && t.time < recentCutoff);
+    if (!recentTicks.length || !olderTicks.length) { microMomentum[symbol] = null; continue; }
+    // Volume-weighted average price for each window
+    const vwap = (arr) => {
+      let sumPV = 0, sumV = 0;
+      for (const t of arr) { sumPV += t.price * (t.size || 1); sumV += (t.size || 1); }
+      return sumV > 0 ? sumPV / sumV : arr[arr.length - 1].price;
+    };
+    const recentVwap = vwap(recentTicks);
+    const olderVwap  = vwap(olderTicks);
+    microMomentum[symbol] = olderVwap > 0 ? +((recentVwap - olderVwap) / olderVwap).toFixed(5) : null;
+  }
+
   const result = {};
   for (const symbol of symbols) {
     const ind = indicators[symbol];
@@ -537,6 +563,7 @@ function buildPredictions(data, kalshiTargets = {}, accumulatorManager = null, o
         ema200: ind.trend.ema200 != null ? +ind.trend.ema200.toFixed(2) : null,
         trendAlignment: ind.trend.alignment,
         momentumShortPct: ind.momentumShort != null ? +ind.momentumShort.toFixed(3) : null,
+        microMomentumPct: microMomentum[symbol] != null ? microMomentum[symbol] : null,
         volumeSpikeRatio: ind.volumeSpike ? +ind.volumeSpike.ratio.toFixed(2) : null,
         orderBookImbalance: ind.imbalance ? +ind.imbalance.ratio.toFixed(3) : null,
         spreadPct: ind.spread ? +ind.spread.percent.toFixed(4) : null,

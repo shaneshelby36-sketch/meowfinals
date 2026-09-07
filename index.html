@@ -893,6 +893,14 @@
             <span class="field-hint">⚠️ <strong>Once armed, bank the green when the bid drops this far from the peak.</strong> e.g. peaked at +5¢, trigger 3¢ → banks at +2¢ instead of riding back to red. Default <strong>3¢</strong>. <strong>0 = off entirely</strong>.</span>
           </label>
 
+          <label style="border: 2px solid #f59e0b; border-radius: 6px; padding: 8px; background: #fffbeb;">⚡ Commodity — micro-momentum entry block (basis pts)
+            <div class="slider-row">
+              <input id="bot-commodity-micro-momentum" type="range" min="0" max="50" step="1" style="border:2px solid #f59e0b;" />
+              <span class="slider-value" id="bot-commodity-micro-momentum-value">—</span>
+            </div>
+            <span class="field-hint">⚠️ <strong>Block commodity entries when the underlying is actively moving against the lean.</strong> Uses last 30s vs 30–60s ago (sub-minute Polygon ticks). e.g. <strong>5</strong> = block if price moved 0.05% against entry direction. <strong>0 = off</strong>. Default <strong>5 bps</strong>.</span>
+          </label>
+
           <label>🎯 Commodity — max open at once
             <div class="slider-row">
               <input id="bot-commodity-max-open" type="range" min="1" max="3" step="1" style="border:2px solid #10b981;" />

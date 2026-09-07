@@ -1876,6 +1876,12 @@ function modelHardAdverseCents(config = {}) {
  * 3-candle momentum threshold (% of price) below which an entry in the
  * against-momentum direction is blocked. 0 = off (feature disabled).
  */
+function modelCommodityMicroMomentumBlock(config = {}) {
+  const n = Number(config.commodityMicroMomentumBlock);
+  if (Number.isFinite(n) && n >= 0) return n; // 0 = explicit off
+  return MODEL_COMMODITY_MICRO_MOMENTUM_BLOCK_DEFAULT;
+}
+
 function modelEntryMomentumBlockPct(config = {}) {
   const n = Number(config.modelEntryMomentumBlockPct);
   if (Number.isFinite(n) && n >= 0) return n;
@@ -3346,6 +3352,13 @@ const MODEL_HARD_ADVERSE_CENTS_DEFAULT = 0;
  * risen >0.15% in the last 3 minutes.
  */
 const MODEL_ENTRY_MOMENTUM_BLOCK_PCT_DEFAULT = 0;
+/**
+ * Commodity micro-momentum entry gate: if the underlying's 30s VWAP has moved
+ * against the entry direction by more than this % in the last 30s vs 30–60s ago,
+ * skip the entry. Uses sub-minute Polygon ticks — fresher than the 3-min candle
+ * momentum block. 0 = off (default). e.g. 0.05 = block if price moved 0.05% against.
+ */
+const MODEL_COMMODITY_MICRO_MOMENTUM_BLOCK_DEFAULT = 0.05; // 0.05% = 5 basis points
 /** Paper fill ceiling on adverse exits. 0 = off (book live bid). */
 const MODEL_MAX_LOSS_CENTS_DEFAULT = 0;
 /**
@@ -3974,6 +3987,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'commodityMaxOpenPositions',
   'commodityPeakPullbackArmCents',
   'commodityPeakPullbackTriggerCents',
+  'commodityMicroMomentumBlock',
   'modelAutoSwitchLowAvailDollars',
   'modelAutoSwitchMinLeadDollars',
   'modelAutoSwitchCooldownMinutes',
@@ -12315,6 +12329,30 @@ class TradingBot {
               `is against entry direction (block threshold ${(entryMomBlock * 100).toFixed(2)}%).`
           );
           return null;
+        }
+      }
+    }
+
+    // Micro-momentum gate for commodities: uses sub-minute Polygon ticks (last 30s
+    // VWAP vs 30–60s ago) to block entries when the underlying is actively moving
+    // against the lean direction right now — fresher than the 3-min candle block.
+    // Only applies to commodity symbols; crypto uses the candle-based block above.
+    if (isCommoditySymbol(symbol)) {
+      const microBlock = modelCommodityMicroMomentumBlock(this.config);
+      if (microBlock > 0) {
+        const microPct = assetPrediction.indicatorsSnapshot && assetPrediction.indicatorsSnapshot.microMomentumPct;
+        if (Number.isFinite(microPct)) {
+          // YES = betting price goes UP → block if underlying dropping (microPct < -threshold)
+          // NO  = betting price goes DOWN → block if underlying rising (microPct > +threshold)
+          const blocked = side === 'yes' ? microPct < -microBlock : microPct > microBlock;
+          if (blocked) {
+            say(
+              `Waiting: ${symbol} ${side.toUpperCase()} — underlying micro-momentum ` +
+              `${microPct >= 0 ? '+' : ''}${(microPct * 100).toFixed(3)}% (30s) ` +
+              `is against entry direction (block >${(microBlock * 100).toFixed(3)}%).`
+            );
+            return null;
+          }
         }
       }
     }
