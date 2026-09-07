@@ -2502,20 +2502,13 @@ function modelBeChaseExitReady(
   const needProgress = modelTrailArmCents(config);
   const atBe = !!flatOrGreen;
 
-  if (!atBe) {
-    if (trade) {
-      delete trade.modelBeChaseStartedAt;
-      delete trade.modelBeChaseTroughBid;
-    }
-    return { ready: false, reset: true };
-  }
-
   const peak = Number(peakProgressCents);
   const peaked = Number.isFinite(peak) ? peak : 0;
   if (peaked >= needProgress) {
     if (trade) {
       delete trade.modelBeChaseStartedAt;
       delete trade.modelBeChaseTroughBid;
+      delete trade.modelBeChaseTotalMs;
     }
     return { ready: false, achieved: true, needProgress };
   }
@@ -2523,13 +2516,28 @@ function modelBeChaseExitReady(
   const t = Number(now);
   if (!Number.isFinite(t)) return { ready: false, needSec, needProgress };
 
+  if (!atBe) {
+    // Price dipped back below entry — bank any time already accumulated this
+    // visit, then pause the clock until we're green again.
+    if (trade && Number.isFinite(Number(trade.modelBeChaseStartedAt))) {
+      const visitMs = t - Number(trade.modelBeChaseStartedAt);
+      trade.modelBeChaseTotalMs = (Number(trade.modelBeChaseTotalMs) || 0) + Math.max(0, visitMs);
+      delete trade.modelBeChaseStartedAt;
+      delete trade.modelBeChaseTroughBid;
+    }
+    return { ready: false, reset: true };
+  }
+
+  // Price is at or above entry — start (or resume) this visit's clock.
   if (!trade.modelBeChaseStartedAt) {
     trade.modelBeChaseStartedAt = t;
     if (trade) delete trade.modelBeChaseTroughBid;
     return { ready: false, started: true, needSec, needProgress };
   }
 
-  const elapsed = t - Number(trade.modelBeChaseStartedAt);
+  const visitMs = t - Number(trade.modelBeChaseStartedAt);
+  const totalMs = (Number(trade.modelBeChaseTotalMs) || 0) + visitMs;
+  const elapsed = totalMs;
   if (elapsed >= needSec * 1000) {
     if (risingNow) {
       return {
