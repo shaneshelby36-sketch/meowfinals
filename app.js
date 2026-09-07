@@ -3597,7 +3597,7 @@ async function loadBotConfigIntoForm() {
         c.modelConfirmMaxExtensionCents != null ? c.modelConfirmMaxExtensionCents : 15;
     }
     const modelMinEntry = document.getElementById('bot-model-min-entry');
-    if (modelMinEntry) modelMinEntry.value = c.modelMinEntryCents != null ? c.modelMinEntryCents : 65;
+    if (modelMinEntry) modelMinEntry.value = c.modelMinEntryCents != null ? c.modelMinEntryCents : 70;
     const modelMinRoomFloor = document.getElementById('bot-model-min-room-floor');
     if (modelMinRoomFloor) {
       modelMinRoomFloor.value =

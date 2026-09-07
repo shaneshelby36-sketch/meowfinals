@@ -39,7 +39,7 @@ const ROTATION_PERIOD_MS = 12 * 60 * 60 * 1000; // 12 hours
 const TRADE_LOG_MAX = 5000; // permanent history cap (oldest dropped only past this)
 // Bump when shipping intentional default resets so stale bot-config.json
 // doesn't keep old absolute stop/TP values after deploy.
-const SETTINGS_DEFAULTS_VERSION = 85;
+const SETTINGS_DEFAULTS_VERSION = 86;
 
 /** Min ms between Kalshi series list refreshes per KX*15M (live book only). */
 const KALSHI_SERIES_REFRESH_MS = 12_000;
@@ -3205,10 +3205,10 @@ const STRATEGY_RETRO_MID_CEILING_MINUTES = 8.5;
 const EDGE_MAX_ENTRY_DEFAULT_CENTS = 95;
 /** Model: never buy richer than this (leaves a little room to 100). */
 const MODEL_MAX_ENTRY_DEFAULT_CENTS = 88;
-/** Model: never buy cheaper than this (normal floor). 65¢ OK only with low-ask conviction. */
-const MODEL_MIN_ENTRY_DEFAULT_CENTS = 65;
-/** Absolute floor even when the call is “perfect.” */
-const MODEL_PERFECT_MIN_ENTRY_DEFAULT_CENTS = 65;
+/** Model: never buy cheaper than this (normal floor). 70¢ floor for crypto. */
+const MODEL_MIN_ENTRY_DEFAULT_CENTS = 70;
+/** Absolute floor even when the call is "perfect." */
+const MODEL_PERFECT_MIN_ENTRY_DEFAULT_CENTS = 70;
 /** Asks at/below this need near-certain direction (under the 70¢ half-stake line). */
 const MODEL_LOW_ASK_CEILING_CENTS_DEFAULT = 69;
 /** Min engine conf for low-ask (≤69¢) entries. 0 = off (use normal min conf only). */
@@ -10406,6 +10406,17 @@ class TradingBot {
         this.lastDecision =
           `Skipped ${symbol} ${String(side || '').toUpperCase()} @ ${priceCents}¢: above model max entry ${maxEntry}¢.`;
         return false;
+      }
+      // Min entry floor (crypto): re-check at order time in case price dipped since evaluation.
+      if (!isCommoditySymbol(symbol)) {
+        const minEntry = Number.isFinite(Number(this.config.modelMinEntryCents))
+          ? Number(this.config.modelMinEntryCents)
+          : MODEL_MIN_ENTRY_DEFAULT_CENTS;
+        if (minEntry > 0 && priceCents < minEntry) {
+          this.lastDecision =
+            `Skipped ${symbol} ${String(side || '').toUpperCase()} @ ${priceCents}¢: below model min entry ${minEntry}¢.`;
+          return false;
+        }
       }
       // Absolute floor; 25–44¢ only reaches here via evaluate's perfect-call exception.
       if (perfectFloor > 0 && priceCents < perfectFloor) {
