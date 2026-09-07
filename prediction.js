@@ -470,7 +470,11 @@ function buildPredictions(data, kalshiTargets = {}, accumulatorManager = null, o
   for (const symbol of symbols) {
     const ind = indicators[symbol];
     if (!ind) {
-      result[symbol] = { ready: false, price: data[symbol].series.latestClose() };
+      result[symbol] = {
+        ready: false,
+        price: data[symbol].series.latestClose(),
+        indicatorsSnapshot: { microMomentumPct: microMomentum[symbol] != null ? microMomentum[symbol] : null },
+      };
       continue;
     }
     // Commodities: no BTC cross-reference; other crypto: use BTC as benchmark.
