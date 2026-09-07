@@ -567,6 +567,22 @@ function renderAsset(symbol, assetData) {
     snap.orderBookImbalance != null ? `${(snap.orderBookImbalance * 100).toFixed(0)}%` : '—';
   panel.querySelector('.meta-pattern').textContent = snap.candlePattern || '—';
 
+  // Micro-momentum chip: show 30s VWAP direction with colour coding.
+  // Green = rising (underlying moving up), red = falling, grey = no data.
+  const microEl = panel.querySelector('.meta-micro-mom');
+  if (microEl) {
+    const micro = snap.microMomentumPct;
+    if (micro != null && Number.isFinite(micro)) {
+      const bps = (micro * 10000).toFixed(1);
+      const sign = micro >= 0 ? '+' : '';
+      microEl.textContent = `${sign}${bps} bps`;
+      microEl.style.color = micro > 0.0001 ? '#34d399' : micro < -0.0001 ? '#f87171' : '#8b949e';
+    } else {
+      microEl.textContent = '—';
+      microEl.style.color = '';
+    }
+  }
+
   const cards = panel.querySelectorAll('.window-card');
   const windowKeys = ['w5', 'w10', 'w15'];
   windowKeys.forEach((key, i) => {
