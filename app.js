@@ -1444,6 +1444,16 @@ function renderCommodityLeanBar(data) {
       cell.style.outline = '';
     }
 
+    const microPct = snap && snap.microMomentumPct != null ? snap.microMomentumPct : null;
+    const microHtml = microPct != null && !isStale
+      ? (() => {
+          const bps = (microPct * 10000).toFixed(1);
+          const sign = microPct >= 0 ? '+' : '';
+          const col = microPct > 0.0001 ? '#34d399' : microPct < -0.0001 ? '#f87171' : '#8b949e';
+          return `<span style="color:${col};font-size:9px;font-weight:700;" title="30s micro-momentum (VWAP)">${sign}${bps}bp</span>`;
+        })()
+      : '';
+
     cell.innerHTML = `
       <div style="display:flex;align-items:center;gap:3px;">
         ${agreeDot}
@@ -1451,6 +1461,7 @@ function renderCommodityLeanBar(data) {
         ${isStale ? `<span style="color:#f97316;font-size:9px;" title="Window closed — awaiting new market">⏳</span>` : ''}
         ${!isStale && avgConf != null ? `<span style="color:${avgConf >= 70 ? '#22c55e' : avgConf >= 60 ? '#f59e0b' : '#ef4444'};font-size:10px;font-weight:700;" title="Avg confidence across 3 windows (need ≥70%)">c${avgConf}%</span>` : ''}
         ${kalshiPriceHtml}
+        ${microHtml}
         ${fadeHtml}
         ${goHtml}
       </div>
