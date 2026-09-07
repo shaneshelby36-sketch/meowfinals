@@ -2527,6 +2527,8 @@ const SLIDER_UNITS = {
   'bot-commodity-min-confidence': (v) => (Number(v) <= 0 ? 'global' : `≥${Math.round(v)}%`),
   'bot-commodity-settle-close': (v) => (Number(v) <= 0 ? 'default (6m)' : `${(+v).toFixed(1)} min`),
   'bot-commodity-late-barrier': (v) => (Number(v) <= 0 ? 'default (7m)' : `${(+v).toFixed(1)} min`),
+  'bot-commodity-peak-pullback-arm': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}¢`),
+  'bot-commodity-peak-pullback-trigger': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}¢`),
   'bot-model-preclose-force': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(2)} min`),
   'bot-model-late-exit-max-loss': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
   'bot-model-lean-floor-drop': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
@@ -3142,6 +3144,8 @@ function wireSliderDisplays() {
     'bot-commodity-min-confidence',
     'bot-commodity-settle-close',
     'bot-commodity-late-barrier',
+    'bot-commodity-peak-pullback-arm',
+    'bot-commodity-peak-pullback-trigger',
     'bot-model-preclose-force',
     'bot-model-late-exit-max-loss',
     'bot-model-lean-floor-drop',
@@ -3347,6 +3351,8 @@ function wireBotConfigAutoSave() {
     'bot-commodity-min-confidence',
     'bot-commodity-settle-close',
     'bot-commodity-late-barrier',
+    'bot-commodity-peak-pullback-arm',
+    'bot-commodity-peak-pullback-trigger',
     'bot-model-preclose-force',
     'bot-model-late-exit-max-loss',
     'bot-model-lean-floor-drop',
@@ -3730,6 +3736,10 @@ async function loadBotConfigIntoForm() {
     if (commoditySettleClose) commoditySettleClose.value = c.commoditySettleCloseMinutes != null ? c.commoditySettleCloseMinutes : 0;
     const commodityLateBarrier = document.getElementById('bot-commodity-late-barrier');
     if (commodityLateBarrier) commodityLateBarrier.value = c.commodityLateBarrierMinutes != null ? c.commodityLateBarrierMinutes : 0;
+    const commodityPeakPullbackArm = document.getElementById('bot-commodity-peak-pullback-arm');
+    if (commodityPeakPullbackArm) commodityPeakPullbackArm.value = c.commodityPeakPullbackArmCents != null ? c.commodityPeakPullbackArmCents : 3;
+    const commodityPeakPullbackTrigger = document.getElementById('bot-commodity-peak-pullback-trigger');
+    if (commodityPeakPullbackTrigger) commodityPeakPullbackTrigger.value = c.commodityPeakPullbackTriggerCents != null ? c.commodityPeakPullbackTriggerCents : 3;
     const modelPreCloseForce = document.getElementById('bot-model-preclose-force');
     if (modelPreCloseForce) {
       modelPreCloseForce.value =
@@ -3948,6 +3958,8 @@ async function loadBotConfigIntoForm() {
       'bot-commodity-min-confidence',
       'bot-commodity-settle-close',
       'bot-commodity-late-barrier',
+      'bot-commodity-peak-pullback-arm',
+      'bot-commodity-peak-pullback-trigger',
       'bot-model-preclose-force',
       'bot-model-late-exit-max-loss',
       'bot-model-lean-floor-drop',
@@ -4215,6 +4227,8 @@ async function saveBotConfig(opts = {}) {
     commodityMinConfidence: parseFloat(document.getElementById('bot-commodity-min-confidence')?.value || '0'),
     commoditySettleCloseMinutes: parseFloat(document.getElementById('bot-commodity-settle-close')?.value || '0'),
     commodityLateBarrierMinutes: parseFloat(document.getElementById('bot-commodity-late-barrier')?.value || '0'),
+    commodityPeakPullbackArmCents: parseFloat(document.getElementById('bot-commodity-peak-pullback-arm')?.value || '0'),
+    commodityPeakPullbackTriggerCents: parseFloat(document.getElementById('bot-commodity-peak-pullback-trigger')?.value || '0'),
     modelPreCloseForceMinutes: parseFloat(
       document.getElementById('bot-model-preclose-force')?.value || '1'
     ),

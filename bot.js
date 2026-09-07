@@ -891,6 +891,13 @@ const MODEL_COMMODITY_LATE_BARRIER_MINUTES_DEFAULT = 7;
 const MODEL_COMMODITY_SETTLE_CLOSE_MINUTES_DEFAULT = 6;
 /** Long-hold TP: bank any green on a commodity after holding this long before the late barrier. */
 const MODEL_COMMODITY_LONG_HOLD_TP_MS_DEFAULT = 5 * 60 * 1000; // 5 minutes
+/**
+ * Peak-pullback TP for commodities: once the peak is ≥ this many ¢ above entry
+ * AND the bid has pulled back ≥ commodityPeakPullbackTriggerCents from that peak
+ * while still green, bank the remaining profit. 0 = off.
+ */
+const MODEL_COMMODITY_PEAK_PULLBACK_ARM_CENTS_DEFAULT = 3;
+const MODEL_COMMODITY_PEAK_PULLBACK_TRIGGER_CENTS_DEFAULT = 3;
 /** Don't early-exit a Model hold until it's been open at least this long. */
 const MODEL_MIN_HOLD_MS_DEFAULT = 4_000;
 /** After Model BE/TP, sit out that coin this long before rebuy. */
@@ -1773,6 +1780,28 @@ function modelTrailCentsForTrade(trade, config = {}) {
     if (override > 0) return override;
   }
   return modelTrailCents(config);
+}
+
+/**
+ * Commodity peak-pullback TP arm (¢ above entry the peak must reach before the
+ * pullback trigger is armed). 0 = use default (3¢).
+ */
+function modelCommodityPeakPullbackArmCents(config = {}) {
+  const n = Number(config.commodityPeakPullbackArmCents);
+  if (Number.isFinite(n) && n > 0) return Math.round(n);
+  if (Number.isFinite(n) && n === 0) return 0; // explicit 0 = off
+  return MODEL_COMMODITY_PEAK_PULLBACK_ARM_CENTS_DEFAULT;
+}
+
+/**
+ * Commodity peak-pullback TP trigger (¢ the bid must pull back from the peak
+ * before the position is banked). 0 = use default (3¢).
+ */
+function modelCommodityPeakPullbackTriggerCents(config = {}) {
+  const n = Number(config.commodityPeakPullbackTriggerCents);
+  if (Number.isFinite(n) && n > 0) return Math.round(n);
+  if (Number.isFinite(n) && n === 0) return 0; // explicit 0 = off
+  return MODEL_COMMODITY_PEAK_PULLBACK_TRIGGER_CENTS_DEFAULT;
 }
 
 /** Block entries when held-side live lean is too soft (e.g. 72% NO on a 74¢ ticket). */
@@ -3943,6 +3972,8 @@ const EDITABLE_NUMERIC_FIELDS = [
   'commoditySettleCloseMinutes',
   'commodityLateBarrierMinutes',
   'commodityMaxOpenPositions',
+  'commodityPeakPullbackArmCents',
+  'commodityPeakPullbackTriggerCents',
   'modelAutoSwitchLowAvailDollars',
   'modelAutoSwitchMinLeadDollars',
   'modelAutoSwitchCooldownMinutes',
@@ -9638,9 +9669,9 @@ class TradingBot {
       // the late barrier when either:
       //   (a) held ≥5 minutes — slow markets can hold to the 5-min mark without
       //       hitting the TP target; collect profit rather than riding it back down.
-      //   (b) peak-pullback: peaked ≥3¢ green and has since pulled back ≥3¢ from
-      //       that peak while still green — price has reversed off the high; don't
-      //       wait for the full TP target, bank what's left.
+      //   (b) peak-pullback: peaked ≥ armCents green and has since pulled back
+      //       ≥ triggerCents from that peak while still green — price has reversed
+      //       off the high; don't wait for the full TP target, bank what's left.
       // Both cases require a minimum hold (open grace + 60s buffer) and green ≥1¢.
       // Skip when commodityRideToSettle (override 99) — those hold to settlement only.
       if (
@@ -9653,9 +9684,13 @@ class TradingBot {
         heldMs >= openGraceMs + 60_000
       ) {
         const longHold = heldMs >= MODEL_COMMODITY_LONG_HOLD_TP_MS_DEFAULT;
+        const ppArmCents = modelCommodityPeakPullbackArmCents(this.config);
+        const ppTriggerCents = modelCommodityPeakPullbackTriggerCents(this.config);
         const peakPullbackTp =
-          peakProgress >= 3 &&
-          pullback >= 3 &&
+          ppArmCents > 0 &&
+          ppTriggerCents > 0 &&
+          peakProgress >= ppArmCents &&
+          pullback >= ppTriggerCents &&
           greenCents < peakProgress; // bid has reversed off the peak
         if (longHold || peakPullbackTp) {
           const reason = longHold
