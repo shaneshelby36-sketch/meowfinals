@@ -1899,6 +1899,20 @@ function modelAtrMoveBlock(config = {}) {
   return MODEL_ATR_MOVE_BLOCK_DEFAULT;
 }
 
+/** Vol threshold (%) above which commodity entries are blocked. 0 = off. */
+function modelCommodityVolBlock(config = {}) {
+  const n = Number(config.commodityVolBlock);
+  if (Number.isFinite(n) && n >= 0) return n;
+  return MODEL_COMMODITY_VOL_BLOCK_DEFAULT;
+}
+
+/** ATR% threshold above which commodity entries are blocked. 0 = off. */
+function modelCommodityAtrBlock(config = {}) {
+  const n = Number(config.commodityAtrBlock);
+  if (Number.isFinite(n) && n >= 0) return n;
+  return MODEL_COMMODITY_ATR_BLOCK_DEFAULT;
+}
+
 /**
  * Lean-gated dynamic floor. Returns the minimum bid price allowed for this
  * trade when lean is deteriorating. Returns 0 when the feature is off (baseDrop=0)
@@ -3388,6 +3402,17 @@ const MODEL_COMMODITY_MICRO_MOMENTUM_BLOCK_DEFAULT = 0.05; // 0.05% = 5 basis po
  * Applies to both crypto and commodities.
  */
 const MODEL_ATR_MOVE_BLOCK_DEFAULT = 0; // off by default — user turns on to test
+/**
+ * Commodity volatility entry block: skip commodity entries when the underlying
+ * is in an elevated-volatility regime. Uses the same thresholds as the lean bar
+ * UNSTABLE warning: vol > threshold% OR atrPct > atrThreshold%.
+ * Two separate thresholds — vol (20-candle std dev of returns) and ATR% (intrabar range).
+ * 0 = off. Default vol threshold: 0.35% (matches lean bar "elevated" level).
+ * Default ATR threshold: 0.5% (matches lean bar "wide range" level).
+ * Only applies to commodity symbols.
+ */
+const MODEL_COMMODITY_VOL_BLOCK_DEFAULT = 0.35;  // % — matches lean bar elevated threshold
+const MODEL_COMMODITY_ATR_BLOCK_DEFAULT = 0.5;   // % — matches lean bar wide-range threshold
 /** Paper fill ceiling on adverse exits. 0 = off (book live bid). */
 const MODEL_MAX_LOSS_CENTS_DEFAULT = 0;
 /**
@@ -3984,6 +4009,8 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelPeakTouchWindow',
   'modelEntryMomentumBlockPct',
   'modelAtrMoveBlock',
+  'commodityVolBlock',
+  'commodityAtrBlock',
   'commodityStakeDollarsGold',
   'commodityStakeDollarsSilver',
   'commodityStakeDollarsOil',
@@ -5189,6 +5216,8 @@ class TradingBot {
       modelPeakTouchWindow: MODEL_PEAK_TOUCH_WINDOW_DEFAULT,
       modelEntryMomentumBlockPct: MODEL_ENTRY_MOMENTUM_BLOCK_PCT_DEFAULT,
       modelAtrMoveBlock: MODEL_ATR_MOVE_BLOCK_DEFAULT,
+      commodityVolBlock: MODEL_COMMODITY_VOL_BLOCK_DEFAULT,
+      commodityAtrBlock: MODEL_COMMODITY_ATR_BLOCK_DEFAULT,
       // Per-commodity overrides: 0/unset = use code default (TP=30¢, stop=15¢, stake=$0=global).
       commodityStakeDollarsGold: MODEL_COMMODITY_STAKE_DEFAULT,
       commodityStakeDollarsSilver: MODEL_COMMODITY_STAKE_DEFAULT,
@@ -8059,6 +8088,8 @@ class TradingBot {
         stopPostMaxBidCents: trade.stopPostMaxBidCents,
         modelEntryHeldProb: trade.modelEntryHeldProb,
         modelExitHeldProb: trade.modelExitHeldProb,
+        modelEntrySpreadCents: trade.modelEntrySpreadCents,
+        contracts: trade.contracts,
         peakHeldBidCents: trade.peakHeldBidCents,
         troughHeldBidCents: trade.troughHeldBidCents,
         beChaseResult: trade.beChaseResult || undefined,
@@ -12412,6 +12443,33 @@ class TradingBot {
             `${momLong >= 0 ? '+' : ''}${(momLong * 100).toFixed(2)}% ` +
             `is ${Math.abs(atrRatio).toFixed(2)}× ATR30 (${atr30Pct.toFixed(3)}%) against entry ` +
             `(block >${atrMoveThreshold}× ATR).`
+          );
+          return null;
+        }
+      }
+    }
+
+    // Commodity volatility entry block: skip when vol or ATR is elevated — same
+    // thresholds as the lean bar ⚠ UNSTABLE warning. Prevents entering NATGAS/COPPER
+    // during fast-moving sessions where gap risk is highest.
+    if (isCommoditySymbol(symbol)) {
+      const volThreshold = modelCommodityVolBlock(this.config);
+      const atrThreshold = modelCommodityAtrBlock(this.config);
+      const snap = assetPrediction.indicatorsSnapshot;
+      if (snap) {
+        const vol = Number(snap.volatilityPct);
+        const atrPct = Number(snap.atrPct);
+        if (volThreshold > 0 && Number.isFinite(vol) && vol > volThreshold) {
+          say(
+            `Waiting: ${symbol} ${side.toUpperCase()} — volatility ${vol.toFixed(3)}% > ` +
+            `${volThreshold}% threshold (unstable regime — skip to avoid gap risk).`
+          );
+          return null;
+        }
+        if (atrThreshold > 0 && Number.isFinite(atrPct) && atrPct > atrThreshold) {
+          say(
+            `Waiting: ${symbol} ${side.toUpperCase()} — ATR ${atrPct.toFixed(3)}% > ` +
+            `${atrThreshold}% threshold (wide intrabar range — skip to avoid gap risk).`
           );
           return null;
         }

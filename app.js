@@ -2068,6 +2068,24 @@ function buildTradeLogHtml(tradeLog, tradeLogTotal) {
         : t.beChaseResult === 'expired'
           ? ` · bounce ✗`
           : '';
+      const contractsNote = Number.isFinite(t.contracts) && t.contracts > 0
+        ? ` · ${t.contracts}c`
+        : '';
+      const openedMs = Number(t.openedAt);
+      const closedMs = Number(t.closedAt);
+      const durationNote = Number.isFinite(openedMs) && Number.isFinite(closedMs) && closedMs > openedMs
+        ? (() => {
+            const sec = Math.round((closedMs - openedMs) / 1000);
+            return sec >= 60 ? ` · ${Math.floor(sec / 60)}m${sec % 60 > 0 ? `${sec % 60}s` : ''}` : ` · ${sec}s`;
+          })()
+        : '';
+      const closeTime = Number(t.windowCloseTime);
+      const minsLeftNote = Number.isFinite(closeTime) && Number.isFinite(openedMs) && closeTime > openedMs
+        ? ` · ${((closeTime - openedMs) / 60000).toFixed(1)}m left`
+        : '';
+      const spreadNote = Number.isFinite(t.modelEntrySpreadCents) && t.modelEntrySpreadCents > 0
+        ? ` · sprd ${t.modelEntrySpreadCents}¢`
+        : '';
       let stopNote = '';
       let stopCopy = '';
       if (t.exitReason === 'stop_loss') {
@@ -2095,7 +2113,12 @@ function buildTradeLogHtml(tradeLog, tradeLogTotal) {
         status,
         `${entry}${t.status === 'closed' ? ` → ${exit}` : ''}`,
         Number.isFinite(t.stakeDollars) ? `$${Number(t.stakeDollars).toFixed(2)}` : null,
+        contractsNote ? contractsNote.replace(/^\s·\s/, '') : null,
         conf ? conf.replace(/^\s·\s/, '') : null,
+        leanNote ? leanNote.replace(/^\s·\s/, '') : null,
+        minsLeftNote ? minsLeftNote.replace(/^\s·\s/, '') : null,
+        durationNote ? durationNote.replace(/^\s·\s/, '') : null,
+        spreadNote ? spreadNote.replace(/^\s·\s/, '') : null,
         fees ? fees.replace(/^\s·\s/, '') : null,
         gross ? gross.replace(/^\s·\s/, '') : null,
         skim ? skim.replace(/^\s·\s/, '') : null,
@@ -2111,7 +2134,7 @@ function buildTradeLogHtml(tradeLog, tradeLogTotal) {
           <span class="bot-log-msg">
             <strong>${t.symbol || '?'} ${side}</strong>
             ${status} · ${entry}${t.status === 'closed' ? ` → ${exit}` : ''}
-            ${Number.isFinite(t.stakeDollars) ? ` · $${Number(t.stakeDollars).toFixed(2)}` : ''}${conf}${leanNote}${peakNote}${troughNote}${beChaseNote}${fees}${gross}${skim}
+            ${Number.isFinite(t.stakeDollars) ? ` · $${Number(t.stakeDollars).toFixed(2)}` : ''}${contractsNote}${conf}${leanNote}${peakNote}${troughNote}${beChaseNote}${minsLeftNote}${durationNote}${spreadNote}${fees}${gross}${skim}
             <span class="bot-log-sub">opened ${formatTradeTime(t.openedAt)}${t.mode ? ` · ${t.mode}` : ''}</span>
             ${stopNote}
           </span>
@@ -2570,6 +2593,8 @@ const SLIDER_UNITS = {
   'bot-commodity-peak-pullback-arm': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}¢`),
   'bot-commodity-peak-pullback-trigger': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}¢`),
   'bot-commodity-micro-momentum': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)} bps`),
+  'bot-commodity-vol-block': (v) => (Number(v) <= 0 ? 'off' : `>${(+v).toFixed(2)}%`),
+  'bot-commodity-atr-block': (v) => (Number(v) <= 0 ? 'off' : `>${(+v).toFixed(2)}%`),
   'bot-model-preclose-force': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(2)} min`),
   'bot-model-late-exit-max-loss': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
   'bot-model-lean-floor-drop': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
@@ -3189,6 +3214,8 @@ function wireSliderDisplays() {
     'bot-commodity-peak-pullback-arm',
     'bot-commodity-peak-pullback-trigger',
     'bot-commodity-micro-momentum',
+    'bot-commodity-vol-block',
+    'bot-commodity-atr-block',
     'bot-model-preclose-force',
     'bot-model-late-exit-max-loss',
     'bot-model-lean-floor-drop',
@@ -3398,6 +3425,8 @@ function wireBotConfigAutoSave() {
     'bot-commodity-peak-pullback-arm',
     'bot-commodity-peak-pullback-trigger',
     'bot-commodity-micro-momentum',
+    'bot-commodity-vol-block',
+    'bot-commodity-atr-block',
     'bot-model-preclose-force',
     'bot-model-late-exit-max-loss',
     'bot-model-lean-floor-drop',
@@ -3789,6 +3818,19 @@ async function loadBotConfigIntoForm() {
     if (commodityPeakPullbackTrigger) commodityPeakPullbackTrigger.value = c.commodityPeakPullbackTriggerCents != null ? c.commodityPeakPullbackTriggerCents : 3;
     const commodityMicroMomentum = document.getElementById('bot-commodity-micro-momentum');
     if (commodityMicroMomentum) commodityMicroMomentum.value = c.commodityMicroMomentumBlock != null ? Math.round(c.commodityMicroMomentumBlock * 10000) : 5;
+    const commodityVolBlock = document.getElementById('bot-commodity-vol-block');
+    if (commodityVolBlock) commodityVolBlock.value = c.commodityVolBlock != null ? c.commodityVolBlock : 0.35;
+    const commodityAtrBlock = document.getElementById('bot-commodity-atr-block');
+    if (commodityAtrBlock) commodityAtrBlock.value = c.commodityAtrBlock != null ? c.commodityAtrBlock : 0.5;
+    // Sync toggle button label to current slider state
+    const volBlockToggle = document.getElementById('bot-commodity-vol-block-toggle');
+    if (volBlockToggle) {
+      const isOn = parseFloat(commodityVolBlock?.value || 0) > 0 || parseFloat(commodityAtrBlock?.value || 0) > 0;
+      volBlockToggle.textContent = isOn ? 'ON' : 'OFF';
+      volBlockToggle.style.background = isOn ? '#ef4444' : '#374151';
+      volBlockToggle.style.borderColor = isOn ? '#ef4444' : '#6b7280';
+      volBlockToggle.style.color = isOn ? '#fff' : '#9ca3af';
+    }
     const modelPreCloseForce = document.getElementById('bot-model-preclose-force');
     if (modelPreCloseForce) {
       modelPreCloseForce.value =
@@ -4011,6 +4053,8 @@ async function loadBotConfigIntoForm() {
       'bot-commodity-peak-pullback-arm',
       'bot-commodity-peak-pullback-trigger',
       'bot-commodity-micro-momentum',
+      'bot-commodity-vol-block',
+      'bot-commodity-atr-block',
       'bot-model-preclose-force',
       'bot-model-late-exit-max-loss',
       'bot-model-lean-floor-drop',
@@ -4282,6 +4326,8 @@ async function saveBotConfig(opts = {}) {
     commodityPeakPullbackArmCents: parseFloat(document.getElementById('bot-commodity-peak-pullback-arm')?.value || '0'),
     commodityPeakPullbackTriggerCents: parseFloat(document.getElementById('bot-commodity-peak-pullback-trigger')?.value || '0'),
     commodityMicroMomentumBlock: parseFloat(document.getElementById('bot-commodity-micro-momentum')?.value || '5') / 10000,
+    commodityVolBlock: parseFloat(document.getElementById('bot-commodity-vol-block')?.value || '0.35'),
+    commodityAtrBlock: parseFloat(document.getElementById('bot-commodity-atr-block')?.value || '0.5'),
     modelPreCloseForceMinutes: parseFloat(
       document.getElementById('bot-model-preclose-force')?.value || '1'
     ),
@@ -4968,6 +5014,37 @@ function wireBotUI() {
   document.getElementById('bot-dashboard-open').addEventListener('click', openBotOverlay);
   document.getElementById('bot-reset-paper').addEventListener('click', resetPaperHistory);
   document.getElementById('bot-reset-paper-full').addEventListener('click', resetPaperHistoryFull);
+
+  // Commodity vol/ATR block ON/OFF toggle
+  document.getElementById('bot-commodity-vol-block-toggle')?.addEventListener('click', () => {
+    const volSlider = document.getElementById('bot-commodity-vol-block');
+    const atrSlider = document.getElementById('bot-commodity-atr-block');
+    const btn = document.getElementById('bot-commodity-vol-block-toggle');
+    if (!volSlider || !atrSlider || !btn) return;
+    const isOn = parseFloat(volSlider.value) > 0 || parseFloat(atrSlider.value) > 0;
+    if (isOn) {
+      // Turn OFF — store current values then zero both
+      btn.dataset.prevVol = volSlider.value;
+      btn.dataset.prevAtr = atrSlider.value;
+      volSlider.value = 0;
+      atrSlider.value = 0;
+      btn.textContent = 'OFF';
+      btn.style.background = '#374151';
+      btn.style.borderColor = '#6b7280';
+      btn.style.color = '#9ca3af';
+    } else {
+      // Turn ON — restore previous values or defaults
+      volSlider.value = btn.dataset.prevVol || 0.35;
+      atrSlider.value = btn.dataset.prevAtr || 0.5;
+      btn.textContent = 'ON';
+      btn.style.background = '#ef4444';
+      btn.style.borderColor = '#ef4444';
+      btn.style.color = '#fff';
+    }
+    // Fire input events so the slider value labels update
+    volSlider.dispatchEvent(new Event('input'));
+    atrSlider.dispatchEvent(new Event('input'));
+  });
   document.getElementById('bot-commodity-fetch-candles')?.addEventListener('click', refreshCommodityCandles);
   document.getElementById('daily-loss-reset-btn')?.addEventListener('click', async () => {
     const btn = document.getElementById('daily-loss-reset-btn');
