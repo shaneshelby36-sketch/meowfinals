@@ -1889,6 +1889,17 @@ function modelEntryMomentumBlockPct(config = {}) {
 }
 
 /**
+ * ATR-move entry block multiplier. Returns the configured threshold (× ATR30)
+ * above which the 10-candle momentum is considered "too far against" the entry
+ * direction to take the trade. 0 = off.
+ */
+function modelAtrMoveBlock(config = {}) {
+  const n = Number(config.modelAtrMoveBlock);
+  if (Number.isFinite(n) && n >= 0) return n;
+  return MODEL_ATR_MOVE_BLOCK_DEFAULT;
+}
+
+/**
  * Lean-gated dynamic floor. Returns the minimum bid price allowed for this
  * trade when lean is deteriorating. Returns 0 when the feature is off (baseDrop=0)
  * — the caller must also gate on modelDeteriorating before acting on this.
@@ -3367,6 +3378,16 @@ const MODEL_ENTRY_MOMENTUM_BLOCK_PCT_DEFAULT = 0;
  * momentum block. 0 = off (default). e.g. 0.05 = block if price moved 0.05% against.
  */
 const MODEL_COMMODITY_MICRO_MOMENTUM_BLOCK_DEFAULT = 0.05; // 0.05% = 5 basis points
+/**
+ * ATR-move entry block: skip an entry when the 10-candle price momentum is
+ * moving against the entry direction by more than (threshold × ATR30). Uses
+ * the 30-min ATR to normalise the move so the gate is market-aware rather than
+ * a fixed % — a 0.3% move on a sleepy commodity means something very different
+ * than the same 0.3% on BTC during a volatile session.
+ * 0 = off (default). e.g. 0.5 = block if 10-min move is > 0.5× the ATR30.
+ * Applies to both crypto and commodities.
+ */
+const MODEL_ATR_MOVE_BLOCK_DEFAULT = 0; // off by default — user turns on to test
 /** Paper fill ceiling on adverse exits. 0 = off (book live bid). */
 const MODEL_MAX_LOSS_CENTS_DEFAULT = 0;
 /**

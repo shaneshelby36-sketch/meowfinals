@@ -153,14 +153,28 @@ class CommodityFeed extends EventEmitter {
       case 'CA': {
         const sym = this._symbolFromTicker(msg.pair ? `C:${msg.pair}` : msg.sym);
         if (!sym) break;
-        const price = msg.c != null ? msg.c : null;
-        if (price == null) break;
-        this.emit('trade', {
-          productId: sym,
-          price,
-          size: msg.v || 1,
-          time: msg.e || msg.s || Date.now(),
-        });
+        const closePrice = msg.c != null ? msg.c : null;
+        if (closePrice == null) break;
+        // A single minute-bar gives only one data point per 60s, which is not
+        // enough for the micro-momentum 30s VWAP comparison (needs data in both
+        // the 0–30s and 30–60s buckets). Spread the bar's OHLC across 4 synthetic
+        // ticks evenly spaced over the last 60 seconds so the lean bar always has
+        // enough resolution to show a real bp reading.
+        const barEnd   = msg.e || msg.s || Date.now();
+        const barStart = barEnd - 60_000;
+        const o = msg.o != null ? msg.o : closePrice;
+        const h = msg.h != null ? msg.h : closePrice;
+        const l = msg.l != null ? msg.l : closePrice;
+        const size = (msg.v || 4) / 4;
+        const syntheticTicks = [
+          { price: o,          time: barStart },
+          { price: h,          time: barStart + 20_000 },
+          { price: l,          time: barStart + 40_000 },
+          { price: closePrice, time: barEnd },
+        ];
+        for (const tick of syntheticTicks) {
+          this.emit('trade', { productId: sym, price: tick.price, size, time: tick.time });
+        }
         break;
       }
       default:

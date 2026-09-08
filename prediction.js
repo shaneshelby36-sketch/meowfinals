@@ -48,6 +48,8 @@ function gatherIndicators(series, book, minCandles = 210) {
   const rsiVal = rsi(closes, 14);
   const macdVal = macd(closes);
   const atrVal = atr(candles, 14);
+  const atr15Val = atr(candles, 15);
+  const atr30Val = atr(candles, 30);
   const mom3 = momentum(closes, 3);
   const mom10 = momentum(closes, 10);
   const vol = volatility(closes, 20);
@@ -92,6 +94,10 @@ function gatherIndicators(series, book, minCandles = 210) {
     macd: macdVal,
     atr: atrVal,
     atrPct: (atrVal / price) * 100,
+    atr15: atr15Val,
+    atr15Pct: atr15Val != null ? (atr15Val / price) * 100 : null,
+    atr30: atr30Val,
+    atr30Pct: atr30Val != null ? (atr30Val / price) * 100 : null,
     momentumShort: mom3,
     momentumLong: mom10,
     volatility: vol,
@@ -561,12 +567,15 @@ function buildPredictions(data, kalshiTargets = {}, accumulatorManager = null, o
         rsi: +ind.rsi.toFixed(1),
         macdHistogram: +ind.macd.histogram.toFixed(4),
         atrPct: +ind.atrPct.toFixed(3),
+        atr15Pct: ind.atr15Pct != null ? +ind.atr15Pct.toFixed(3) : null,
+        atr30Pct: ind.atr30Pct != null ? +ind.atr30Pct.toFixed(3) : null,
         volatilityPct: ind.volatility != null ? +ind.volatility.toFixed(3) : null,
         ema20: +ind.trend.ema20.toFixed(2),
         ema50: +ind.trend.ema50.toFixed(2),
         ema200: ind.trend.ema200 != null ? +ind.trend.ema200.toFixed(2) : null,
         trendAlignment: ind.trend.alignment,
         momentumShortPct: ind.momentumShort != null ? +ind.momentumShort.toFixed(3) : null,
+        momentumLongPct: ind.momentumLong != null ? +ind.momentumLong.toFixed(3) : null,
         microMomentumPct: microMomentum[symbol] != null ? microMomentum[symbol] : null,
         volumeSpikeRatio: ind.volumeSpike ? +ind.volumeSpike.ratio.toFixed(2) : null,
         orderBookImbalance: ind.imbalance ? +ind.imbalance.ratio.toFixed(3) : null,
