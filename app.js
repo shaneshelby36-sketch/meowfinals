@@ -2561,6 +2561,7 @@ const SLIDER_UNITS = {
   'bot-model-peak-touch-tp': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}×`),
   'bot-model-peak-touch-window': (v) => `${Math.round(v)}¢`,
   'bot-model-entry-momentum-block': (v) => (Number(v) <= 0 ? 'off' : `${(+v * 100).toFixed(0)}%`),
+  'bot-model-atr-move-block': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)}× ATR`),
   'bot-model-settle-close': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
   'bot-model-late-barrier': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
   'bot-commodity-min-confidence': (v) => (Number(v) <= 0 ? 'global' : `≥${Math.round(v)}%`),
@@ -3179,6 +3180,7 @@ function wireSliderDisplays() {
     'bot-model-peak-touch-tp',
     'bot-model-peak-touch-window',
     'bot-model-entry-momentum-block',
+    'bot-model-atr-move-block',
     'bot-model-settle-close',
     'bot-model-late-barrier',
     'bot-commodity-min-confidence',
@@ -3387,6 +3389,7 @@ function wireBotConfigAutoSave() {
     'bot-model-peak-touch-tp',
     'bot-model-peak-touch-window',
     'bot-model-entry-momentum-block',
+    'bot-model-atr-move-block',
     'bot-model-settle-close',
     'bot-model-late-barrier',
     'bot-commodity-min-confidence',
@@ -3756,6 +3759,8 @@ async function loadBotConfigIntoForm() {
     if (modelPeakTouchWindow) modelPeakTouchWindow.value = c.modelPeakTouchWindow != null ? c.modelPeakTouchWindow : 2;
     const modelEntryMomentumBlock = document.getElementById('bot-model-entry-momentum-block');
     if (modelEntryMomentumBlock) modelEntryMomentumBlock.value = c.modelEntryMomentumBlockPct != null ? c.modelEntryMomentumBlockPct : 0;
+    const modelAtrMoveBlock = document.getElementById('bot-model-atr-move-block');
+    if (modelAtrMoveBlock) modelAtrMoveBlock.value = c.modelAtrMoveBlock != null ? c.modelAtrMoveBlock : 0;
     const modelMaxOpen = document.getElementById('bot-model-max-open');
     if (modelMaxOpen) modelMaxOpen.value = c.modelMaxMinutesToOpen != null ? c.modelMaxMinutesToOpen : 0;
     const modelMinOpen = document.getElementById('bot-model-min-open');
@@ -3997,6 +4002,7 @@ async function loadBotConfigIntoForm() {
       'bot-model-peak-touch-tp',
       'bot-model-peak-touch-window',
       'bot-model-entry-momentum-block',
+      'bot-model-atr-move-block',
       'bot-model-settle-close',
       'bot-model-late-barrier',
       'bot-commodity-min-confidence',
@@ -4267,6 +4273,7 @@ async function saveBotConfig(opts = {}) {
     modelPeakTouchTp: parseFloat(document.getElementById('bot-model-peak-touch-tp')?.value || '3'),
     modelPeakTouchWindow: parseFloat(document.getElementById('bot-model-peak-touch-window')?.value || '2'),
     modelEntryMomentumBlockPct: parseFloat(document.getElementById('bot-model-entry-momentum-block')?.value || '0'),
+    modelAtrMoveBlock: parseFloat(document.getElementById('bot-model-atr-move-block')?.value || '0'),
     modelSettleCloseMinutes: parseFloat(document.getElementById('bot-model-settle-close')?.value || '2.5'),
     modelLateBarrierMinutes: parseFloat(document.getElementById('bot-model-late-barrier')?.value || '2'),
     commodityMinConfidence: parseFloat(document.getElementById('bot-commodity-min-confidence')?.value || '0'),

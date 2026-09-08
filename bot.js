@@ -3983,6 +3983,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelPeakTouchTp',
   'modelPeakTouchWindow',
   'modelEntryMomentumBlockPct',
+  'modelAtrMoveBlock',
   'commodityStakeDollarsGold',
   'commodityStakeDollarsSilver',
   'commodityStakeDollarsOil',
@@ -5187,6 +5188,7 @@ class TradingBot {
       modelPeakTouchTp: MODEL_PEAK_TOUCH_TP_DEFAULT,
       modelPeakTouchWindow: MODEL_PEAK_TOUCH_WINDOW_DEFAULT,
       modelEntryMomentumBlockPct: MODEL_ENTRY_MOMENTUM_BLOCK_PCT_DEFAULT,
+      modelAtrMoveBlock: MODEL_ATR_MOVE_BLOCK_DEFAULT,
       // Per-commodity overrides: 0/unset = use code default (TP=30¢, stop=15¢, stake=$0=global).
       commodityStakeDollarsGold: MODEL_COMMODITY_STAKE_DEFAULT,
       commodityStakeDollarsSilver: MODEL_COMMODITY_STAKE_DEFAULT,
@@ -12385,6 +12387,33 @@ class TradingBot {
             );
             return null;
           }
+        }
+      }
+    }
+
+    // ATR-move entry block: skip when the 10-candle price momentum is moving
+    // against the entry direction by more than (threshold × ATR30). Normalising
+    // by ATR30 makes the gate market-aware — the same % move means very different
+    // things on BTC vs Gold vs a quiet NatGas session.
+    const atrMoveThreshold = modelAtrMoveBlock(this.config);
+    if (atrMoveThreshold > 0) {
+      const snap = assetPrediction.indicatorsSnapshot;
+      const momLong = snap && snap.momentumLongPct;   // 10-candle % move
+      const atr30Pct = snap && snap.atr30Pct;         // ATR30 as % of price
+      if (Number.isFinite(momLong) && Number.isFinite(atr30Pct) && atr30Pct > 0) {
+        // Ratio of the 10-min move to the 30-min ATR — how many ATRs did price move?
+        const atrRatio = momLong / atr30Pct;
+        // YES = betting UP → block if strongly falling (atrRatio < -threshold)
+        // NO  = betting DOWN → block if strongly rising (atrRatio > +threshold)
+        const blocked = side === 'yes' ? atrRatio < -atrMoveThreshold : atrRatio > atrMoveThreshold;
+        if (blocked) {
+          say(
+            `Waiting: ${symbol} ${side.toUpperCase()} — 10-min move ` +
+            `${momLong >= 0 ? '+' : ''}${(momLong * 100).toFixed(2)}% ` +
+            `is ${Math.abs(atrRatio).toFixed(2)}× ATR30 (${atr30Pct.toFixed(3)}%) against entry ` +
+            `(block >${atrMoveThreshold}× ATR).`
+          );
+          return null;
         }
       }
     }

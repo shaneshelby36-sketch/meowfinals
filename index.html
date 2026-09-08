@@ -1169,6 +1169,13 @@
             </div>
             <span class="field-hint">Block entry when the 3-min price momentum is moving against the entry direction by more than this %. e.g. <strong>0.15</strong> blocks YES entries when price has dropped >0.15% in the last 3 candles. <strong>0</strong> = off.</span>
           </label>
+          <label>ATR-move entry block (× ATR30 against)
+            <div class="slider-row">
+              <input id="bot-model-atr-move-block" type="range" min="0" max="2" step="0.1" />
+              <span class="slider-value" id="bot-model-atr-move-block-value">—</span>
+            </div>
+            <span class="field-hint">Skip entry when the <strong>10-min price move against your direction</strong> exceeds this multiple of the 30-min ATR. e.g. <strong>0.5</strong> = block if price moved >0.5× ATR30 against you in the last 10 candles. Normalised by ATR so the gate is context-aware on both fast crypto and slow commodities. <strong>0 = off</strong>.</span>
+          </label>
           <label>MODEL cash out before settle (min left)
             <div class="slider-row">
               <input id="bot-model-settle-close" type="range" min="0" max="8" step="0.5" />
