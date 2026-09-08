@@ -920,12 +920,27 @@
               </div>
               <span class="field-hint">Skip commodity entries when 20-candle volatility exceeds this %. Default <strong>0.35%</strong> (same as lean bar ⚠ UNSTABLE level).</span>
             </label>
-            <label style="display:block;">ATR block (% threshold)
+            <label style="display:block;margin-bottom:6px;">ATR block (% threshold)
               <div class="slider-row">
                 <input id="bot-commodity-atr-block" type="range" min="0" max="2" step="0.05" style="border:2px solid #ef4444;" />
                 <span class="slider-value" id="bot-commodity-atr-block-value">—</span>
               </div>
               <span class="field-hint">Skip commodity entries when intrabar ATR exceeds this % of price. Default <strong>0.5%</strong> (same as lean bar wide-range level).</span>
+            </label>
+            <div style="border-top:1px solid #ef444455;margin:8px 0 6px;"></div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <span style="font-weight:700;color:#fca5a5;font-size:12px;">⚡ Volatile-session trail tighten</span>
+              <button type="button" id="bot-commodity-vol-trail-toggle"
+                style="font-size:12px;font-weight:800;padding:4px 14px;border-radius:5px;border:2px solid #6b7280;background:#374151;color:#9ca3af;cursor:pointer;letter-spacing:0.5px;">
+                OFF
+              </button>
+            </div>
+            <label style="display:block;">Vol trail (¢ from peak)
+              <div class="slider-row">
+                <input id="bot-commodity-vol-trail" type="range" min="0" max="20" step="1" style="border:2px solid #f59e0b;" />
+                <span class="slider-value" id="bot-commodity-vol-trail-value">—</span>
+              </div>
+              <span class="field-hint">When vol or ATR is elevated, tighten the commodity trail stop to this many ¢ from the peak — banks faster on reversals. <strong>0 = off</strong>. e.g. <strong>4</strong> = bank if price pulls back 4¢ from peak during choppy session.</span>
             </label>
           </div>
 

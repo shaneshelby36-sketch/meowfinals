@@ -1914,6 +1914,27 @@ function modelCommodityAtrBlock(config = {}) {
 }
 
 /**
+ * Tightened trail stop (¢) for commodity trades when the session is volatile.
+ * Returns the vol-trail value when enabled AND vol/ATR is currently elevated;
+ * otherwise returns the normal trade trail. 0 = feature off.
+ */
+function modelTrailCentsForTradeVolAdjusted(trade, config = {}, snap = null) {
+  const base = modelTrailCentsForTrade(trade, config);
+  if (!isCommoditySymbol(String(trade && trade.symbol || ''))) return base;
+  const volTrail = Number(config.commodityVolTrailCents);
+  if (!(volTrail > 0)) return base; // off
+  if (!snap) return base;
+  const volThreshold = modelCommodityVolBlock(config);
+  const atrThreshold = modelCommodityAtrBlock(config);
+  const vol = Number(snap.volatilityPct);
+  const atrPct = Number(snap.atrPct);
+  const volElevated = volThreshold > 0 && Number.isFinite(vol) && vol > volThreshold;
+  const atrElevated = atrThreshold > 0 && Number.isFinite(atrPct) && atrPct > atrThreshold;
+  if (volElevated || atrElevated) return volTrail;
+  return base;
+}
+
+/**
  * Lean-gated dynamic floor. Returns the minimum bid price allowed for this
  * trade when lean is deteriorating. Returns 0 when the feature is off (baseDrop=0)
  * — the caller must also gate on modelDeteriorating before acting on this.
@@ -3403,6 +3424,14 @@ const MODEL_COMMODITY_MICRO_MOMENTUM_BLOCK_DEFAULT = 0.05; // 0.05% = 5 basis po
  */
 const MODEL_ATR_MOVE_BLOCK_DEFAULT = 0; // off by default — user turns on to test
 /**
+ * Volatile-session trail tighten for commodities. When vol or ATR is elevated
+ * (using the same thresholds as commodityVolBlock/commodityAtrBlock), the trail
+ * stop is replaced with this tighter value so green runs bank faster on any
+ * pullback. 0 = off (default — use normal commodity trail).
+ * e.g. 4 = tighten to 4¢ pullback from peak when session is volatile.
+ */
+const MODEL_COMMODITY_VOL_TRAIL_CENTS_DEFAULT = 0; // off by default
+/**
  * Commodity volatility entry block: skip commodity entries when the underlying
  * is in an elevated-volatility regime. Uses the same thresholds as the lean bar
  * UNSTABLE warning: vol > threshold% OR atrPct > atrThreshold%.
@@ -4011,6 +4040,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelAtrMoveBlock',
   'commodityVolBlock',
   'commodityAtrBlock',
+  'commodityVolTrailCents',
   'commodityStakeDollarsGold',
   'commodityStakeDollarsSilver',
   'commodityStakeDollarsOil',
@@ -5218,6 +5248,7 @@ class TradingBot {
       modelAtrMoveBlock: MODEL_ATR_MOVE_BLOCK_DEFAULT,
       commodityVolBlock: MODEL_COMMODITY_VOL_BLOCK_DEFAULT,
       commodityAtrBlock: MODEL_COMMODITY_ATR_BLOCK_DEFAULT,
+      commodityVolTrailCents: MODEL_COMMODITY_VOL_TRAIL_CENTS_DEFAULT,
       // Per-commodity overrides: 0/unset = use code default (TP=30¢, stop=15¢, stake=$0=global).
       commodityStakeDollarsGold: MODEL_COMMODITY_STAKE_DEFAULT,
       commodityStakeDollarsSilver: MODEL_COMMODITY_STAKE_DEFAULT,
@@ -9512,7 +9543,10 @@ class TradingBot {
       // If price gives back more than trailCents from its peak, cut immediately.
       // Only active when modelTrailCents (or commodityTrailCents) > 0 AND peak ≥ entry + trailCents
       // (ensures the floor is always at or above entry — never worse than entry stop).
-      const trailCents = modelTrailCentsForTrade(trade, this.config);
+      const _tradeSnap = assetPred ? assetPred.indicatorsSnapshot : null;
+      const trailCents = modelTrailCentsForTradeVolAdjusted(trade, this.config, _tradeSnap);
+      const _baseTrailCents = modelTrailCentsForTrade(trade, this.config);
+      const _trailTightened = trailCents !== _baseTrailCents && trailCents > 0;
       if (!inOpenGrace && trailCents > 0 && armed && Number.isFinite(peak) && peak > entry) {
         const trailFloor = Math.round(peak - trailCents);
         // Only fire if trail floor is at or above entry (never punishes a flat entry with an extra loss)
@@ -9520,9 +9554,11 @@ class TradingBot {
           const realBid = this._sideBidCentsReal(market, trade.side);
           const checkBid = (realBid != null && Number.isFinite(realBid)) ? realBid : heldSideBidCents;
           if (checkBid < trailFloor) {
-            this.lastDecision =
-              `Trail stop: bid ${Math.round(checkBid)}¢ < trail floor ${trailFloor}¢ ` +
-              `(peak ${Math.round(peak)}¢ − ${trailCents}¢) on ${trade.symbol} — cutting.`;
+            this.lastDecision = _trailTightened
+              ? `Trail stop (vol-tightened ${trailCents}¢ vs normal ${_baseTrailCents}¢): bid ${Math.round(checkBid)}¢ < trail floor ${trailFloor}¢ ` +
+                `(peak ${Math.round(peak)}¢) on ${trade.symbol} — cutting.`
+              : `Trail stop: bid ${Math.round(checkBid)}¢ < trail floor ${trailFloor}¢ ` +
+                `(peak ${Math.round(peak)}¢ − ${trailCents}¢) on ${trade.symbol} — cutting.`;
             await tryModelAgainstCut('model_against');
             return;
           }

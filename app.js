@@ -2595,6 +2595,7 @@ const SLIDER_UNITS = {
   'bot-commodity-micro-momentum': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)} bps`),
   'bot-commodity-vol-block': (v) => (Number(v) <= 0 ? 'off' : `>${(+v).toFixed(2)}%`),
   'bot-commodity-atr-block': (v) => (Number(v) <= 0 ? 'off' : `>${(+v).toFixed(2)}%`),
+  'bot-commodity-vol-trail': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}¢`),
   'bot-model-preclose-force': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(2)} min`),
   'bot-model-late-exit-max-loss': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
   'bot-model-lean-floor-drop': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
@@ -3216,6 +3217,7 @@ function wireSliderDisplays() {
     'bot-commodity-micro-momentum',
     'bot-commodity-vol-block',
     'bot-commodity-atr-block',
+    'bot-commodity-vol-trail',
     'bot-model-preclose-force',
     'bot-model-late-exit-max-loss',
     'bot-model-lean-floor-drop',
@@ -3427,6 +3429,7 @@ function wireBotConfigAutoSave() {
     'bot-commodity-micro-momentum',
     'bot-commodity-vol-block',
     'bot-commodity-atr-block',
+    'bot-commodity-vol-trail',
     'bot-model-preclose-force',
     'bot-model-late-exit-max-loss',
     'bot-model-lean-floor-drop',
@@ -3831,6 +3834,17 @@ async function loadBotConfigIntoForm() {
       volBlockToggle.style.borderColor = isOn ? '#ef4444' : '#6b7280';
       volBlockToggle.style.color = isOn ? '#fff' : '#9ca3af';
     }
+    const commodityVolTrail = document.getElementById('bot-commodity-vol-trail');
+    if (commodityVolTrail) commodityVolTrail.value = c.commodityVolTrailCents != null ? c.commodityVolTrailCents : 0;
+    // Sync vol-trail toggle button
+    const volTrailToggle = document.getElementById('bot-commodity-vol-trail-toggle');
+    if (volTrailToggle) {
+      const isOn = parseFloat(commodityVolTrail?.value || 0) > 0;
+      volTrailToggle.textContent = isOn ? 'ON' : 'OFF';
+      volTrailToggle.style.background = isOn ? '#f59e0b' : '#374151';
+      volTrailToggle.style.borderColor = isOn ? '#f59e0b' : '#6b7280';
+      volTrailToggle.style.color = isOn ? '#000' : '#9ca3af';
+    }
     const modelPreCloseForce = document.getElementById('bot-model-preclose-force');
     if (modelPreCloseForce) {
       modelPreCloseForce.value =
@@ -4055,6 +4069,7 @@ async function loadBotConfigIntoForm() {
       'bot-commodity-micro-momentum',
       'bot-commodity-vol-block',
       'bot-commodity-atr-block',
+      'bot-commodity-vol-trail',
       'bot-model-preclose-force',
       'bot-model-late-exit-max-loss',
       'bot-model-lean-floor-drop',
@@ -4328,6 +4343,7 @@ async function saveBotConfig(opts = {}) {
     commodityMicroMomentumBlock: parseFloat(document.getElementById('bot-commodity-micro-momentum')?.value || '5') / 10000,
     commodityVolBlock: parseFloat(document.getElementById('bot-commodity-vol-block')?.value || '0.35'),
     commodityAtrBlock: parseFloat(document.getElementById('bot-commodity-atr-block')?.value || '0.5'),
+    commodityVolTrailCents: parseFloat(document.getElementById('bot-commodity-vol-trail')?.value || '0'),
     modelPreCloseForceMinutes: parseFloat(
       document.getElementById('bot-model-preclose-force')?.value || '1'
     ),
@@ -5044,6 +5060,28 @@ function wireBotUI() {
     // Fire input events so the slider value labels update
     volSlider.dispatchEvent(new Event('input'));
     atrSlider.dispatchEvent(new Event('input'));
+  });
+  // Vol trail ON/OFF toggle
+  document.getElementById('bot-commodity-vol-trail-toggle')?.addEventListener('click', () => {
+    const trailSlider = document.getElementById('bot-commodity-vol-trail');
+    const btn = document.getElementById('bot-commodity-vol-trail-toggle');
+    if (!trailSlider || !btn) return;
+    const isOn = parseFloat(trailSlider.value) > 0;
+    if (isOn) {
+      btn.dataset.prevTrail = trailSlider.value;
+      trailSlider.value = 0;
+      btn.textContent = 'OFF';
+      btn.style.background = '#374151';
+      btn.style.borderColor = '#6b7280';
+      btn.style.color = '#9ca3af';
+    } else {
+      trailSlider.value = btn.dataset.prevTrail || 4;
+      btn.textContent = 'ON';
+      btn.style.background = '#f59e0b';
+      btn.style.borderColor = '#f59e0b';
+      btn.style.color = '#000';
+    }
+    trailSlider.dispatchEvent(new Event('input'));
   });
   document.getElementById('bot-commodity-fetch-candles')?.addEventListener('click', refreshCommodityCandles);
   document.getElementById('daily-loss-reset-btn')?.addEventListener('click', async () => {
