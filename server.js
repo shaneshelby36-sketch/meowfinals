@@ -1100,6 +1100,8 @@ app.get("/", (req, res) => {
       modelMomentumPullbackCents:  pick('modelMomentumPullbackCents'),
       modelSettleCloseLossCents:   pick('modelSettleCloseLossCents'),
       modelLateExitMaxLossCents:   pick('modelLateExitMaxLossCents'),
+      modelAgainstMinHoldMs:       pick('modelAgainstMinHoldMs'),
+      modelAgainstMinConf:         pick('modelAgainstMinConf'),
     };
   }
 

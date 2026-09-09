@@ -7914,9 +7914,9 @@ class TradingBot {
             sellPrice < entryPxForRetry
           ) {
             const prevReason = reason;
-            reason = 'model_against';
+            reason = 'model_slip';
             console.warn(
-              `[bot] ${prevReason} retry relabeled model_against on ${trade.ticker}: ` +
+              `[bot] ${prevReason} retry relabeled model_slip on ${trade.ticker}: ` +
                 `sell ${sellPrice}¢ < entry ${entryPxForRetry}¢`
             );
           }
@@ -9581,7 +9581,7 @@ class TradingBot {
           this.lastDecision = tightened
             ? `No-progress stop tighten: −${realAdverse}¢ (≥${maxAdverse}¢, tightened from ${baseMaxAdverse}¢) on ${trade.symbol} — cutting.`
             : `Hard adverse stop: −${realAdverse}¢ (≥${maxAdverse}¢) on ${trade.symbol} — cutting.`;
-          await tryModelAgainstCut('model_against');
+          await tryModelAgainstCut('model_hard_stop');
           return;
         }
       }
@@ -9597,19 +9597,21 @@ class TradingBot {
       const _trailTightened = trailCents !== _baseTrailCents && trailCents > 0;
       if (!inOpenGrace && trailCents > 0 && armed && Number.isFinite(peak) && peak > entry) {
         const trailFloor = Math.round(peak - trailCents);
-        // Only fire if trail floor is at or above entry (never punishes a flat entry with an extra loss)
-        if (trailFloor >= entry) {
-          const realBid = this._sideBidCentsReal(market, trade.side);
-          const checkBid = (realBid != null && Number.isFinite(realBid)) ? realBid : heldSideBidCents;
-          if (checkBid < trailFloor) {
-            this.lastDecision = _trailTightened
-              ? `Trail stop (vol-tightened ${trailCents}¢ vs normal ${_baseTrailCents}¢): bid ${Math.round(checkBid)}¢ < trail floor ${trailFloor}¢ ` +
-                `(peak ${Math.round(peak)}¢) on ${trade.symbol} — cutting.`
-              : `Trail stop: bid ${Math.round(checkBid)}¢ < trail floor ${trailFloor}¢ ` +
-                `(peak ${Math.round(peak)}¢ − ${trailCents}¢) on ${trade.symbol} — cutting.`;
-            await tryModelAgainstCut('model_against');
-            return;
-          }
+        // Effective floor is never below entry: when the raw trail floor would fall
+        // below entry (e.g. commodity peak +7¢ with 10¢ trail) we use entry instead,
+        // so the trail still protects profits on small peaks without locking in a loss.
+        const effectiveTrailFloor = Math.max(trailFloor, Math.round(entry));
+        const realBid = this._sideBidCentsReal(market, trade.side);
+        const checkBid = (realBid != null && Number.isFinite(realBid)) ? realBid : heldSideBidCents;
+        if (checkBid < effectiveTrailFloor) {
+          const flooredNote = effectiveTrailFloor > trailFloor ? ` (floored at entry)` : '';
+          this.lastDecision = _trailTightened
+            ? `Trail stop (vol-tightened ${trailCents}¢ vs normal ${_baseTrailCents}¢): bid ${Math.round(checkBid)}¢ < trail floor ${effectiveTrailFloor}¢` +
+              `${flooredNote} (peak ${Math.round(peak)}¢) on ${trade.symbol} — cutting.`
+            : `Trail stop: bid ${Math.round(checkBid)}¢ < trail floor ${effectiveTrailFloor}¢` +
+              `${flooredNote} (peak ${Math.round(peak)}¢ − ${trailCents}¢) on ${trade.symbol} — cutting.`;
+          await tryModelAgainstCut('model_trail_stop');
+          return;
         }
       }
 
@@ -9633,7 +9635,7 @@ class TradingBot {
         if (ratio * 100 >= uwRatioPct) {
           this.lastDecision =
             `Underwater ${Math.round(ratio * 100)}% of first ${Math.round(uwWindowMs / 1000)}s on ${trade.symbol} — hard cut.`;
-          await tryModelAgainstCut('model_against');
+          await tryModelAgainstCut('model_underwater');
           return;
         }
       }

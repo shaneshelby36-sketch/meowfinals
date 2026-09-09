@@ -1634,7 +1634,9 @@ function exitSoundKind(trade) {
     if (pnl < 0) return 'loss';
   }
   if (reason === 'take_profit' || reason === 'near_certain') return 'win';
-  if (reason === 'stop_loss' || reason === 'model_against' || reason === 'model_stagnation' || reason === 'model_rapid_adverse') return 'loss';
+  if (reason === 'stop_loss' || reason === 'model_against' || reason === 'model_stagnation' ||
+      reason === 'model_rapid_adverse' || reason === 'model_hard_stop' || reason === 'model_trail_stop' ||
+      reason === 'model_underwater' || reason === 'model_slip') return 'loss';
   return 'flat';
 }
 
@@ -4786,10 +4788,10 @@ function renderBacktestResults(data, dayLabel) {
       <div class="capital-row"><span>Win rate</span><span>${t.winRatePct != null ? t.winRatePct + '%' : '—'}</span></div>
       <div class="capital-row"><span>Avg confidence (taken)</span><span>${t.avgConfidenceTaken != null ? t.avgConfidenceTaken + '%' : '—'}</span></div>
       <div class="capital-row"><span>Avg confidence (scanned)</span><span>${t.avgConfidenceScanned != null ? t.avgConfidenceScanned + '%' : '—'}</span></div>
-      <div class="capital-row"><span>Stop-loss exits</span><span>${t.stopLossExits ?? 0}</span></div>
+      <div class="capital-row"><span>Hard-stop exits</span><span>${t.stopLossExits ?? 0}</span></div>
       <div class="capital-row"><span>Take-profit exits</span><span>${t.takeProfitExits ?? 0}</span></div>
       <div class="capital-row"><span>Breakeven exits</span><span>${t.breakevenExits ?? 0}</span></div>
-      ${isModel ? '<div class="capital-row"><span>Model-against cuts</span><span>' + (t.modelAgainstExits ?? 0) + '</span></div><div class="capital-row"><span>Late/settle exits</span><span>' + (t.modelLateExits ?? 0) + '</span></div>' : ''}
+      ${isModel ? '<div class="capital-row"><span>Lean-signal cuts</span><span>' + (t.modelAgainstExits ?? 0) + '</span></div><div class="capital-row"><span>Late/settle exits</span><span>' + (t.modelLateExits ?? 0) + '</span></div>' : ''}
       <div class="capital-divider"></div>
       <div class="capital-row capital-reserved"><span>Personal Wallet <em>(locked — never spent)</em></span><span class="${(t.reservedProfitCents || 0) > 0 ? 'chip-positive' : ''}">${formatMoneyFromCents(t.reservedProfitCents)}</span></div>
       <div class="capital-row capital-reserved"><span>Insurance Fund</span><span class="${(t.insuranceCents || 0) > 0 ? 'chip-positive' : ''}">${formatMoneyFromCents(t.insuranceCents || 0)}</span></div>

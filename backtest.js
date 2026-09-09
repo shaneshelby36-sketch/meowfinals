@@ -55,6 +55,8 @@ const {
   modelMinHoldMs,
   modelOpenGraceMs,
   modelPeakProgressCents,
+  modelAgainstMinHoldMs,
+  modelAgainstMinConf,
   MODEL_MIN_CONFIDENCE_DEFAULT,
   MODEL_MAX_ENTRY_DEFAULT_CENTS,
   MODEL_MIN_ENTRY_DEFAULT_CENTS,
@@ -316,6 +318,9 @@ function normalizeModelSettings(raw = {}) {
     modelBeChaseSeconds:               n('modelBeChaseSeconds',               20),
     modelMomentumStallSeconds:         n('modelMomentumStallSeconds',         4),
     modelMomentumPullbackCents:        n('modelMomentumPullbackCents',        2),
+    // MODEL_AGAINST gates — mirror live bot so backtest reflects the same behaviour
+    modelAgainstMinHoldMs:  n('modelAgainstMinHoldMs',  75000),
+    modelAgainstMinConf:    n('modelAgainstMinConf',    70),
   };
 }
 
@@ -643,6 +648,16 @@ function backtestWithSettings(
         );
         const modelDeteriorating = !!(engineTurning || leanStaleScratch);
 
+        // MODEL_AGAINST gate — mirrors live bot: lean-signal exits suppressed until
+        // the position has been held long enough AND live confidence is sufficient.
+        // Hard price stops (maxAdverse, trail, maxLoss, floor) bypass this gate.
+        const _maMinHold = modelAgainstMinHoldMs(ms);
+        const _maMinConf = modelAgainstMinConf(ms);
+        const _liveConf = Number.isFinite(leanWindow.confidence) ? leanWindow.confidence : null;
+        const modelAgainstAllowed =
+          (_maMinHold <= 0 || heldMs >= _maMinHold) &&
+          (_maMinConf <= 0 || _liveConf == null || _liveConf >= _maMinConf);
+
         // Hard adverse stop (unconditional)
         const maxAdverse = modelMaxAdverseCentsForTrade(trade, ms);
         if (!inOpenGrace && maxAdverse > 0 && adverseCents >= maxAdverse) {
@@ -670,7 +685,7 @@ function backtestWithSettings(
         }
 
         // Lean-gated floor (lean deteriorating + below entry-scaled floor)
-        if (exitPrice == null && !inOpenGrace && modelDeteriorating && econUnderwater) {
+        if (exitPrice == null && !inOpenGrace && modelDeteriorating && econUnderwater && modelAgainstAllowed) {
           const leanFloor = modelLeanGatedFloorCents(trade, ms);
           if (leanFloor > 0 && mark < leanFloor) {
             exitPrice = Math.max(leanFloor, 1);
@@ -679,12 +694,14 @@ function backtestWithSettings(
         }
 
         // Trail stop (once armed: peak − trailCents)
+        // Effective floor is never below entry — mirrors live bot behaviour.
         const trailCents = modelTrailCentsForTrade(trade, ms);
         if (exitPrice == null && !inOpenGrace && trailCents > 0 && armed &&
             Number.isFinite(peak) && peak > entry) {
           const trailFloor = Math.round(peak - trailCents);
-          if (trailFloor >= entry && mark < trailFloor) {
-            exitPrice = trailFloor;
+          const effectiveTrailFloor = Math.max(trailFloor, Math.round(entry));
+          if (mark < effectiveTrailFloor) {
+            exitPrice = effectiveTrailFloor;
             reason = 'model_trail_stop';
           }
         }
@@ -760,7 +777,7 @@ function backtestWithSettings(
         }
 
         // Lean decay cut: strong lean collapsed + not recovered
-        if (exitPrice == null && !canExtendLate && decayState.inDecayZone && decayState.cutReady) {
+        if (exitPrice == null && !canExtendLate && decayState.inDecayZone && decayState.cutReady && modelAgainstAllowed) {
           if (flatOrGreen && isDecentGreen && heldLongEnough) {
             exitPrice = mark; reason = 'take_profit';
           } else if (flatOrGreen) {
@@ -772,7 +789,7 @@ function backtestWithSettings(
 
         // Hard lean against + confirmed → cut or scratch
         const againstBeReady = !inOpenGrace && heldMs >= openGrace + (ms.modelLeanAgainstBeSeconds != null ? ms.modelLeanAgainstBeSeconds * 1000 : 2000);
-        if (exitPrice == null && engineTurning && againstBeReady) {
+        if (exitPrice == null && engineTurning && againstBeReady && modelAgainstAllowed) {
           if (flatOrGreen && isDecentGreen && heldLongEnough) {
             exitPrice = mark; reason = 'take_profit';
           } else if (flatOrGreen) {
@@ -1301,7 +1318,8 @@ function backtestWithSettings(
     t.exitReason === 'stop_loss' ||
     t.exitReason === 'model_hard_stop' ||
     t.exitReason === 'model_floor_stop' ||
-    t.exitReason === 'model_max_loss'
+    t.exitReason === 'model_max_loss' ||
+    t.exitReason === 'model_underwater'
   ).length;
   const takeProfitExits = closedTrades.filter((t) => t.exitReason === 'take_profit').length;
   const settleStaleExits = closedTrades.filter((t) => t.exitReason === 'settle_stale').length;
