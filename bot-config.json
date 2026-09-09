@@ -98,7 +98,7 @@
   "modelOpenGraceMs": 12000,
   "modelMaxEntrySpreadCents": 8,
   "modelMinMinutesToOpen": 2,
-  "modelMaxMinutesToOpen": 12,
+  "modelMaxMinutesToOpen": 7.5,
   "modelPeakTouchTp": 10,
   "modelPeakTouchWindow": 1,
   "modelEntryMomentumBlockPct": 0.15,

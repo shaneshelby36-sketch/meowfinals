@@ -1075,6 +1075,10 @@ function isModelPostExitCooldownReason(reason) {
     r === 'model_lean_stop' ||
     r === 'model_dip_stop' ||
     r === 'model_against' ||
+    r === 'model_hard_stop' ||
+    r === 'model_trail_stop' ||
+    r === 'model_underwater' ||
+    r === 'model_slip' ||
     r === 'model_stagnation' ||
     r === 'model_rapid_adverse' ||
     r === 'model_late_exit' ||
@@ -3513,6 +3517,10 @@ function isForceRetryExitReason(reason) {
     r === 'take_profit' ||
     r === 'breakeven' ||
     r === 'model_against' ||
+    r === 'model_hard_stop' ||
+    r === 'model_trail_stop' ||
+    r === 'model_underwater' ||
+    r === 'model_slip' ||
     r === 'model_stagnation' ||
     r === 'model_rapid_adverse' ||
     r === 'model_late_exit' ||
@@ -9610,7 +9618,22 @@ class TradingBot {
               `${flooredNote} (peak ${Math.round(peak)}¢) on ${trade.symbol} — cutting.`
             : `Trail stop: bid ${Math.round(checkBid)}¢ < trail floor ${effectiveTrailFloor}¢` +
               `${flooredNote} (peak ${Math.round(peak)}¢ − ${trailCents}¢) on ${trade.symbol} — cutting.`;
-          await tryModelAgainstCut('model_trail_stop');
+          // Paper mode: fill at the trail floor (the price where the stop triggered),
+          // not at the current bid which may have already crashed far below it.
+          // Live mode: best-effort fill at current bid (can't guarantee the floor price).
+          const trailFill = this.config.mode === 'paper'
+            ? effectiveTrailFloor
+            : heldSideBidCents;
+          const closed = await this._closePosition(trade, trailFill, 'model_trail_stop', {
+            liveSellPriceCents: heldSideBidCents,
+          });
+          if (!closed && this._isLiveTrade(trade) && trade.status === 'open') {
+            trade.pendingForceExit = 'model_trail_stop';
+            if (!Number.isFinite(Number(trade.pendingForceExitSince))) {
+              trade.pendingForceExitSince = Date.now();
+            }
+            this._persist();
+          }
           return;
         }
       }
