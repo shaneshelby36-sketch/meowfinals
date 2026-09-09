@@ -1487,8 +1487,12 @@
         </div>
         <p class="settings-hint" id="bot-settings-feedback"></p>
         <details class="settings-json-wrap" id="bot-settings-json-details">
-          <summary>Current saved settings</summary>
-          <pre id="bot-settings-json">Loading…</pre>
+          <summary>Edit settings as JSON</summary>
+          <div class="settings-json-toolbar">
+            <span class="settings-json-status" id="bot-settings-json-status"></span>
+            <button type="button" class="btn-secondary" id="bot-settings-json-save">Save JSON</button>
+          </div>
+          <textarea id="bot-settings-json" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off">Loading…</textarea>
         </details>
       </div>
 

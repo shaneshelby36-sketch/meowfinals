@@ -3488,9 +3488,27 @@ function wireBotConfigAutoSave() {
 }
 
 function updateSettingsJson(config) {
-  const pre = document.getElementById('bot-settings-json');
-  if (!pre) return;
-  pre.textContent = JSON.stringify(config, null, 2);
+  const ta = document.getElementById('bot-settings-json');
+  if (!ta) return;
+  ta.value = JSON.stringify(config, null, 2);
+  _settingsJsonSetStatus('');
+}
+
+function _settingsJsonSetStatus(msg, type = '') {
+  const el = document.getElementById('bot-settings-json-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'settings-json-status' + (type ? ` ${type}` : '');
+}
+
+function _settingsJsonParse() {
+  const ta = document.getElementById('bot-settings-json');
+  if (!ta) return null;
+  try {
+    return JSON.parse(ta.value);
+  } catch (e) {
+    return e;
+  }
 }
 
 async function loadBotConfigIntoForm() {
@@ -5107,6 +5125,60 @@ function wireBotUI() {
     }
   });
   document.getElementById('bot-settings-save').addEventListener('click', () => saveBotConfig());
+
+  // JSON editor — live parse validation + Save JSON button
+  const jsonTa = document.getElementById('bot-settings-json');
+  if (jsonTa) {
+    jsonTa.addEventListener('input', () => {
+      const result = _settingsJsonParse();
+      if (result instanceof Error) {
+        _settingsJsonSetStatus(`⚠ ${result.message}`, 'err');
+      } else if (result && typeof result === 'object') {
+        const keys = Object.keys(result).length;
+        _settingsJsonSetStatus(`✓ valid JSON — ${keys} keys`, 'ok');
+      } else {
+        _settingsJsonSetStatus('');
+      }
+    });
+  }
+  document.getElementById('bot-settings-json-save')?.addEventListener('click', async () => {
+    const { engineUrl } = loadSettings();
+    const feedback = document.getElementById('bot-settings-feedback');
+    const statusEl = document.getElementById('bot-settings-json-status');
+    const result = _settingsJsonParse();
+    if (result instanceof Error) {
+      _settingsJsonSetStatus(`Cannot save — invalid JSON: ${result.message}`, 'err');
+      return;
+    }
+    if (!result || typeof result !== 'object') {
+      _settingsJsonSetStatus('Cannot save — not a JSON object', 'err');
+      return;
+    }
+    try {
+      const res = await fetch(`${engineUrl}/api/bot/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(result),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const msg = body.message ? `Not saved — ${body.message}` : `Not saved — HTTP ${res.status}`;
+        _settingsJsonSetStatus(msg, 'err');
+        if (feedback) { feedback.textContent = msg; feedback.style.color = 'var(--down)'; }
+        return;
+      }
+      const saved = await res.json().catch(() => ({}));
+      if (saved.config) updateSettingsJson(saved.config);
+      _settingsJsonSetStatus('✓ Saved', 'ok');
+      if (feedback) { feedback.textContent = '✓ Saved from JSON editor.'; feedback.style.color = 'var(--up)'; }
+      refreshBotStatus();
+      loadBotConfigIntoForm();
+    } catch (err) {
+      const msg = `Not saved — ${err.message}`;
+      _settingsJsonSetStatus(msg, 'err');
+      if (feedback) { feedback.textContent = msg; feedback.style.color = 'var(--down)'; }
+    }
+  });
   const dailyLossStep = (delta) => {
     const el = document.getElementById('bot-daily-loss-value');
     if (!el) return;
