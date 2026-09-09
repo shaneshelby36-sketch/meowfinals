@@ -1895,3 +1895,58 @@ body[data-view-mode="bot"] .asset-picker {
   background: #ef4444;
   color: #fff;
 }
+
+/* ---------- Settings accordion (collapsible groups) ---------- */
+
+.settings-accordion {
+  grid-column: 1 / -1;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.settings-accordion-summary {
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--panel-raised);
+}
+.settings-accordion-summary::-webkit-details-marker { display: none; }
+.settings-accordion-summary::before {
+  content: '▶';
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+.settings-accordion[open] > .settings-accordion-summary::before {
+  transform: rotate(90deg);
+}
+.settings-accordion[open] > .settings-accordion-summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.settings-accordion-hint {
+  font-size: 0.7rem;
+  font-weight: 400;
+  color: var(--text-dim);
+  margin-left: 2px;
+}
+
+.settings-accordion-body {
+  padding: 10px 12px 12px;
+  background: var(--panel);
+}
+
+/* Commodity accordion gets a green left accent */
+.settings-accordion-commodity > .settings-accordion-summary {
+  border-left: 3px solid #10b981;
+}

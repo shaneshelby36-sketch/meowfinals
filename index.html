@@ -565,6 +565,9 @@
             <span class="field-hint">Held-side live prob must be at least this to open — but only when price is <em>below</em> the lean skip threshold. At or above that threshold the lean check is skipped. Default <strong>65%</strong>. Per-asset overrides below take priority. <strong>0</strong> = off.</span>
           </label>
 
+          <details class="settings-accordion" style="grid-column:1/-1;">
+            <summary class="settings-accordion-summary">Per-coin lean overrides <span class="settings-accordion-hint">SOL · BTC · ETH · XRP · DOGE · BNB · NEAR · HYPE · GOLD · SILVER · OIL · NATGAS · COPPER</span></summary>
+            <div class="settings-accordion-body bot-field-grid">
           <label>MODEL lean skip above (¢)
             <div class="slider-row">
               <input id="bot-model-lean-skip-above" type="range" min="0" max="99" step="1" />
@@ -663,13 +666,17 @@
             </div>
             <span class="field-hint">COPPER lean required to enter <em>below</em> the commodity min-entry price. At or above min-entry this lean check is skipped. <strong>0</strong> = use global (or off if global is 0).</span>
           </label>
+            </div>
+          </details>
 
-          <h4 class="bot-panel-subhead" style="border-top:2px solid #10b981;padding-top:8px;margin-top:12px;color:#10b981;">🎯 Commodity overrides (Gold / Silver / Oil / NatGas / Copper)</h4>
-          <div class="commodity-candle-row">
+          <details class="settings-accordion settings-accordion-commodity" style="grid-column:1/-1;">
+            <summary class="settings-accordion-summary">🎯 Commodity overrides <span class="settings-accordion-hint">Gold · Silver · Oil · NatGas · Copper — stake, stop, TP, trail, lean, vol block</span></summary>
+            <div class="settings-accordion-body bot-field-grid">
+          <div class="commodity-candle-row" style="grid-column:1/-1;">
             <p class="field-hint" style="margin:0;">All sliders default to <strong>0 = use global</strong>. Candles load from Polygon on startup — fetch fresh ones anytime.</p>
             <button type="button" class="btn-secondary" id="bot-commodity-fetch-candles">⟳ Fetch candles now</button>
           </div>
-          <p class="field-hint" id="bot-commodity-fetch-status" style="display:none;margin-top:4px;"></p>
+          <p class="field-hint" id="bot-commodity-fetch-status" style="display:none;margin-top:4px;grid-column:1/-1;"></p>
 
           <label>🎯 Commodity — min entry (¢)
             <div class="slider-row">
@@ -959,6 +966,8 @@
             </div>
             <span class="field-hint">Max simultaneous open commodity trades (GOLD/SILVER/OIL). Default <strong>1</strong>.</span>
           </label>
+            </div>
+          </details>
 
           <label>MODEL signal score strength
             <div class="slider-row">
