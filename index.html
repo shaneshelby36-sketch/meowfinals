@@ -469,64 +469,72 @@
             <p class="active-setup-why" id="bot-active-setup-why"></p>
           </div>
 
-          <div class="model-setups" id="bot-model-setups">
-            <h4 class="bot-panel-subhead">All setups</h4>
-            <p class="settings-hint">Tap a card — or use the dropdown above — to switch the <strong>live</strong> book. The new book brings its own bankroll. <strong>What-if</strong> is raw PnL on saved fills only.</p>
-            <label>Shadow paper books
-              <select id="bot-model-shadow-books">
-                <option value="off">Off — freeze shadows (default)</option>
-                <option value="on">On — silent paper books for every other setup</option>
-              </select>
-            </label>
-            <label>Auto-switch live setup
-              <select id="bot-model-auto-switch">
-                <option value="off">Off — manual only (default)</option>
-                <option value="on">On — when live avail is low, jump to a climbing shadow</option>
-              </select>
-            </label>
-            <p class="settings-hint" id="bot-model-auto-switch-note" role="status" aria-live="polite">Auto-switch status loads with bot status.</p>
-            <div id="bot-model-setups-list" class="model-setups-list"></div>
-          </div>
+          <details class="settings-accordion" style="grid-column:1/-1;">
+            <summary class="settings-accordion-summary">All setups <span class="settings-accordion-hint">switch live book · shadow books · auto-switch</span></summary>
+            <div class="settings-accordion-body">
+              <div class="model-setups" id="bot-model-setups">
+                <p class="settings-hint">Tap a card — or use the dropdown above — to switch the <strong>live</strong> book. The new book brings its own bankroll. <strong>What-if</strong> is raw PnL on saved fills only.</p>
+                <label>Shadow paper books
+                  <select id="bot-model-shadow-books">
+                    <option value="off">Off — freeze shadows (default)</option>
+                    <option value="on">On — silent paper books for every other setup</option>
+                  </select>
+                </label>
+                <label>Auto-switch live setup
+                  <select id="bot-model-auto-switch">
+                    <option value="off">Off — manual only (default)</option>
+                    <option value="on">On — when live avail is low, jump to a climbing shadow</option>
+                  </select>
+                </label>
+                <p class="settings-hint" id="bot-model-auto-switch-note" role="status" aria-live="polite">Auto-switch status loads with bot status.</p>
+                <div id="bot-model-setups-list" class="model-setups-list"></div>
+              </div>
+            </div>
+          </details>
 
-          <div class="model-setups" id="bot-asset-stats">
-            <h4 class="bot-panel-subhead">Per-asset stats</h4>
-            <p class="settings-hint">Win rate and P&amp;L per coin over the last <em>N</em> closed trades. Auto-exclude drops coins that fall outside the floor/ceiling band (unless pinned).</p>
-            <label>Auto-exclude
-              <select id="bot-asset-auto-exclude">
-                <option value="off">Off — manual only (default)</option>
-                <option value="on">On — auto-exclude underperforming coins each cycle</option>
-              </select>
-            </label>
-            <label>Min trades before auto-exclude checks
-              <div class="slider-row">
-                <input id="bot-asset-auto-exclude-min-trades" type="range" min="3" max="30" step="1" />
-                <span class="slider-value" id="bot-asset-auto-exclude-min-trades-value">—</span>
+          <details class="settings-accordion" style="grid-column:1/-1;">
+            <summary class="settings-accordion-summary">Per-asset stats <span class="settings-accordion-hint">win rate · auto-exclude · lookback</span></summary>
+            <div class="settings-accordion-body">
+              <div class="model-setups" id="bot-asset-stats">
+                <p class="settings-hint">Win rate and P&amp;L per coin over the last <em>N</em> closed trades. Auto-exclude drops coins that fall outside the floor/ceiling band (unless pinned).</p>
+                <label>Auto-exclude
+                  <select id="bot-asset-auto-exclude">
+                    <option value="off">Off — manual only (default)</option>
+                    <option value="on">On — auto-exclude underperforming coins each cycle</option>
+                  </select>
+                </label>
+                <label>Min trades before auto-exclude checks
+                  <div class="slider-row">
+                    <input id="bot-asset-auto-exclude-min-trades" type="range" min="3" max="30" step="1" />
+                    <span class="slider-value" id="bot-asset-auto-exclude-min-trades-value">—</span>
+                  </div>
+                  <span class="field-hint">Default <strong>5</strong>. Coins with fewer trades are never auto-excluded.</span>
+                </label>
+                <label>Win-rate floor % (exclude below)
+                  <div class="slider-row">
+                    <input id="bot-asset-auto-exclude-floor" type="range" min="0" max="60" step="1" />
+                    <span class="slider-value" id="bot-asset-auto-exclude-floor-value">—</span>
+                  </div>
+                  <span class="field-hint">Default <strong>30%</strong>. Coin win rate must be at or above this to stay tradeable.</span>
+                </label>
+                <label>Win-rate ceiling % (exclude above — 0 = off)
+                  <div class="slider-row">
+                    <input id="bot-asset-auto-exclude-ceiling" type="range" min="0" max="100" step="1" />
+                    <span class="slider-value" id="bot-asset-auto-exclude-ceiling-value">—</span>
+                  </div>
+                  <span class="field-hint">Default <strong>0</strong> (disabled). Rarely needed — can exclude runaway winners if desired.</span>
+                </label>
+                <label>Lookback (last N closed trades)
+                  <div class="slider-row">
+                    <input id="bot-asset-stats-lookback" type="range" min="10" max="200" step="5" />
+                    <span class="slider-value" id="bot-asset-stats-lookback-value">—</span>
+                  </div>
+                  <span class="field-hint">Default <strong>50</strong>. How many recent closed trades count toward each asset's stats.</span>
+                </label>
+                <div id="bot-asset-stats-list" class="model-setups-list"></div>
               </div>
-              <span class="field-hint">Default <strong>5</strong>. Coins with fewer trades are never auto-excluded.</span>
-            </label>
-            <label>Win-rate floor % (exclude below)
-              <div class="slider-row">
-                <input id="bot-asset-auto-exclude-floor" type="range" min="0" max="60" step="1" />
-                <span class="slider-value" id="bot-asset-auto-exclude-floor-value">—</span>
-              </div>
-              <span class="field-hint">Default <strong>30%</strong>. Coin win rate must be at or above this to stay tradeable.</span>
-            </label>
-            <label>Win-rate ceiling % (exclude above — 0 = off)
-              <div class="slider-row">
-                <input id="bot-asset-auto-exclude-ceiling" type="range" min="0" max="100" step="1" />
-                <span class="slider-value" id="bot-asset-auto-exclude-ceiling-value">—</span>
-              </div>
-              <span class="field-hint">Default <strong>0</strong> (disabled). Rarely needed — can exclude runaway winners if desired.</span>
-            </label>
-            <label>Lookback (last N closed trades)
-              <div class="slider-row">
-                <input id="bot-asset-stats-lookback" type="range" min="10" max="200" step="5" />
-                <span class="slider-value" id="bot-asset-stats-lookback-value">—</span>
-              </div>
-              <span class="field-hint">Default <strong>50</strong>. How many recent closed trades count toward each asset's stats.</span>
-            </label>
-            <div id="bot-asset-stats-list" class="model-setups-list"></div>
-          </div>
+            </div>
+          </details>
 
           <h4 class="bot-panel-subhead">Entry</h4>
           <label>MODEL fade (opposite side)
