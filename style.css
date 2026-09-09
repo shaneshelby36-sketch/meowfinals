@@ -1740,3 +1740,158 @@ body[data-view-mode="bot"] .asset-picker {
   .brand-name { display: none; }
   .updated-pill { display: none; }
 }
+
+/* ---------- Settings customise mode ---------- */
+
+.bot-settings-customize {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  margin-left: 6px;
+}
+.bot-settings-customize.active {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
+/* Every hideable row gets position:relative so the ✕ button can anchor */
+.settings-hideable {
+  position: relative;
+}
+
+/* The ✕ dismiss button — hidden unless customize mode is on */
+.settings-hide-btn {
+  display: none;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid #ef4444;
+  background: #2d0a0a;
+  color: #f87171;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 2;
+  flex-shrink: 0;
+}
+.settings-hide-btn:hover {
+  background: #ef4444;
+  color: #fff;
+}
+
+/* Restore button shown on dimmed rows */
+.settings-restore-btn {
+  display: none;
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid #10b981;
+  background: #0a2d1e;
+  color: #34d399;
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  z-index: 2;
+  flex-shrink: 0;
+}
+.settings-restore-btn:hover {
+  background: #10b981;
+  color: #fff;
+}
+
+/* Customize mode: show the ✕ on every visible row */
+#bot-settings-fields.customize-mode .settings-hideable:not(.settings-row-hidden) .settings-hide-btn {
+  display: flex;
+}
+
+/* Hidden row: collapsed by default */
+.settings-hideable.settings-row-hidden {
+  display: none;
+}
+
+/* When "show hidden" is toggled, reveal them dimmed */
+#bot-settings-fields.show-hidden-rows .settings-hideable.settings-row-hidden {
+  display: flex;
+  opacity: 0.35;
+  pointer-events: none;
+  text-decoration: line-through;
+  text-decoration-color: #ef4444;
+}
+/* But in customize mode, allow clicks to restore */
+#bot-settings-fields.customize-mode.show-hidden-rows .settings-hideable.settings-row-hidden {
+  pointer-events: auto;
+  opacity: 0.45;
+}
+#bot-settings-fields.customize-mode.show-hidden-rows .settings-hideable.settings-row-hidden .settings-restore-btn {
+  display: flex;
+}
+
+/* NEW badge for freshly added settings */
+.settings-new-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: #f59e0b;
+  color: #000;
+  border-radius: 3px;
+  padding: 1px 5px;
+  margin-left: 6px;
+  vertical-align: middle;
+  line-height: 1.4;
+}
+
+/* Customize toolbar (shown below the lock button row) */
+.settings-customize-toolbar {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0 2px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  grid-column: 1 / -1;
+}
+.settings-customize-toolbar.visible {
+  display: flex;
+}
+.settings-customize-toolbar button {
+  font-size: 0.7rem;
+  padding: 3px 9px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--panel-raised);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.settings-customize-toolbar button:hover {
+  border-color: var(--text-dim);
+  color: var(--text);
+}
+.settings-customize-toolbar button.danger {
+  border-color: #ef4444;
+  color: #f87171;
+}
+.settings-customize-toolbar button.danger:hover {
+  background: #ef4444;
+  color: #fff;
+}

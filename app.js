@@ -2572,6 +2572,8 @@ const SLIDER_UNITS = {
   'bot-model-underwater-ratio': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-rapid-adverse': (v) => (Number(v) <= 0 ? 'off' : `−${Math.round(v)}¢`),
   'bot-model-open-grace-ms': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(Number(v) / 1000)}s`),
+  'bot-model-against-min-hold': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
+  'bot-model-against-min-conf': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}%`),
   'bot-model-prob-drift': (v) => `${Math.round(v)}pts`,
   'bot-model-live-lean-margin': (v) => `${Math.round(v)}%`,
   'bot-model-stall-sec': (v) => (Number(v) <= 0 ? 'off' : `${Math.round(v)}s`),
@@ -3196,6 +3198,8 @@ function wireSliderDisplays() {
     'bot-model-underwater-ratio',
     'bot-model-rapid-adverse',
     'bot-model-open-grace-ms',
+    'bot-model-against-min-hold',
+    'bot-model-against-min-conf',
     'bot-model-prob-drift',
     'bot-model-live-lean-margin',
     'bot-model-decay-drop',
@@ -3408,6 +3412,8 @@ function wireBotConfigAutoSave() {
     'bot-model-underwater-ratio',
     'bot-model-rapid-adverse',
     'bot-model-open-grace-ms',
+    'bot-model-against-min-hold',
+    'bot-model-against-min-conf',
     'bot-model-prob-drift',
     'bot-model-live-lean-margin',
     'bot-model-decay-drop',
@@ -3785,6 +3791,10 @@ async function loadBotConfigIntoForm() {
     }
     const modelOpenGraceEl = document.getElementById('bot-model-open-grace-ms');
     if (modelOpenGraceEl) modelOpenGraceEl.value = c.modelOpenGraceMs != null ? c.modelOpenGraceMs : 10000;
+    const modelAgainstMinHoldEl = document.getElementById('bot-model-against-min-hold');
+    if (modelAgainstMinHoldEl) modelAgainstMinHoldEl.value = c.modelAgainstMinHoldMs != null ? c.modelAgainstMinHoldMs / 1000 : 75;
+    const modelAgainstMinConfEl = document.getElementById('bot-model-against-min-conf');
+    if (modelAgainstMinConfEl) modelAgainstMinConfEl.value = c.modelAgainstMinConf != null ? c.modelAgainstMinConf : 70;
     const modelPeakTouchTp = document.getElementById('bot-model-peak-touch-tp');
     if (modelPeakTouchTp) modelPeakTouchTp.value = c.modelPeakTouchTp != null ? c.modelPeakTouchTp : 10;
     const modelPeakTouchWindow = document.getElementById('bot-model-peak-touch-window');
@@ -4048,6 +4058,8 @@ async function loadBotConfigIntoForm() {
     'bot-model-underwater-ratio',
     'bot-model-rapid-adverse',
     'bot-model-open-grace-ms',
+    'bot-model-against-min-hold',
+    'bot-model-against-min-conf',
     'bot-model-prob-drift',
     'bot-model-live-lean-margin',
     'bot-model-decay-drop',
@@ -4320,6 +4332,8 @@ async function saveBotConfig(opts = {}) {
     modelUnderwaterRatioPct: parseFloat(document.getElementById('bot-model-underwater-ratio')?.value || '70'),
     modelRapidAdverseCents: parseFloat(document.getElementById('bot-model-rapid-adverse')?.value || '0'),
     modelOpenGraceMs: parseFloat(document.getElementById('bot-model-open-grace-ms')?.value || '10000'),
+    modelAgainstMinHoldMs: parseFloat(document.getElementById('bot-model-against-min-hold')?.value || '75') * 1000,
+    modelAgainstMinConf: parseFloat(document.getElementById('bot-model-against-min-conf')?.value || '70'),
     modelProbDriftPts: parseFloat(document.getElementById('bot-model-prob-drift')?.value || '15'),
     modelLeanRisingHold: document.getElementById('bot-model-lean-rising-hold')?.value || 'off',
     modelLeanRisingMinPts: parseFloat(document.getElementById('bot-model-lean-rising-min-pts')?.value || '1'),
@@ -4955,7 +4969,118 @@ async function switchMode(requestedMode) {
   }
 }
 
+// ── Settings customise mode ──────────────────────────────────────────────────
+// Lets the user hide any label/subhead they don't use. Hidden IDs are stored
+// in localStorage under 'settingsHidden' (a JSON array of data-hide-id values).
+// Nothing is deleted — rows are just display:none until restored.
+function initSettingsCustomize() {
+  const STORE_KEY = 'settingsHidden';
+  const fields = document.getElementById('bot-settings-fields');
+  if (!fields) return;
+
+  // Auto-inject settings-hideable + buttons on every label and subhead that
+  // doesn't already have the class (the two NEW ones are already marked in HTML).
+  let autoIdx = 0;
+  fields.querySelectorAll('label, h4.bot-panel-subhead').forEach((el) => {
+    if (el.classList.contains('settings-hideable')) return; // already done in HTML
+    // Skip labels that are inside another label (e.g. commodity vol block sub-labels)
+    if (el.closest('.settings-hideable')) return;
+    el.classList.add('settings-hideable');
+    const id = el.dataset.hideId || `auto-${autoIdx++}`;
+    el.dataset.hideId = id;
+    const hideBtn = document.createElement('button');
+    hideBtn.type = 'button';
+    hideBtn.className = 'settings-hide-btn';
+    hideBtn.setAttribute('aria-label', 'Hide this setting');
+    hideBtn.textContent = '✕';
+    el.appendChild(hideBtn);
+    const restoreBtn = document.createElement('button');
+    restoreBtn.type = 'button';
+    restoreBtn.className = 'settings-restore-btn';
+    restoreBtn.setAttribute('aria-label', 'Restore this setting');
+    restoreBtn.textContent = '↩';
+    el.appendChild(restoreBtn);
+  });
+
+  // Load persisted hidden set
+  function loadHidden() {
+    try { return new Set(JSON.parse(localStorage.getItem(STORE_KEY) || '[]')); }
+    catch { return new Set(); }
+  }
+  function saveHidden(set) {
+    localStorage.setItem(STORE_KEY, JSON.stringify([...set]));
+  }
+  function applyHidden(hidden) {
+    fields.querySelectorAll('.settings-hideable').forEach((el) => {
+      if (hidden.has(el.dataset.hideId)) {
+        el.classList.add('settings-row-hidden');
+      } else {
+        el.classList.remove('settings-row-hidden');
+      }
+    });
+  }
+
+  applyHidden(loadHidden());
+
+  // ✕ hide buttons
+  fields.addEventListener('click', (e) => {
+    const hideBtn = e.target.closest('.settings-hide-btn');
+    if (hideBtn) {
+      e.stopPropagation();
+      const row = hideBtn.closest('.settings-hideable');
+      if (!row) return;
+      const hidden = loadHidden();
+      hidden.add(row.dataset.hideId);
+      saveHidden(hidden);
+      applyHidden(hidden);
+      return;
+    }
+    const restoreBtn = e.target.closest('.settings-restore-btn');
+    if (restoreBtn) {
+      e.stopPropagation();
+      const row = restoreBtn.closest('.settings-hideable');
+      if (!row) return;
+      const hidden = loadHidden();
+      hidden.delete(row.dataset.hideId);
+      saveHidden(hidden);
+      applyHidden(hidden);
+    }
+  });
+
+  // Customize toggle button
+  const customizeBtn = document.getElementById('bot-settings-customize');
+  const toolbar = document.getElementById('settings-customize-toolbar');
+  if (customizeBtn) {
+    customizeBtn.addEventListener('click', () => {
+      const on = fields.classList.toggle('customize-mode');
+      customizeBtn.classList.toggle('active', on);
+      customizeBtn.textContent = on ? 'Done' : 'Customize';
+      if (toolbar) toolbar.classList.toggle('visible', on);
+    });
+  }
+
+  // Show hidden toggle
+  const showHiddenBtn = document.getElementById('settings-show-hidden');
+  if (showHiddenBtn) {
+    showHiddenBtn.addEventListener('click', () => {
+      const on = fields.classList.toggle('show-hidden-rows');
+      showHiddenBtn.textContent = on ? 'Hide hidden' : 'Show hidden';
+    });
+  }
+
+  // Restore all
+  const restoreAllBtn = document.getElementById('settings-restore-all');
+  if (restoreAllBtn) {
+    restoreAllBtn.addEventListener('click', () => {
+      if (!confirm('Restore all hidden settings?')) return;
+      saveHidden(new Set());
+      applyHidden(new Set());
+    });
+  }
+}
+
 function wireBotUI() {
+  initSettingsCustomize();
   initExitSoundUi();
   document.getElementById('bot-btn').addEventListener('click', openBotOverlay);
   document.getElementById('bot-overlay-close').addEventListener('click', closeBotOverlay);

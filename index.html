@@ -305,9 +305,17 @@
           <button type="button" id="bot-settings-lock" class="bot-settings-lock" aria-pressed="false" title="Lock settings so sliders can't be bumped by accident">
             Unlock to edit
           </button>
+          <button type="button" id="bot-settings-customize" class="bot-settings-customize" title="Mark settings to hide — keeps the panel tidy">
+            Customize
+          </button>
         </h3>
         <p class="settings-hint">These apply immediately — no restart needed. Lock settings when you're done so a sleepy thumb can't drop stop-loss to 1¢. Trading mode (paper/live) is set on the server and can't be changed here.</p>
         <div id="bot-settings-fields">
+        <div class="settings-customize-toolbar" id="settings-customize-toolbar">
+          <span>Click <strong style="color:#ef4444">✕</strong> on any row to hide it. Hidden rows stay hidden after reload.</span>
+          <button type="button" id="settings-show-hidden">Show hidden</button>
+          <button type="button" id="settings-restore-all" class="danger">Restore all</button>
+        </div>
         <div class="bot-strategy-tabs" role="tablist" aria-label="Strategy">
           <button type="button" class="bot-strategy-tab" data-strategy="edge" id="bot-tab-edge">Edge</button>
           <button type="button" class="bot-strategy-tab" data-strategy="settle" id="bot-tab-settle">Settle (80–94¢)</button>
@@ -1121,6 +1129,24 @@
               <span class="slider-value" id="bot-model-open-grace-ms-value">—</span>
             </div>
             <span class="field-hint">Default <strong>10s</strong>. After entry, only hard lean flips can exit during this window — soft turns, BE chases, and adverse cuts are all suppressed. Prevents instant exits when a lean collapses on the first tick after opening.</span>
+          </label>
+          <label class="settings-hideable" data-hide-id="model-against-min-hold" style="border: 2px solid #f59e0b; border-radius: 6px; padding: 8px;">⏱ MODEL_AGAINST min hold (seconds)<span class="settings-new-badge">NEW</span>
+            <div class="slider-row">
+              <input id="bot-model-against-min-hold" type="range" min="0" max="180" step="5" />
+              <span class="slider-value" id="bot-model-against-min-hold-value">—</span>
+            </div>
+            <span class="field-hint">Default <strong>75s</strong>. Lean-signal exits (hard-against, lean decay, lean-gated floor) cannot fire until the position has been held this long. Hard price stops (adverse, trail, rapid-adverse, underwater-ratio) are unaffected. Set to <strong>0</strong> to disable.</span>
+            <button type="button" class="settings-hide-btn" aria-label="Hide this setting">✕</button>
+            <button type="button" class="settings-restore-btn" aria-label="Restore this setting">↩</button>
+          </label>
+          <label class="settings-hideable" data-hide-id="model-against-min-conf" style="border: 2px solid #f59e0b; border-radius: 6px; padding: 8px;">🎯 MODEL_AGAINST min confidence (%)<span class="settings-new-badge">NEW</span>
+            <div class="slider-row">
+              <input id="bot-model-against-min-conf" type="range" min="0" max="95" step="5" />
+              <span class="slider-value" id="bot-model-against-min-conf-value">—</span>
+            </div>
+            <span class="field-hint">Default <strong>70%</strong>. Lean-signal exits require live confidence to be at least this value before cutting. Prevents MODEL_AGAINST from firing on uncertain signals. Set to <strong>0</strong> to disable.</span>
+            <button type="button" class="settings-hide-btn" aria-label="Hide this setting">✕</button>
+            <button type="button" class="settings-restore-btn" aria-label="Restore this setting">↩</button>
           </label>
           <label>MODEL prob drift (pts from entry)
             <div class="slider-row">
