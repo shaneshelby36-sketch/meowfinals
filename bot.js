@@ -908,6 +908,10 @@ const MODEL_GLOBAL_POST_EXIT_COOLDOWN_MS_DEFAULT = 20_000;
 const MODEL_POST_LEAN_STOP_COOLDOWN_MS_DEFAULT = 120_000;
 /** After open grace: when model is not firm, wait this long then BE/cut (avoid ask→bid flicker). */
 const MODEL_LEAN_AGAINST_BE_MS_DEFAULT = 12_000;
+/** MODEL_AGAINST / lean-decay exits require the position to have been held at least this long. */
+const MODEL_AGAINST_MIN_HOLD_MS_DEFAULT = 75_000;
+/** MODEL_AGAINST / lean-decay exits require live confidence to be at least this value (0 = disabled). */
+const MODEL_AGAINST_MIN_CONF_DEFAULT = 70;
 /** First N ms after open: only hard lean-turning exits (ignore soft + ask/bid haircut). */
 const MODEL_OPEN_GRACE_MS_DEFAULT = 4_000;
 /** Lean-exit / momentum TP floor — no micro-banks under this. */
@@ -1096,6 +1100,30 @@ function modelLeanAgainstBeMs(config = {}) {
   const sec = Number(config.modelLeanAgainstBeSeconds);
   if (Number.isFinite(sec) && sec >= 0) return Math.round(sec * 1000);
   return MODEL_LEAN_AGAINST_BE_MS_DEFAULT;
+}
+
+/**
+ * Minimum ms a position must have been held before any MODEL_AGAINST / lean-decay
+ * exit can fire. Hard price stops (maxAdverse, trail, rapid-adverse, underwater-ratio)
+ * are NOT subject to this gate — only lean-signal-driven cuts.
+ */
+function modelAgainstMinHoldMs(config = {}) {
+  const n = Number(config.modelAgainstMinHoldMs);
+  if (Number.isFinite(n) && n >= 0) return Math.round(n);
+  const sec = Number(config.modelAgainstMinHoldSeconds);
+  if (Number.isFinite(sec) && sec >= 0) return Math.round(sec * 1000);
+  return MODEL_AGAINST_MIN_HOLD_MS_DEFAULT;
+}
+
+/**
+ * Minimum live confidence required for a MODEL_AGAINST / lean-decay exit to fire.
+ * If confidence is below this, the exit is suppressed and the position holds.
+ * Set to 0 in config to disable the gate.
+ */
+function modelAgainstMinConf(config = {}) {
+  const n = Number(config.modelAgainstMinConf);
+  if (Number.isFinite(n) && n >= 0) return Math.round(n);
+  return MODEL_AGAINST_MIN_CONF_DEFAULT;
 }
 
 /** Live window still supports this MODEL hold (inverse of lean-turning). */
@@ -4030,6 +4058,9 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelGlobalPostExitCooldownSeconds',
   'modelPostLeanStopCooldownMinutes',
   'modelLeanAgainstBeSeconds',
+  'modelAgainstMinHoldMs',
+  'modelAgainstMinHoldSeconds',
+  'modelAgainstMinConf',
   'modelOpenGraceMs',
   'modelMaxEntrySpreadCents',
   'modelMinMinutesToOpen',
@@ -5238,6 +5269,8 @@ class TradingBot {
       modelGlobalPostExitCooldownSeconds: MODEL_GLOBAL_POST_EXIT_COOLDOWN_MS_DEFAULT / 1000,
       modelPostLeanStopCooldownMinutes: MODEL_POST_LEAN_STOP_COOLDOWN_MS_DEFAULT / 60000,
       modelLeanAgainstBeSeconds: MODEL_LEAN_AGAINST_BE_MS_DEFAULT / 1000,
+      modelAgainstMinHoldMs: MODEL_AGAINST_MIN_HOLD_MS_DEFAULT,
+      modelAgainstMinConf: MODEL_AGAINST_MIN_CONF_DEFAULT,
       modelOpenGraceMs: MODEL_OPEN_GRACE_MS_DEFAULT,
       modelMaxEntrySpreadCents: MODEL_MAX_ENTRY_SPREAD_CENTS_DEFAULT,
       modelMinMinutesToOpen: MODEL_MIN_MINUTES_TO_OPEN_DEFAULT,
@@ -9424,6 +9457,21 @@ class TradingBot {
         ? now - Number(trade._hardAgainstSince)
         : 0;
       const hardAgainstConfirmed = hardAgainstHeldMs >= againstBeDelay;
+
+      // ── MODEL_AGAINST GATES (min-hold + min-conf) ─────────────────────────
+      // Lean-signal-driven cuts (hard-against, lean decay, lean-gated floor) must
+      // pass BOTH conditions before firing. Hard price stops (maxAdverse, trail,
+      // rapid-adverse, underwater-ratio) bypass these gates — they protect capital
+      // regardless of how long we've held or what confidence the engine reports.
+      const _maMinHold = modelAgainstMinHoldMs(this.config);
+      const _maMinConf = modelAgainstMinConf(this.config);
+      const _liveConf = picked && picked.window && Number.isFinite(picked.window.confidence)
+        ? picked.window.confidence
+        : null;
+      const modelAgainstAllowed =
+        (_maMinHold <= 0 || heldMs >= _maMinHold) &&
+        (_maMinConf <= 0 || _liveConf == null || _liveConf >= _maMinConf);
+
       const leanStaleScratch =
         !faded &&
         picked &&
@@ -9592,7 +9640,7 @@ class TradingBot {
 
       // Lean-gated dynamic floor: only fires when lean is deteriorating AND bid
       // has dropped below the entry-scaled floor. Lean firm → completely ignored.
-      if (bidOk && modelDeteriorating && !inOpenGrace && underwater) {
+      if (bidOk && modelDeteriorating && !inOpenGrace && underwater && modelAgainstAllowed) {
         const leanFloor = modelLeanGatedFloorCents(trade, this.config);
         if (leanFloor > 0 && heldSideBidCents < leanFloor) {
           this.lastDecision =
@@ -9711,7 +9759,7 @@ class TradingBot {
       // Commodities with a TP override hold to their target — minor lean dips are noise
       // on slower-moving markets. Only fire decay cut once they've hit their TP target.
       const commodityHolding = commodityTpOverride > 0 && !commodityRideToSettle && greenCents < commodityTpOverride;
-      if (bidOk && picked && picked.window && !faded && !commodityHolding) {
+      if (bidOk && picked && picked.window && !faded && !commodityHolding && modelAgainstAllowed) {
         const decay = modelLeanDecayCutState(trade, picked.window, trade.side, now, this.config);
         if (decay.inDecayZone && decay.cutReady) {
           const up = Number(picked.window.probabilityUp);
@@ -9741,7 +9789,7 @@ class TradingBot {
         }
       }
 
-      if (modelHardAgainst && againstBeReady && hardAgainstConfirmed) {
+      if (modelHardAgainst && againstBeReady && hardAgainstConfirmed && modelAgainstAllowed) {
         if (await exitModelAgainst()) return;
       }
 
@@ -9770,7 +9818,7 @@ class TradingBot {
       // Bid-led dump: only act when hard lean against (firm holds ignore price slides).
       const dumpPullback = modelDumpPullbackCents(this.config);
       if (!faded && bidOk && dumpPullback > 0 && pullback >= dumpPullback) {
-        if (modelHardAgainst && againstBeReady && hardAgainstConfirmed) {
+        if (modelHardAgainst && againstBeReady && hardAgainstConfirmed && modelAgainstAllowed) {
           if (await exitModelAgainst()) return;
         } else if ((isBankableGreen || isDecentGreen) && heldForBank) {
           await this._closePosition(trade, heldSideBidCents, 'take_profit', {
@@ -13534,6 +13582,8 @@ module.exports = {
   modelGlobalPostExitCooldownMs,
   modelPostLeanStopCooldownMs,
   modelLeanAgainstBeMs,
+  modelAgainstMinHoldMs,
+  modelAgainstMinConf,
   modelOpenGraceMs,
   modelOnPaceBelowBarrier,
   modelShouldLeanStopRed,
@@ -13654,6 +13704,8 @@ module.exports = {
   MODEL_POST_EXIT_COOLDOWN_MS_DEFAULT,
   MODEL_GLOBAL_POST_EXIT_COOLDOWN_MS_DEFAULT,
   MODEL_LEAN_AGAINST_BE_MS_DEFAULT,
+  MODEL_AGAINST_MIN_HOLD_MS_DEFAULT,
+  MODEL_AGAINST_MIN_CONF_DEFAULT,
   MODEL_MIN_TP_CENTS_DEFAULT,
   MODEL_BANK_GREEN_CENTS_DEFAULT,
   MODEL_NEAR_TARGET_BANK_CENTS_DEFAULT,
