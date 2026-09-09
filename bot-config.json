@@ -187,7 +187,7 @@
   "modelFastRedCents": 2,
   "modelProbDriftPts": 35,
   "modelLeanDecayDropPts": 5,
-  "modelLeanDecayStallSeconds": 0,
+  "modelLeanDecayStallSeconds": 15,
   "modelLeanDecayFloor": 70,
   "modelLeanAgainstBeSeconds": 12
 }

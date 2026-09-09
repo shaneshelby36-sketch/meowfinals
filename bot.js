@@ -5465,6 +5465,8 @@ class TradingBot {
     // Last post-stop protection gate logged to activity (dedupe poll spam).
     this._lastProtectionGateKey = null;
     this._lastProtectionGateSymbol = null;
+    // Per-symbol last-logged skip reason — dedupe rejection activity log entries.
+    this._lastSkipReasons = Object.create(null);
     // Serialize manage/settle so watchdog + cycle can't double-sell the same leg.
     this._tradeLock = Promise.resolve();
     this._tradeLockDepth = 0;
@@ -11143,9 +11145,14 @@ class TradingBot {
           ` (hold to settlement${lateNote}${sizeNote}).`;
       } else if (isModel) {
         const sizeNote = modelQuarter ? ' · half stake' : '';
+        const leanNote = Number.isFinite(Number(trade.modelEntryHeldProb))
+          ? ` · lean ${Math.round(trade.modelEntryHeldProb)}%`
+          : '';
+        const dirNote = trade.modelDirection ? ` · ${trade.modelDirection}` : '';
+        const winNote = trade.modelWindowKey ? ` · ${trade.modelWindowKey}` : '';
         this.lastDecision =
           `Opened ${symbol} ${side.toUpperCase()} model position at ${trade.entryPriceCents}¢` +
-          `${sizeNote} (confidence ${engineConfidence}%).`;
+          `${sizeNote} (conf ${engineConfidence}%${leanNote}${dirNote}${winNote}).`;
       } else {
         this.lastDecision =
           `Opened ${symbol} ${side.toUpperCase()} ${this.config.mode} position at ${trade.entryPriceCents}¢` +
@@ -12680,13 +12687,24 @@ class TradingBot {
     // Serial — parallel AUTO scans were bursting list GETs and tripping 429.
     const valid = [];
     for (const sym of candidates) {
+      let skipMsg = null;
       const opp = await this._evaluateSymbolForModel(sym, predictions, {
         quiet: true,
         onSkip: (_s, msg) => {
-          if (msg) skips.push(msg.replace(/^Waiting:\s*/i, ''));
+          if (msg) {
+            skips.push(msg.replace(/^Waiting:\s*/i, ''));
+            if (!skipMsg) skipMsg = msg.replace(/^Waiting:\s*/i, '').replace(/\s+/g, ' ').trim();
+          }
         },
       });
-      if (opp) valid.push(opp);
+      if (opp) {
+        // Clear any stale skip reason when symbol becomes valid.
+        delete this._lastSkipReasons[sym];
+        valid.push(opp);
+      } else if (skipMsg && skipMsg !== this._lastSkipReasons[sym]) {
+        this._lastSkipReasons[sym] = skipMsg;
+        this._logActivity(`Skipped ${sym}: ${skipMsg}`, { kind: 'skip', symbol: sym });
+      }
       if (
         this.client &&
         typeof this.client.isPublicRateLimited === 'function' &&

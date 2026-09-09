@@ -1124,6 +1124,7 @@ body[data-view-mode="bot"] .asset-picker {
 .bot-log-row.kind-close .bot-log-msg { color: var(--text); }
 .bot-log-row.kind-error .bot-log-msg { color: var(--down); }
 .bot-log-row.kind-gate .bot-log-msg { color: var(--wait); }
+.bot-log-row.kind-skip .bot-log-msg { color: var(--muted, #888); }
 
 @media (max-width: 720px) {
   .bot-log-row {
