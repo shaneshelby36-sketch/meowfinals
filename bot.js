@@ -12703,7 +12703,18 @@ class TradingBot {
         valid.push(opp);
       } else if (skipMsg && skipMsg !== this._lastSkipReasons[sym]) {
         this._lastSkipReasons[sym] = skipMsg;
-        this._logActivity(`Skipped ${sym}: ${skipMsg}`, { kind: 'skip', symbol: sym });
+        // Append lean snapshot so it's visible even on rejected entries.
+        const _pred = predictions[sym];
+        const _picked = _pred ? pickModelWindow(_pred, Infinity) : null;
+        const _win = _picked && _picked.window;
+        const _up = _win && Number(_win.probabilityUp);
+        const _down = _win && Number(_win.probabilityDown);
+        const _dir = _picked && _picked.direction;
+        const leanSuffix =
+          Number.isFinite(_up) && Number.isFinite(_down)
+            ? ` [lean ${_dir || '?'} ${_dir === 'UP' ? Math.round(_up) : _dir === 'DOWN' ? Math.round(_down) : Math.round(Math.max(_up, _down))}%]`
+            : '';
+        this._logActivity(`Skipped ${sym}: ${skipMsg}${leanSuffix}`, { kind: 'skip', symbol: sym });
       }
       if (
         this.client &&

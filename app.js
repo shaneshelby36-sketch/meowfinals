@@ -1081,6 +1081,26 @@ const ALL_LEAN_SYMS = [...COMMO_SYMS, ...CRYPTO_SYMS];
 const _unstableHistory = {};
 const UNSTABLE_HISTORY_LEN = 5;
 
+// Rolling lean history — last 30 poll snapshots per symbol.
+// Each entry: { ts, up, down, conf, dir }
+const _leanHistory = {};
+const LEAN_HISTORY_LEN = 30;
+
+function _recordLeanSnapshot(sym, d) {
+  if (!d || !d.ready || !d.windows) return;
+  // Use the active window (w10 preferred, fallback w5/w15) for the snapshot.
+  const win = d.windows.w10 || d.windows.w5 || d.windows.w15;
+  if (!win) return;
+  const up = Number(win.probabilityUp);
+  const down = Number(win.probabilityDown);
+  const conf = Number(win.confidence);
+  if (!Number.isFinite(up) || !Number.isFinite(down)) return;
+  const dir = up >= down + 1 ? 'UP' : down >= up + 1 ? 'DOWN' : null;
+  if (!_leanHistory[sym]) _leanHistory[sym] = [];
+  _leanHistory[sym].push({ ts: Date.now(), up, down, conf: Number.isFinite(conf) ? conf : null, dir });
+  if (_leanHistory[sym].length > LEAN_HISTORY_LEN) _leanHistory[sym].shift();
+}
+
 function _recordUnstableSnapshot(sym, inGoWindow, isUnstable, reasons) {
   if (!_unstableHistory[sym]) _unstableHistory[sym] = [];
   _unstableHistory[sym].push({ ts: Date.now(), inGoWindow, isUnstable, reasons: reasons.slice() });
@@ -1228,6 +1248,7 @@ function renderCommodityLeanBar(data) {
     const cell = document.getElementById(id);
     if (!cell) continue;
     const d = data && data[sym];
+    _recordLeanSnapshot(sym, d);
     if (!d || !d.ready || !d.windows) {
       const snapMicro = d && d.indicatorsSnapshot && d.indicatorsSnapshot.microMomentumPct != null
         ? d.indicatorsSnapshot.microMomentumPct : null;
@@ -1803,6 +1824,7 @@ async function refreshBotStatus() {
       buildOpenPositionsHtml(data.openTrades),
       `<div class="bot-stat-chips">${chips.join('')}</div>`,
       buildTradeLogHtml(data.tradeLog, data.tradeLogTotal),
+      buildLeanHistoryHtml(),
       buildActivityLogHtml(data.activityLog, data.recentTrades),
     ].join('');
     restoreLogScroll('bot-activity-log-list', activityScroll, 'bottom');
@@ -2352,6 +2374,70 @@ function buildActivityLogHtml(activityLog, recentTrades) {
     <div class="bot-log bot-activity-log">
       <div class="bot-panel-title">Activity log <button type="button" class="bot-log-copy" id="bot-activity-copy" title="Copy log text">Copy</button></div>
       <div class="bot-log-list" id="bot-activity-log-list">${html}</div>
+    </div>`;
+}
+
+function buildLeanHistoryHtml() {
+  const groups = [
+    { label: 'Commodities', syms: COMMO_SYMS.map(s => s.sym) },
+    { label: 'Crypto', syms: CRYPTO_SYMS.map(s => s.sym) },
+  ];
+
+  const rows = groups.map(({ label, syms }) => {
+    const symRows = syms.map((sym) => {
+      const hist = _leanHistory[sym];
+      if (!hist || hist.length === 0) return null;
+
+      // Average held-side lean (direction of most recent sample wins ties)
+      const last = hist[hist.length - 1];
+      const heldDir = last.dir || (last.up >= 50 ? 'UP' : 'DOWN');
+      const heldVals = hist.map(h => heldDir === 'UP' ? h.up : h.down);
+      const avgLean = Math.round(heldVals.reduce((a, b) => a + b, 0) / heldVals.length);
+      const curLean = Math.round(heldDir === 'UP' ? last.up : last.down);
+
+      // Direction consistency: % of samples matching current direction
+      const matchCount = hist.filter(h => h.dir === heldDir).length;
+      const consistency = Math.round((matchCount / hist.length) * 100);
+
+      // Mini sparkline — 10 most recent samples as small bars
+      const sparkSamples = hist.slice(-10);
+      const sparkBars = sparkSamples.map(h => {
+        const v = heldDir === 'UP' ? h.up : h.down;
+        const pct = Math.round(Math.max(0, Math.min(100, v)));
+        const strong = pct >= 75;
+        const mod = pct >= 60;
+        const col = strong ? '#22c55e' : mod ? '#86efac' : '#57606a';
+        const h_px = Math.round(1 + (pct / 100) * 11);
+        return `<span style="display:inline-block;width:4px;height:${h_px}px;background:${col};border-radius:1px;margin-right:1px;vertical-align:bottom;" title="${pct}%"></span>`;
+      }).join('');
+
+      const dirColor = heldDir === 'UP' ? '#22c55e' : '#ef4444';
+      const avgColor = avgLean >= 75 ? '#22c55e' : avgLean >= 60 ? '#86efac' : '#8b949e';
+      const conColor = consistency >= 80 ? '#22c55e' : consistency >= 60 ? '#f59e0b' : '#ef4444';
+      const n = hist.length;
+
+      return `<div class="lean-hist-row">
+        <span class="lean-hist-sym">${escapeHtml(sym)}</span>
+        <span class="lean-hist-dir" style="color:${dirColor}">${heldDir}</span>
+        <span class="lean-hist-cur" title="Current lean">${curLean}%</span>
+        <span class="lean-hist-avg" style="color:${avgColor}" title="Avg lean (${n} samples)">avg ${avgLean}%</span>
+        <span class="lean-hist-con" style="color:${conColor}" title="Direction consistency">${consistency}% consistent</span>
+        <span class="lean-hist-spark">${sparkBars}</span>
+      </div>`;
+    }).filter(Boolean);
+
+    if (!symRows.length) return '';
+    return `<div class="lean-hist-group">
+      <div class="lean-hist-group-label">${escapeHtml(label)}</div>
+      ${symRows.join('')}
+    </div>`;
+  }).filter(Boolean).join('');
+
+  if (!rows) return '';
+  return `
+    <div class="bot-log bot-lean-history">
+      <div class="bot-panel-title">Lean averages <span style="font-weight:400;font-size:11px;color:#57606a;">(w10 · last 30 polls)</span></div>
+      <div class="lean-hist-body">${rows || '<p style="color:#57606a;font-size:12px;padding:6px 0;">Collecting samples…</p>'}</div>
     </div>`;
 }
 
