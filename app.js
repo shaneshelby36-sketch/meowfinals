@@ -1918,7 +1918,7 @@ function renderBotDashboard(data) {
     chip('Trades opened', data.stats.totalAttempts),
     chip('Lifetime log', data.tradeLogTotal != null ? data.tradeLogTotal : data.stats.lifetimeTrades || 0),
     chip('Profitable exits', data.stats.profitableExits),
-    buildTradeLogHtml(data.tradeLog, data.tradeLogTotal),
+    buildTradeLogHtml(data.tradeLog, data.tradeLogTotal, { noCopy: true }),
   ].join('');
   toggle.textContent = data.isRunning ? 'Stop new trades' : 'Start bot';
   toggle.dataset.running = String(!data.isRunning);
@@ -2039,7 +2039,7 @@ function buildOpenPositionsHtml(openTrades) {
     </div>`;
 }
 
-function buildTradeLogHtml(tradeLog, tradeLogTotal) {
+function buildTradeLogHtml(tradeLog, tradeLogTotal, { noCopy = false } = {}) {
   const trades = Array.isArray(tradeLog) ? tradeLog : [];
   const total = Number.isFinite(tradeLogTotal) ? tradeLogTotal : trades.length;
   if (!trades.length) {
@@ -2168,11 +2168,13 @@ function buildTradeLogHtml(tradeLog, tradeLogTotal) {
     })
     .join('');
 
+  const copyBtn = noCopy ? '' : `<button type="button" class="bot-log-copy" id="bot-trade-copy" title="Copy trade log text">Copy</button>`;
+  const listId = noCopy ? 'bot-trade-log-list-mini' : 'bot-trade-log-list';
   return `
     <div class="bot-log bot-trade-log">
-      <div class="bot-panel-title">Trade log <span>${total}</span> <button type="button" class="bot-log-copy" id="bot-trade-copy" title="Copy trade log text">Copy</button></div>
+      <div class="bot-panel-title">Trade log <span>${total}</span> ${copyBtn}</div>
       <p class="bot-empty-line">Saved on disk (survives reboot + 12h rotation). Showing latest ${trades.length}${total > trades.length ? ` of ${total}` : ''}.</p>
-      <div class="bot-log-list" id="bot-trade-log-list">${rows}</div>
+      <div class="bot-log-list" id="${listId}">${rows}</div>
     </div>`;
 }
 

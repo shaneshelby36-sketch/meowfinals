@@ -2375,6 +2375,14 @@ function modelStagnationMinProgressCents(config = {}) {
   return modelTrailArmCents(config);
 }
 
+/** Seconds the bid must stay below the hard-stop threshold before the stop fires. 0 = instant (default). */
+function modelHardStopConfirmSeconds(config = {}) {
+  const n = Number(config.modelHardStopConfirmSeconds);
+  if (Number.isFinite(n) && n <= 0) return 0;
+  if (Number.isFinite(n) && n > 0) return n;
+  return 0;
+}
+
 function modelNoProgressTightenSeconds(config = {}) {
   const n = Number(config.modelNoProgressTightenSeconds);
   if (Number.isFinite(n) && n <= 0) return 0;
@@ -4028,6 +4036,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'modelLeanFloorBaseEntry',
   'modelMaxLossCents',
   'modelHardStopFloorCents',
+  'modelHardStopConfirmSeconds',
   'modelMinRoomToFloorCents',
   'modelRichStopFloorCents',
   'modelMidRichStopFloorCents',
@@ -5259,6 +5268,7 @@ class TradingBot {
       modelLeanFloorBaseEntry: MODEL_LEAN_FLOOR_BASE_ENTRY_DEFAULT,
       modelMaxLossCents: MODEL_MAX_LOSS_CENTS_DEFAULT,
       modelHardStopFloorCents: MODEL_HARD_STOP_FLOOR_CENTS_DEFAULT,
+      modelHardStopConfirmSeconds: 0,
       modelMinRoomToFloorCents: MODEL_MIN_ROOM_TO_FLOOR_CENTS_DEFAULT,
       modelLeanStopBarrierCents: MODEL_LEAN_STOP_BARRIER_CENTS_DEFAULT,
       modelLeanStopPaceDrawdownPct: MODEL_LEAN_STOP_PACE_DRAWDOWN_PCT_DEFAULT,
@@ -9587,12 +9597,37 @@ class TradingBot {
           ? Math.round(entry - stopBid)
           : adverseCents;
         if (stopBid != null && realAdverse >= maxAdverse) {
-          const tightened = maxAdverse < baseMaxAdverse;
-          this.lastDecision = tightened
-            ? `No-progress stop tighten: −${realAdverse}¢ (≥${maxAdverse}¢, tightened from ${baseMaxAdverse}¢) on ${trade.symbol} — cutting.`
-            : `Hard adverse stop: −${realAdverse}¢ (≥${maxAdverse}¢) on ${trade.symbol} — cutting.`;
-          await tryModelAgainstCut('model_hard_stop');
-          return;
+          const confirmSec = modelHardStopConfirmSeconds(this.config);
+          if (confirmSec > 0) {
+            // Stamp when bid first crosses threshold; only fire after it stays there.
+            if (!Number.isFinite(Number(trade._hardStopBreachedSince))) {
+              trade._hardStopBreachedSince = now;
+              this._persist();
+            }
+            const breachedMs = now - Number(trade._hardStopBreachedSince);
+            if (breachedMs < confirmSec * 1000) {
+              this.lastDecision = `Hard stop arming: −${realAdverse}¢ on ${trade.symbol} — confirming for ${confirmSec}s (${((confirmSec * 1000 - breachedMs) / 1000).toFixed(1)}s left).`;
+              // Don't return — let other checks run in case lean exits fire first.
+            } else {
+              const tightened = maxAdverse < baseMaxAdverse;
+              this.lastDecision = tightened
+                ? `No-progress stop tighten: −${realAdverse}¢ (≥${maxAdverse}¢, tightened from ${baseMaxAdverse}¢) on ${trade.symbol} — cutting.`
+                : `Hard adverse stop: −${realAdverse}¢ (≥${maxAdverse}¢, confirmed ${Math.round(breachedMs / 1000)}s) on ${trade.symbol} — cutting.`;
+              await tryModelAgainstCut('model_hard_stop');
+              return;
+            }
+          } else {
+            const tightened = maxAdverse < baseMaxAdverse;
+            this.lastDecision = tightened
+              ? `No-progress stop tighten: −${realAdverse}¢ (≥${maxAdverse}¢, tightened from ${baseMaxAdverse}¢) on ${trade.symbol} — cutting.`
+              : `Hard adverse stop: −${realAdverse}¢ (≥${maxAdverse}¢) on ${trade.symbol} — cutting.`;
+            await tryModelAgainstCut('model_hard_stop');
+            return;
+          }
+        } else if (Number.isFinite(Number(trade._hardStopBreachedSince))) {
+          // Bid recovered above threshold — clear the stamp.
+          delete trade._hardStopBreachedSince;
+          this._persist();
         }
       }
 
