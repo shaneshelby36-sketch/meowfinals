@@ -96,12 +96,12 @@
         font-size:13px;font-weight:700;letter-spacing:0.5px;cursor:pointer;border-left:1px solid #21262d;touch-action:manipulation;">CRYPTO</button>
       <div style="flex:1;"></div>
       <!-- Stake stepper -->
-      <div style="display:flex;align-items:center;gap:0;border-left:1px solid #21262d;padding:0 6px;gap:4px;" title="Contracts per manual trade">
+      <div style="display:flex;align-items:center;gap:0;border-left:1px solid #21262d;padding:0 6px;gap:4px;" title="Dollar stake per manual trade — contracts = floor(stake / price)">
         <span style="color:#57606a;font-size:11px;font-weight:600;white-space:nowrap;">stake</span>
         <button id="lean-stake-down" onclick="leanBarStakeAdj(-1)" style="
           width:30px;height:26px;background:#161b22;border:1px solid #30363d;border-radius:4px;
           color:#c9d1d9;font-size:16px;font-weight:700;cursor:pointer;line-height:1;touch-action:manipulation;">−</button>
-        <span id="lean-stake-value" style="min-width:22px;text-align:center;color:#c9d1d9;font-size:13px;font-weight:700;">1</span>
+        <span id="lean-stake-value" style="min-width:28px;text-align:center;color:#c9d1d9;font-size:13px;font-weight:700;">$1</span>
         <button id="lean-stake-up" onclick="leanBarStakeAdj(1)" style="
           width:30px;height:26px;background:#161b22;border:1px solid #30363d;border-radius:4px;
           color:#c9d1d9;font-size:16px;font-weight:700;cursor:pointer;line-height:1;touch-action:manipulation;">+</button>

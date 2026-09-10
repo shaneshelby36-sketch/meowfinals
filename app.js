@@ -1547,20 +1547,23 @@ function renderCommodityLeanBar(data) {
 
 // ---------- lean bar quick-trade ----------
 
-let _leanBarStake = 1;
+let _leanBarStakeDollars = 1;
 
 function leanBarStakeAdj(delta) {
-  _leanBarStake = Math.max(1, Math.min(20, _leanBarStake + delta));
+  _leanBarStakeDollars = Math.max(1, Math.min(100, _leanBarStakeDollars + delta));
   const el = document.getElementById('lean-stake-value');
-  if (el) el.textContent = _leanBarStake;
+  if (el) el.textContent = `$${_leanBarStakeDollars}`;
 }
 
 async function submitManualTrade({ symbol, ticker, side, entryPriceCents, manualStopCents, windowCloseTime }) {
   const { engineUrl } = loadSettings();
+  // Convert dollar stake → contracts: floor($stake / pricePerContract)
+  const pricePerContract = (entryPriceCents || 50) / 100;
+  const contracts = Math.max(1, Math.floor(_leanBarStakeDollars / pricePerContract));
   const res = await fetch(`${engineUrl}/api/bot/manual-trade`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ symbol, ticker, side, entryPriceCents, contracts: _leanBarStake, manualStopCents, windowCloseTime }),
+    body: JSON.stringify({ symbol, ticker, side, entryPriceCents, contracts, manualStopCents, windowCloseTime }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
