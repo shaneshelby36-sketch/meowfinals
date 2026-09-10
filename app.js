@@ -1310,13 +1310,10 @@ function renderCommodityLeanBar(data) {
       : seriesPath
         ? `https://kalshi.com/markets/${seriesPath}`
         : null;
-    if (kalshiUrl) {
-      cell.style.cursor = 'pointer';
-      cell.onclick = () => window.open(kalshiUrl, '_blank');
-    } else {
-      cell.style.cursor = 'default';
-      cell.onclick = null;
-    }
+    // Right-click / context-menu still opens Kalshi page
+    cell.style.cursor = ticker ? 'pointer' : 'default';
+    cell.oncontextmenu = kalshiUrl ? (e) => { e.preventDefault(); window.open(kalshiUrl, '_blank'); } : null;
+    cell.onclick = null;
 
     // Agree dot
     const agreeDot = allAgree
@@ -1456,9 +1453,19 @@ function renderCommodityLeanBar(data) {
     }
 
     // Show Kalshi price in cents if available
-    const kalshiPriceHtml = kalshiCentsDisplay != null && !isStale
-      ? `<span style="color:${kalshiCentsDisplay >= 70 ? '#22c55e' : kalshiCentsDisplay >= 50 ? '#c9d1d9' : '#ef4444'};font-size:10px;font-weight:700;" title="Kalshi YES ask price">${kalshiCentsDisplay}¢</span>`
-      : '';
+    // Kalshi live price shown as the dominant side's percentage
+    // e.g. YES ask = 62¢  → show "YES 62%"  |  YES ask = 38¢ → show "NO 62%"
+    const kalshiPriceHtml = (() => {
+      if (kalshiCentsDisplay == null || isStale) return '';
+      const yesPct  = kalshiCentsDisplay;
+      const noPct   = 100 - kalshiCentsDisplay;
+      const domSide = yesPct >= 50 ? 'YES' : 'NO';
+      const domPct  = yesPct >= 50 ? yesPct : noPct;
+      const col = domPct >= 70 ? (domSide === 'YES' ? '#22c55e' : '#ef4444')
+                : domPct >= 55 ? (domSide === 'YES' ? '#86efac' : '#fca5a5')
+                : '#8b949e';
+      return `<span style="color:${col};font-size:10px;font-weight:700;" title="Kalshi: YES ${yesPct}¢ / NO ${noPct}¢">${domSide} ${domPct}%</span>`;
+    })();
 
     const goHtml = isStale ? '' : `<span style="color:${goColor};font-size:10px;font-weight:800;letter-spacing:0.5px;" title="${goTitle}">${goSignal}${goSignal === 'GO' && tradeDir && !isFade ? ' ' + tradeDir : ''}</span>`;
 
@@ -1488,8 +1495,21 @@ function renderCommodityLeanBar(data) {
       return `<span style="color:#30363d;font-size:9px;" title="30s micro-momentum — warming up">~</span>`;
     })();
 
+    // Quick-trade YES/NO buttons — only shown when there's a live market ticker
+    const qtBtns = ticker && !isStale ? `
+      <div style="display:flex;gap:2px;margin-top:2px;">
+        <button class="lqt-yes-btn" data-sym="${sym}" data-ticker="${ticker}"
+          data-price="${kalshiCentsDisplay != null ? kalshiCentsDisplay : ''}"
+          data-close="${d.targetCloseTime ? Number(d.targetCloseTime) : ''}"
+          style="flex:1;background:#052e16;border:1px solid #166534;border-radius:3px;color:#22c55e;font-weight:700;font-size:10px;padding:2px 0;cursor:pointer;line-height:1.2;">YES</button>
+        <button class="lqt-no-btn" data-sym="${sym}" data-ticker="${ticker}"
+          data-price="${kalshiCentsDisplay != null ? 100 - kalshiCentsDisplay : ''}"
+          data-close="${d.targetCloseTime ? Number(d.targetCloseTime) : ''}"
+          style="flex:1;background:#2d0a0a;border:1px solid #7f1d1d;border-radius:3px;color:#ef4444;font-weight:700;font-size:10px;padding:2px 0;cursor:pointer;line-height:1.2;">NO</button>
+      </div>` : '';
+
     cell.innerHTML = `
-      <div style="display:flex;align-items:center;gap:3px;">
+      <div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;">
         ${agreeDot}
         <span style="color:${isStale ? '#57606a' : '#c9d1d9'};font-size:11px;font-weight:700;">${sym}</span>
         ${isStale ? `<span style="color:#f97316;font-size:9px;" title="Window closed — awaiting new market">⏳</span>` : ''}
@@ -1507,11 +1527,78 @@ function renderCommodityLeanBar(data) {
         <span style="color:#57606a;">15m</span>${windowLeanHtml(w15)}
       </div>
       ${unstableHtml}
+      ${qtBtns}
     `;
   }
 
   // Update the global instability warning bar after all cells are rendered
   updateLeanBarWarning(data);
+}
+
+// ---------- lean bar quick-trade ----------
+
+async function submitManualTrade({ symbol, ticker, side, entryPriceCents, manualStopCents, windowCloseTime }) {
+  const { engineUrl } = loadSettings();
+  const res = await fetch(`${engineUrl}/api/bot/manual-trade`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ symbol, ticker, side, entryPriceCents, contracts: 1, manualStopCents, windowCloseTime }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+  return data;
+}
+
+function wireLeanBarQuickTrade() {
+  const bar = document.getElementById('lean-bar');
+  if (!bar) return;
+  bar.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.lqt-yes-btn, .lqt-no-btn');
+    if (!btn) return;
+    e.stopPropagation();
+
+    const side = btn.classList.contains('lqt-yes-btn') ? 'yes' : 'no';
+    const sym  = btn.dataset.sym;
+    const tkr  = btn.dataset.ticker;
+    const rawPrice = btn.dataset.price;
+    const rawClose = btn.dataset.close;
+
+    const defaultStop = (() => {
+      const el = document.getElementById('bot-manual-stoploss');
+      const v = parseInt(el ? el.value : '15', 10);
+      return Number.isFinite(v) && v > 0 ? v : 15;
+    })();
+
+    // Price: use the value stamped on the button (YES ask or NO ask).
+    // Fall back to 50 if somehow missing.
+    const entryPriceCents = parseInt(rawPrice, 10) || 50;
+    const windowCloseTime = parseInt(rawClose, 10) || null;
+
+    // Visual feedback: flash the button green/red briefly.
+    const origText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '…';
+
+    try {
+      await submitManualTrade({ symbol: sym, ticker: tkr, side, entryPriceCents, manualStopCents: defaultStop, windowCloseTime });
+      btn.style.background = side === 'yes' ? '#14532d' : '#450a0a';
+      btn.textContent = '✓';
+      setTimeout(() => {
+        btn.textContent = origText;
+        btn.disabled = false;
+        btn.style.background = '';
+      }, 1500);
+    } catch (err) {
+      btn.style.background = '#1a0000';
+      btn.textContent = '✗';
+      console.error('[manual-trade]', err.message);
+      setTimeout(() => {
+        btn.textContent = origText;
+        btn.disabled = false;
+        btn.style.background = '';
+      }, 1500);
+    }
+  });
 }
 
 function startPolling() {
@@ -2741,10 +2828,6 @@ function syncTradingSlidersFromConfig(c) {
   }
   const manualStopEl = document.getElementById('bot-manual-stoploss');
   if (manualStopEl) manualStopEl.value = c.manualStopLossCents != null ? c.manualStopLossCents : 15;
-  const manualSyncEl = document.getElementById('bot-manual-position-sync');
-  if (manualSyncEl) {
-    manualSyncEl.value = String(c.manualPositionSyncEnabled || 'on').toLowerCase() === 'off' ? 'off' : 'on';
-  }
 }
 
 function readTradingSlidersFromForm() {
@@ -2754,7 +2837,6 @@ function readTradingSlidersFromForm() {
     maxOpenPositions: parseFloat(document.getElementById('bot-maxpos')?.value || '1'),
     secondOpenRequiresGreen: document.getElementById('bot-second-green')?.value || 'on',
     manualStopLossCents: parseFloat(document.getElementById('bot-manual-stoploss')?.value || '15'),
-    manualPositionSyncEnabled: document.getElementById('bot-manual-position-sync')?.value || 'on',
   };
 }
 
@@ -3578,7 +3660,6 @@ function wireBotConfigAutoSave() {
     'bot-settle-tiered',
     'bot-half-stake-near',
     'bot-second-green',
-    'bot-manual-position-sync',
     'bot-model-invert',
     'bot-model-auto-switch',
     'bot-asset-auto-exclude',
@@ -5498,6 +5579,7 @@ window.addEventListener('DOMContentLoaded', () => {
   initWindowCoordination();
   wireSettingsUI();
   wireBotUI();
+  wireLeanBarQuickTrade();
   document.getElementById('open-windows-btn').addEventListener('click', openOtherWindows);
   registerServiceWorker();
   requestWakeLock();

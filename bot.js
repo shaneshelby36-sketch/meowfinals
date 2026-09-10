@@ -4140,7 +4140,6 @@ const EDITABLE_NUMERIC_FIELDS = [
   'paperStartingBalanceDollars',
   'dailyLossLimitDollars',
   'manualStopLossCents',
-  'manualPositionSyncEnabled',
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -5420,8 +5419,7 @@ class TradingBot {
       insuranceFloorDollars: INSURANCE_FLOOR_DEFAULT,
       insuranceOverflowDollars: INSURANCE_OVERFLOW_DEFAULT,
       dailyLossLimitDollars: DAILY_LOSS_LIMIT_DEFAULT_DOLLARS, // kill-switch: halt new entries when day P&L hits this loss
-      manualStopLossCents: MANUAL_STOP_LOSS_DEFAULT_CENTS, // stop-loss applied to externally-detected manual positions
-      manualPositionSyncEnabled: 'on', // 'on' | 'off' — auto-detect positions opened outside the bot
+      manualStopLossCents: MANUAL_STOP_LOSS_DEFAULT_CENTS, // stop-loss for lean-bar quick manual trades
       paperStartingBalanceDollars: 100, // trading bankroll (also the capital backing paper trades)
       mode: 'paper', // 'paper' | 'live'
       liveAuthorized: false,
@@ -11409,198 +11407,60 @@ class TradingBot {
   }
 
   /**
-   * Poll Kalshi /portfolio/positions and inject any position the bot did not
-   * open itself as a `strategy:'manual'` open trade. Called once per cycle
-   * in live mode only. Rate-limited to once every 20 s to avoid hammering the
-   * API — the bot's own stop-loss check still runs every second once the trade
-   * is in the ledger.
+   * Register a manual trade entered from the dashboard lean bar.
+   * The trade is injected directly into the ledger as strategy:'manual'
+   * and the existing _manageOpenTrade loop watches it every second,
+   * firing _closePosition (real live sell) when the bid hits the stop.
    *
-   * Kalshi `market_positions` fields used:
-   *   ticker   — market ticker, e.g. "KXBTC15M-25MAR2119:05"
-   *   position — signed integer: > 0 means YES contracts held, < 0 means NO
+   * Returns { ok, message, trade } or { ok: false, error }.
    */
-  async _detectAndInjectExternalPositions() {
-    if (String(this.config.manualPositionSyncEnabled || 'on').toLowerCase() === 'off') return;
-    if (!this.client || !this.client.hasCredentials) return;
+  addManualTrade({ symbol, ticker, side, entryPriceCents, contracts, windowCloseTime, manualStopCents }) {
+    const sym = String(symbol || '').toUpperCase();
+    const s   = String(side   || '').toLowerCase();
+    if (!sym || !ticker) return { ok: false, error: 'symbol and ticker are required' };
+    if (s !== 'yes' && s !== 'no') return { ok: false, error: 'side must be yes or no' };
+    const entry = Math.round(Number(entryPriceCents));
+    if (!Number.isFinite(entry) || entry < 1 || entry > 99) return { ok: false, error: 'entryPriceCents must be 1–99' };
+    const ct = Math.max(1, Math.round(Number(contracts) || 1));
+    const stopCents = Math.max(1, Math.round(
+      Number(manualStopCents) > 0 ? Number(manualStopCents) : Number(this.config.manualStopLossCents) || MANUAL_STOP_LOSS_DEFAULT_CENTS
+    ));
+    const closeTime = Number(windowCloseTime) > 0 ? Number(windowCloseTime) : Date.now() + 15 * 60 * 1000;
 
-    const now = Date.now();
-    const SYNC_INTERVAL_MS = 20_000;
-    if (this._lastExternalPositionSyncAt && now - this._lastExternalPositionSyncAt < SYNC_INTERVAL_MS) return;
-    this._lastExternalPositionSyncAt = now;
+    const trade = {
+      id: crypto.randomUUID ? crypto.randomUUID() : `manual-${Date.now()}-${Math.random()}`,
+      mode: this.config.mode,
+      strategy: 'manual',
+      symbol: sym,
+      ticker: String(ticker).toUpperCase(),
+      side: s,
+      contracts: ct,
+      stakeDollars: +((ct * entry) / 100).toFixed(2),
+      entryPriceCents: entry,
+      manualStopCents: stopCents,
+      openedAt: Date.now(),
+      windowCloseTime: closeTime,
+      engineProbability: null,
+      engineConfidence: null,
+      status: 'open',
+    };
 
-    let positions;
-    try {
-      positions = await this.client.getPositions();
-    } catch (err) {
-      console.warn('[bot] external-position sync failed:', err.message);
-      return;
-    }
+    this.ledger.trades.unshift(trade);
+    if (this.ledger.trades.length > 200) this.ledger.trades.length = 200;
+    this._persist();
 
-    if (!Array.isArray(positions)) {
-      console.warn('[bot] external-position sync: unexpected response shape', typeof positions);
-      return;
-    }
-    if (positions.length === 0) {
-      console.log('[bot] external-position sync: no positions returned from Kalshi');
-      return;
-    }
-    console.log(`[bot] external-position sync: ${positions.length} position(s) from Kalshi`);
-
-    // Build a set of tickers the bot already has open (by ticker+side).
-    const knownTickerSide = new Set();
-    for (const t of this.openTrades) {
-      if (t.ticker && t.side) {
-        knownTickerSide.add(`${String(t.ticker).toUpperCase()}:${String(t.side).toLowerCase()}`);
-      }
-    }
-    // Also skip tickers we already injected in a previous cycle (de-dup across rotations).
-    if (!this._injectedExternalTickers) this._injectedExternalTickers = new Set();
-
-    // Build a reverse map from Kalshi series prefix → symbol.
-    const SERIES_TO_SYMBOL = Object.create(null);
-    for (const [sym, series] of Object.entries(SERIES_BY_SYMBOL)) {
-      SERIES_TO_SYMBOL[series.toUpperCase()] = sym;
-    }
-
-    for (const pos of positions) {
-      // Support both the signed `position` field (older API) and the separate
-      // `yes_position` / `no_position` unsigned fields (v2 API).
-      const rawTicker = pos.ticker || pos.market_ticker || '';
-      const ticker = String(rawTicker).toUpperCase();
-      if (!ticker) {
-        console.log('[bot] external-position sync: skipping entry with no ticker', JSON.stringify(pos).slice(0, 200));
-        continue;
-      }
-
-      // Determine side and contract count, handling both API shapes.
-      let side, absContracts;
-      if (pos.yes_position != null || pos.no_position != null) {
-        // v2 separate fields
-        const yesCt = Math.floor(Number(pos.yes_position) || 0);
-        const noCt  = Math.floor(Number(pos.no_position)  || 0);
-        if (yesCt > 0 && noCt === 0) {
-          side = 'yes'; absContracts = yesCt;
-        } else if (noCt > 0 && yesCt === 0) {
-          side = 'no'; absContracts = noCt;
-        } else if (yesCt > 0) {
-          // Net long YES when both present
-          side = 'yes'; absContracts = yesCt;
-        } else {
-          console.log(`[bot] external-position sync: ${ticker} has zero net position (yes=${yesCt} no=${noCt}), skipping`);
-          continue;
-        }
-      } else if (pos.position != null) {
-        // Legacy signed field
-        const signed = Number(pos.position);
-        if (!Number.isFinite(signed) || signed === 0) {
-          console.log(`[bot] external-position sync: ${ticker} position=${pos.position} is zero or non-finite, skipping`);
-          continue;
-        }
-        side = signed > 0 ? 'yes' : 'no';
-        absContracts = Math.abs(signed);
-      } else {
-        console.log(`[bot] external-position sync: ${ticker} has no position field, raw:`, JSON.stringify(pos).slice(0, 200));
-        continue;
-      }
-
-      const tickerSideKey = `${ticker}:${side}`;
-
-      // Already tracked by the bot (its own open trade).
-      if (knownTickerSide.has(tickerSideKey)) {
-        console.log(`[bot] external-position sync: ${tickerSideKey} already tracked by bot, skipping`);
-        continue;
-      }
-      // Already injected this session.
-      if (this._injectedExternalTickers.has(tickerSideKey)) {
-        console.log(`[bot] external-position sync: ${tickerSideKey} already injected this session`);
-        continue;
-      }
-
-      // Resolve the symbol from the ticker prefix (e.g. KXBTC15M-… → BTC).
-      const seriesPrefix = ticker.split('-')[0];
-      const symbol = SERIES_TO_SYMBOL[seriesPrefix] || null;
-      if (!symbol) {
-        console.warn(`[bot] external-position sync: unknown series prefix "${seriesPrefix}" for ticker ${ticker} — skipping`);
-        continue;
-      }
-
-      // Fetch the current market to get close_time and current bid for entry estimate.
-      let market = null;
-      try {
-        market = await this._getMarketBounded(ticker, 3000);
-      } catch (err) {
-        console.warn(`[bot] external-position sync: market fetch for ${ticker} failed: ${err.message}`);
-      }
-
-      const closeTime = market ? this._marketCloseMs(market) : NaN;
-
-      // If the window has already closed, skip — nothing to guard.
-      if (Number.isFinite(closeTime) && now >= closeTime) {
-        console.log(`[bot] external-position sync: ${ticker} window already closed (${new Date(closeTime).toISOString()}), skipping`);
-        continue;
-      }
-
-      // Estimate entry price from current held-side bid; fall back to 50¢ if unavailable.
-      const bidNow = market ? this._sideBidCents(market, side) : null;
-      const entryEstimate = (Number.isFinite(bidNow) && bidNow >= 1 && bidNow <= 99)
-        ? Math.round(bidNow)
-        : 50;
-
-      const manualStopCents = Math.max(1, Math.round(
-        Number(this.config.manualStopLossCents) > 0
-          ? Number(this.config.manualStopLossCents)
-          : MANUAL_STOP_LOSS_DEFAULT_CENTS
-      ));
-
-      const trade = {
-        id: crypto.randomUUID ? crypto.randomUUID() : `manual-${Date.now()}-${Math.random()}`,
-        mode: 'live',
-        strategy: 'manual',
-        symbol,
-        ticker,
-        side,
-        contracts: absContracts,
-        stakeDollars: +((absContracts * entryEstimate) / 100).toFixed(2),
-        entryPriceCents: entryEstimate,
-        manualStopCents,
-        openedAt: now,
-        windowCloseTime: Number.isFinite(closeTime) ? closeTime : now + 15 * 60 * 1000,
-        engineProbability: null,
-        engineConfidence: null,
-        status: 'open',
-        // Flag: entry price is an estimate from current bid, not a real fill price.
-        manualEntryEstimated: true,
-      };
-
-      this.ledger.trades.unshift(trade);
-      if (this.ledger.trades.length > 200) this.ledger.trades.length = 200;
-      this._injectedExternalTickers.add(tickerSideKey);
-      this._persist();
-
-      const stopLevel = Math.max(1, entryEstimate - manualStopCents);
-      const msg = `[bot] Detected external manual position: ${symbol} ${side.toUpperCase()} ${absContracts}ct @ ~${entryEstimate}¢ (ticker ${ticker}). Stop-loss armed at ${stopLevel}¢ (−${manualStopCents}¢).`;
-      console.log(msg);
-      this._logActivity(
-        `Manual position detected: ${symbol} ${side.toUpperCase()} ~${entryEstimate}¢ · stop at ${stopLevel}¢`,
-        { kind: 'open', symbol, side, strategy: 'manual', tradeId: trade.id }
-      );
-      this._upsertTradeLog({
-        id: trade.id,
-        mode: trade.mode,
-        strategy: trade.strategy,
-        symbol: trade.symbol,
-        ticker: trade.ticker,
-        side: trade.side,
-        contracts: trade.contracts,
-        stakeDollars: trade.stakeDollars,
-        entryPriceCents: trade.entryPriceCents,
-        manualStopCents: trade.manualStopCents,
-        manualEntryEstimated: true,
-        openedAt: trade.openedAt,
-        windowCloseTime: trade.windowCloseTime,
-        status: 'open',
-      });
-    }
+    const stopLevel = Math.max(1, entry - stopCents);
+    const msg = `Manual trade logged: ${sym} ${s.toUpperCase()} ${ct}ct @ ${entry}¢ · stop at ${stopLevel}¢ (−${stopCents}¢)`;
+    this._logActivity(msg, { kind: 'open', symbol: sym, side: s, strategy: 'manual', tradeId: trade.id });
+    this._upsertTradeLog({
+      id: trade.id, mode: trade.mode, strategy: 'manual',
+      symbol: trade.symbol, ticker: trade.ticker, side: trade.side,
+      contracts: trade.contracts, stakeDollars: trade.stakeDollars,
+      entryPriceCents: trade.entryPriceCents, manualStopCents: trade.manualStopCents,
+      openedAt: trade.openedAt, windowCloseTime: trade.windowCloseTime, status: 'open',
+    });
+    console.log(`[bot] ${msg}`);
+    return { ok: true, message: msg, trade };
   }
 
   /**
@@ -11635,11 +11495,6 @@ class TradingBot {
         this.lastError = `Unable to refresh live balance: ${err.message}`;
       }
     }
-
-    // Detect positions opened outside the bot and arm a stop-loss on them.
-    await this._detectAndInjectExternalPositions().catch((err) =>
-      console.warn('[bot] external-position detect error:', err.message)
-    );
 
     // --- first, manage every currently open trade by its own ticker,
     // regardless of what symbol is currently selected to trade next ---
