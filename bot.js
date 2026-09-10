@@ -10193,6 +10193,7 @@ class TradingBot {
       const entry = Number(trade.entryPriceCents);
       const beStop =
         !isSettleTrade(trade) &&
+        !isManualTrade(trade) &&
         Number.isFinite(entry) &&
         stopLevel >= entry;
       const stopFill = this.config.mode === 'paper' ? stopLevel : heldSideBidCents;
@@ -10201,6 +10202,9 @@ class TradingBot {
       });
       return;
     }
+
+    // Manual trades: pure stop-loss only — ride everything else to settlement.
+    if (isManualTrade(trade)) return;
 
     // Settle strategy: stop (above); weak-ticket lean-switch; optional entry-tiered
     // TP/stale/stuck; else hold for official settlement — no edge signal-flip exits
