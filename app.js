@@ -1495,17 +1495,27 @@ function renderCommodityLeanBar(data) {
       return `<span style="color:#30363d;font-size:9px;" title="30s micro-momentum — warming up">~</span>`;
     })();
 
-    // Quick-trade YES/NO buttons — only shown when there's a live market ticker
-    const qtBtns = ticker && !isStale ? `
-      <div style="display:flex;gap:2px;margin-top:2px;">
-        <button class="lqt-yes-btn" data-sym="${sym}" data-ticker="${ticker}"
-          data-price="${kalshiCentsDisplay != null ? kalshiCentsDisplay : ''}"
-          data-close="${d.targetCloseTime ? Number(d.targetCloseTime) : ''}"
-          style="flex:1;background:#052e16;border:1px solid #166534;border-radius:3px;color:#22c55e;font-weight:700;font-size:10px;padding:2px 0;cursor:pointer;line-height:1.2;">YES</button>
-        <button class="lqt-no-btn" data-sym="${sym}" data-ticker="${ticker}"
-          data-price="${kalshiCentsDisplay != null ? 100 - kalshiCentsDisplay : ''}"
-          data-close="${d.targetCloseTime ? Number(d.targetCloseTime) : ''}"
-          style="flex:1;background:#2d0a0a;border:1px solid #7f1d1d;border-radius:3px;color:#ef4444;font-weight:700;font-size:10px;padding:2px 0;cursor:pointer;line-height:1.2;">NO</button>
+    const yesPct = kalshiCentsDisplay != null ? kalshiCentsDisplay : null;
+    const noPct  = yesPct != null ? 100 - yesPct : null;
+    const closeAttr = d.targetCloseTime ? `data-close="${Number(d.targetCloseTime)}"` : '';
+    const tradeButtons = ticker && !isStale && yesPct != null ? `
+      <div style="display:flex;gap:4px;width:100%;margin-top:4px;">
+        <button class="lqt-yes-btn"
+          data-sym="${sym}" data-ticker="${ticker}"
+          data-price="${yesPct}" ${closeAttr}
+          style="flex:1;background:#052e16;border:1px solid #166534;border-radius:6px;
+                 color:#22c55e;font-weight:800;font-size:13px;padding:9px 0;
+                 cursor:pointer;line-height:1;min-width:0;touch-action:manipulation;">
+          YES ${yesPct}%
+        </button>
+        <button class="lqt-no-btn"
+          data-sym="${sym}" data-ticker="${ticker}"
+          data-price="${noPct}" ${closeAttr}
+          style="flex:1;background:#2d0a0a;border:1px solid #7f1d1d;border-radius:6px;
+                 color:#ef4444;font-weight:800;font-size:13px;padding:9px 0;
+                 cursor:pointer;line-height:1;min-width:0;touch-action:manipulation;">
+          NO ${noPct}%
+        </button>
       </div>` : '';
 
     cell.innerHTML = `
@@ -1527,7 +1537,7 @@ function renderCommodityLeanBar(data) {
         <span style="color:#57606a;">15m</span>${windowLeanHtml(w15)}
       </div>
       ${unstableHtml}
-      ${qtBtns}
+      ${tradeButtons}
     `;
   }
 
@@ -1537,12 +1547,20 @@ function renderCommodityLeanBar(data) {
 
 // ---------- lean bar quick-trade ----------
 
+let _leanBarStake = 1;
+
+function leanBarStakeAdj(delta) {
+  _leanBarStake = Math.max(1, Math.min(20, _leanBarStake + delta));
+  const el = document.getElementById('lean-stake-value');
+  if (el) el.textContent = _leanBarStake;
+}
+
 async function submitManualTrade({ symbol, ticker, side, entryPriceCents, manualStopCents, windowCloseTime }) {
   const { engineUrl } = loadSettings();
   const res = await fetch(`${engineUrl}/api/bot/manual-trade`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ symbol, ticker, side, entryPriceCents, contracts: 1, manualStopCents, windowCloseTime }),
+    body: JSON.stringify({ symbol, ticker, side, entryPriceCents, contracts: _leanBarStake, manualStopCents, windowCloseTime }),
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
