@@ -11432,12 +11432,19 @@ class TradingBot {
     try {
       positions = await this.client.getPositions();
     } catch (err) {
-      // Non-fatal — log and skip this cycle.
       console.warn('[bot] external-position sync failed:', err.message);
       return;
     }
 
-    if (!Array.isArray(positions) || positions.length === 0) return;
+    if (!Array.isArray(positions)) {
+      console.warn('[bot] external-position sync: unexpected response shape', typeof positions);
+      return;
+    }
+    if (positions.length === 0) {
+      console.log('[bot] external-position sync: no positions returned from Kalshi');
+      return;
+    }
+    console.log(`[bot] external-position sync: ${positions.length} position(s) from Kalshi`);
 
     // Build a set of tickers the bot already has open (by ticker+side).
     const knownTickerSide = new Set();
@@ -11456,35 +11463,82 @@ class TradingBot {
     }
 
     for (const pos of positions) {
-      const ticker = String(pos.ticker || pos.market_ticker || '').toUpperCase();
-      if (!ticker) continue;
+      // Support both the signed `position` field (older API) and the separate
+      // `yes_position` / `no_position` unsigned fields (v2 API).
+      const rawTicker = pos.ticker || pos.market_ticker || '';
+      const ticker = String(rawTicker).toUpperCase();
+      if (!ticker) {
+        console.log('[bot] external-position sync: skipping entry with no ticker', JSON.stringify(pos).slice(0, 200));
+        continue;
+      }
 
-      const contracts = Number(pos.position);
-      if (!Number.isFinite(contracts) || contracts === 0) continue;
+      // Determine side and contract count, handling both API shapes.
+      let side, absContracts;
+      if (pos.yes_position != null || pos.no_position != null) {
+        // v2 separate fields
+        const yesCt = Math.floor(Number(pos.yes_position) || 0);
+        const noCt  = Math.floor(Number(pos.no_position)  || 0);
+        if (yesCt > 0 && noCt === 0) {
+          side = 'yes'; absContracts = yesCt;
+        } else if (noCt > 0 && yesCt === 0) {
+          side = 'no'; absContracts = noCt;
+        } else if (yesCt > 0) {
+          // Net long YES when both present
+          side = 'yes'; absContracts = yesCt;
+        } else {
+          console.log(`[bot] external-position sync: ${ticker} has zero net position (yes=${yesCt} no=${noCt}), skipping`);
+          continue;
+        }
+      } else if (pos.position != null) {
+        // Legacy signed field
+        const signed = Number(pos.position);
+        if (!Number.isFinite(signed) || signed === 0) {
+          console.log(`[bot] external-position sync: ${ticker} position=${pos.position} is zero or non-finite, skipping`);
+          continue;
+        }
+        side = signed > 0 ? 'yes' : 'no';
+        absContracts = Math.abs(signed);
+      } else {
+        console.log(`[bot] external-position sync: ${ticker} has no position field, raw:`, JSON.stringify(pos).slice(0, 200));
+        continue;
+      }
 
-      const side = contracts > 0 ? 'yes' : 'no';
-      const absContracts = Math.abs(contracts);
       const tickerSideKey = `${ticker}:${side}`;
 
-      // Already tracked by the bot or already injected.
-      if (knownTickerSide.has(tickerSideKey)) continue;
-      if (this._injectedExternalTickers.has(tickerSideKey)) continue;
+      // Already tracked by the bot (its own open trade).
+      if (knownTickerSide.has(tickerSideKey)) {
+        console.log(`[bot] external-position sync: ${tickerSideKey} already tracked by bot, skipping`);
+        continue;
+      }
+      // Already injected this session.
+      if (this._injectedExternalTickers.has(tickerSideKey)) {
+        console.log(`[bot] external-position sync: ${tickerSideKey} already injected this session`);
+        continue;
+      }
 
       // Resolve the symbol from the ticker prefix (e.g. KXBTC15M-… → BTC).
       const seriesPrefix = ticker.split('-')[0];
       const symbol = SERIES_TO_SYMBOL[seriesPrefix] || null;
-      if (!symbol) continue; // unknown series — skip
+      if (!symbol) {
+        console.warn(`[bot] external-position sync: unknown series prefix "${seriesPrefix}" for ticker ${ticker} — skipping`);
+        continue;
+      }
 
       // Fetch the current market to get close_time and current bid for entry estimate.
       let market = null;
       try {
         market = await this._getMarketBounded(ticker, 3000);
-      } catch { /* best-effort */ }
+      } catch (err) {
+        console.warn(`[bot] external-position sync: market fetch for ${ticker} failed: ${err.message}`);
+      }
 
       const closeTime = market ? this._marketCloseMs(market) : NaN;
 
       // If the window has already closed, skip — nothing to guard.
-      if (Number.isFinite(closeTime) && now >= closeTime) continue;
+      if (Number.isFinite(closeTime) && now >= closeTime) {
+        console.log(`[bot] external-position sync: ${ticker} window already closed (${new Date(closeTime).toISOString()}), skipping`);
+        continue;
+      }
 
       // Estimate entry price from current held-side bid; fall back to 50¢ if unavailable.
       const bidNow = market ? this._sideBidCents(market, side) : null;
