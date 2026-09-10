@@ -395,6 +395,20 @@
               <option value="off">Off — fill up to max anytime</option>
             </select>
           </label>
+          <label>Manual order stop-loss (¢ below entry)
+            <div class="slider-row">
+              <input id="bot-manual-stoploss" type="range" min="1" max="40" step="1" />
+              <span class="slider-value" id="bot-manual-stoploss-value">—</span>
+            </div>
+            <span class="field-hint">When you place an order directly on Kalshi (outside the bot), the bot detects it and arms a stop-loss automatically. This sets how many cents below your entry price the stop fires. Default <strong>15¢</strong>. Live mode only.</span>
+          </label>
+          <label>Auto-detect manual orders
+            <select id="bot-manual-position-sync">
+              <option value="on">On — watch for orders placed outside the bot (default)</option>
+              <option value="off">Off — ignore external positions</option>
+            </select>
+            <span class="field-hint">Polls Kalshi every 20 s for positions the bot did not open, then arms a stop-loss on them. Live mode only.</span>
+          </label>
           <label class="bot-exit-sound-toggle">
             <span>Exit sound</span>
             <input type="checkbox" id="bot-exit-sound" />
@@ -1119,6 +1133,14 @@
               <span class="slider-value" id="bot-model-max-adverse-value">—</span>
             </div>
             <span class="field-hint"><strong>Off (0)</strong>. Cut immediately if bid drops this many ¢ below entry — no lean check, no conditions. Catches fast price collapses before lean reacts. Recommended: <strong>25¢</strong>.</span>
+          </label>
+          <label style="border: 2px solid #ef4444; border-radius: 8px; padding: 10px; background: rgba(239,68,68,0.07);">🛡️ HARD STOP CONFIRM (seconds)
+            <div class="stepper-row">
+              <button type="button" class="stepper-btn" id="bot-model-hard-stop-confirm-down">−</button>
+              <span class="stepper-value" id="bot-model-hard-stop-confirm-value">—</span>
+              <button type="button" class="stepper-btn" id="bot-model-hard-stop-confirm-up">+</button>
+            </div>
+            <span class="field-hint">Bid must stay below the hard stop threshold for this many seconds before the stop fires — filters fake-out dips. <strong>Scales with lean: firm/rising lean → full window; soft lean → half; flipped lean → 2s max.</strong> <strong>0 = instant cut (original behaviour)</strong>. Recommended: <strong>10s</strong>.</span>
           </label>
           <label style="border: 2px solid #f59e0b; border-radius: 6px; padding: 8px;">⏱ UNDERWATER RATIO CUT — window (seconds)
             <div class="slider-row">

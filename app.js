@@ -2012,21 +2012,27 @@ function buildOpenPositionsHtml(openTrades) {
   const rows = opens
     .map((t) => {
       const side = String(t.side || '').toUpperCase();
-      const entry = Number.isFinite(t.entryPriceCents) ? `${t.entryPriceCents}¢` : '—';
+      const isManual = String(t.strategy || '').toLowerCase() === 'manual';
+      const entryLabel = Number.isFinite(t.entryPriceCents)
+        ? `${t.entryPriceCents}¢${t.manualEntryEstimated ? ' ~est' : ''}`
+        : '—';
       const stake = Number.isFinite(t.stakeDollars) ? `$${Number(t.stakeDollars).toFixed(2)}` : '—';
       const contracts = Number.isFinite(t.contracts) ? t.contracts : '—';
       const conf = Number.isFinite(t.engineConfidence) ? `${t.engineConfidence}%` : '—';
       const strategy = strategyModeLabel(t.strategy);
+      const stopNote = isManual && Number.isFinite(t.manualStopCents)
+        ? ` · stop −${t.manualStopCents}¢`
+        : '';
       return `
-        <div class="bot-position-row">
+        <div class="bot-position-row${isManual ? ' bot-position-manual' : ''}">
           <div class="bot-position-main">
             <strong>${t.symbol || '?'} ${side}</strong>
-            <span>${entry} · ${contracts} ct · ${stake} · ${strategy}</span>
+            <span>${entryLabel} · ${contracts} ct · ${stake} · ${strategy}${stopNote}</span>
           </div>
           <div class="bot-position-meta">
             <span>Opened ${formatTradeTime(t.openedAt)}</span>
             <span>${formatCloseCountdown(Number(t.windowCloseTime))}</span>
-            <span>Conf ${conf}</span>
+            ${isManual ? `<span style="color:#f59e0b;font-weight:700;">⚡ AUTO-STOP ARMED</span>` : `<span>Conf ${conf}</span>`}
           </div>
           ${t.holdReason ? `<div class="bot-position-hold">${escapeHtml(String(t.holdReason))}</div>` : ''}
         </div>`;
@@ -2714,6 +2720,7 @@ const SLIDER_UNITS = {
   'bot-settle-stuck': (v) => (Number(v) <= 0 ? 'off' : `${(+v).toFixed(1)} min`),
   'bot-stake': (v) => `$${Math.round(v)}`,
   'bot-maxpos': (v) => `${Math.round(v)}`,
+  'bot-manual-stoploss': (v) => `${Math.round(v)}¢`,
   'bot-paper-balance': (v) => `$${Math.round(v)}`,
 };
 
@@ -2732,6 +2739,12 @@ function syncTradingSlidersFromConfig(c) {
   if (secondGreen) {
     secondGreen.value = c.secondOpenRequiresGreen === 'off' ? 'off' : 'on';
   }
+  const manualStopEl = document.getElementById('bot-manual-stoploss');
+  if (manualStopEl) manualStopEl.value = c.manualStopLossCents != null ? c.manualStopLossCents : 15;
+  const manualSyncEl = document.getElementById('bot-manual-position-sync');
+  if (manualSyncEl) {
+    manualSyncEl.value = String(c.manualPositionSyncEnabled || 'on').toLowerCase() === 'off' ? 'off' : 'on';
+  }
 }
 
 function readTradingSlidersFromForm() {
@@ -2740,6 +2753,8 @@ function readTradingSlidersFromForm() {
     stakeDollars: parseFloat(document.getElementById('bot-stake')?.value || '5'),
     maxOpenPositions: parseFloat(document.getElementById('bot-maxpos')?.value || '1'),
     secondOpenRequiresGreen: document.getElementById('bot-second-green')?.value || 'on',
+    manualStopLossCents: parseFloat(document.getElementById('bot-manual-stoploss')?.value || '15'),
+    manualPositionSyncEnabled: document.getElementById('bot-manual-position-sync')?.value || 'on',
   };
 }
 
@@ -3339,6 +3354,7 @@ function wireSliderDisplays() {
     'bot-settle-stuck',
     'bot-stake',
     'bot-maxpos',
+    'bot-manual-stoploss',
     'bot-paper-balance',
   ].forEach((id) => {
     const input = document.getElementById(id);
@@ -3547,6 +3563,7 @@ function wireBotConfigAutoSave() {
     'bot-settle-stuck',
     'bot-stake',
     'bot-maxpos',
+    'bot-manual-stoploss',
     'bot-paper-balance',
     'bot-skim-mode',
     'bot-skim-amount',
@@ -3561,6 +3578,7 @@ function wireBotConfigAutoSave() {
     'bot-settle-tiered',
     'bot-half-stake-near',
     'bot-second-green',
+    'bot-manual-position-sync',
     'bot-model-invert',
     'bot-model-auto-switch',
     'bot-asset-auto-exclude',
@@ -3665,6 +3683,12 @@ async function loadBotConfigIntoForm() {
       const v = c.modelSoftLeanMarginPct != null ? c.modelSoftLeanMarginPct : 3;
       softLeanDisplay.textContent = v + ' pts';
       softLeanDisplay.dataset.value = v;
+    }
+    const hardStopConfirmDisplay = document.getElementById('bot-model-hard-stop-confirm-value');
+    if (hardStopConfirmDisplay) {
+      const v = c.modelHardStopConfirmSeconds != null ? c.modelHardStopConfirmSeconds : 0;
+      hardStopConfirmDisplay.textContent = v === 0 ? 'off (instant)' : `${v}s`;
+      hardStopConfirmDisplay.dataset.value = v;
     }
     const modelLeanSkipAbove = document.getElementById('bot-model-lean-skip-above');
     if (modelLeanSkipAbove) modelLeanSkipAbove.value = c.modelLeanSkipAboveCents != null ? c.modelLeanSkipAboveCents : 0;
@@ -4360,6 +4384,7 @@ async function saveBotConfig(opts = {}) {
     modelMinConfidence: parseFloat(document.getElementById('bot-model-confidence')?.value || '55'),
     modelEntryLiveLeanMarginPct: parseFloat(document.getElementById('bot-model-live-favor')?.value || '2'),
     modelSoftLeanMarginPct: parseFloat(document.getElementById('bot-model-soft-lean-value')?.dataset.value || '3'),
+    modelHardStopConfirmSeconds: parseFloat(document.getElementById('bot-model-hard-stop-confirm-value')?.dataset.value || '0'),
     modelMinEntryLeanPct: parseFloat(document.getElementById('bot-model-min-entry-lean')?.value || '65'),
     modelLeanSkipAboveCents: parseFloat(document.getElementById('bot-model-lean-skip-above')?.value || '0'),
     modelMinEntryLeanPctSOL: parseFloat(document.getElementById('bot-model-min-entry-lean-sol')?.value || '0'),
@@ -5290,6 +5315,16 @@ function wireBotUI() {
   };
   document.getElementById('bot-model-soft-lean-down')?.addEventListener('click', () => softLeanStep(-1));
   document.getElementById('bot-model-soft-lean-up')?.addEventListener('click', () => softLeanStep(1));
+  const hardStopConfirmStep = (delta) => {
+    const el = document.getElementById('bot-model-hard-stop-confirm-value');
+    if (!el) return;
+    const cur = Number(el.dataset.value) || 0;
+    const next = Math.max(0, Math.min(60, cur + delta));
+    el.dataset.value = next;
+    el.textContent = next === 0 ? 'off (instant)' : `${next}s`;
+  };
+  document.getElementById('bot-model-hard-stop-confirm-down')?.addEventListener('click', () => hardStopConfirmStep(-1));
+  document.getElementById('bot-model-hard-stop-confirm-up')?.addEventListener('click', () => hardStopConfirmStep(1));
   document.getElementById('bot-stake-half')?.addEventListener('click', () => {
     const el = document.getElementById('bot-stake');
     if (!el) return;

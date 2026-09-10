@@ -767,6 +767,10 @@ function isModelTrade(trade) {
   return trade && String(trade.strategy || '').toLowerCase() === 'model';
 }
 
+function isManualTrade(trade) {
+  return trade && String(trade.strategy || '').toLowerCase() === 'manual';
+}
+
 /** Active engine window for Model tab by minutes left in the 15m Kalshi session. */
 function pickModelWindowKey(minutesRemaining) {
   const m = Number(minutesRemaining);
@@ -4135,6 +4139,8 @@ const EDITABLE_NUMERIC_FIELDS = [
   'insuranceOverflowDollars',
   'paperStartingBalanceDollars',
   'dailyLossLimitDollars',
+  'manualStopLossCents',
+  'manualPositionSyncEnabled',
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4191,6 +4197,9 @@ const SETTLE_STOP_LOSS_MIN_CENTS = 8;
 /** Ceiling for settle stop — widest ride through wicks (UI max −60¢). */
 const SETTLE_STOP_LOSS_MAX_CENTS = 60;
 const SETTLE_STOP_LOSS_DEFAULT_CENTS = 50;
+
+/** Default stop-loss for externally-detected manual positions (¢ below entry). */
+const MANUAL_STOP_LOSS_DEFAULT_CENTS = 15;
 
 function normalizeSettleStopLossCents(config) {
   if (!config || typeof config !== 'object') return config;
@@ -5411,6 +5420,8 @@ class TradingBot {
       insuranceFloorDollars: INSURANCE_FLOOR_DEFAULT,
       insuranceOverflowDollars: INSURANCE_OVERFLOW_DEFAULT,
       dailyLossLimitDollars: DAILY_LOSS_LIMIT_DEFAULT_DOLLARS, // kill-switch: halt new entries when day P&L hits this loss
+      manualStopLossCents: MANUAL_STOP_LOSS_DEFAULT_CENTS, // stop-loss applied to externally-detected manual positions
+      manualPositionSyncEnabled: 'on', // 'on' | 'off' — auto-detect positions opened outside the bot
       paperStartingBalanceDollars: 100, // trading bankroll (also the capital backing paper trades)
       mode: 'paper', // 'paper' | 'live'
       liveAuthorized: false,
@@ -9599,20 +9610,38 @@ class TradingBot {
         if (stopBid != null && realAdverse >= maxAdverse) {
           const confirmSec = modelHardStopConfirmSeconds(this.config);
           if (confirmSec > 0) {
+            // Scale confirm time by lean: firm lean → longer wait (likely fake-out);
+            // soft/flipped lean → shorter wait (likely real collapse).
+            const _leanNow = picked && picked.window
+              ? modelHeldSideProb(picked.window, trade.side)
+              : NaN;
+            const _entryLean = Number(trade.modelEntryHeldProb);
+            const _leanFirm = Number.isFinite(_leanNow) && _leanNow >= 65;
+            const _leanRising = Number.isFinite(_leanNow) && Number.isFinite(_entryLean) && _leanNow >= _entryLean;
+            const _leanFlipped = Number.isFinite(_leanNow) && _leanNow < 50;
+            // Lean firm/rising → full confirm window (fake-out more likely)
+            // Lean soft (50–65) → half window
+            // Lean flipped (<50) → 2s floor (real move, cut faster)
+            const effectiveConfirmSec = _leanFlipped
+              ? Math.min(confirmSec, 2)
+              : (_leanFirm || _leanRising)
+                ? confirmSec
+                : Math.max(2, confirmSec * 0.5);
             // Stamp when bid first crosses threshold; only fire after it stays there.
             if (!Number.isFinite(Number(trade._hardStopBreachedSince))) {
               trade._hardStopBreachedSince = now;
               this._persist();
             }
             const breachedMs = now - Number(trade._hardStopBreachedSince);
-            if (breachedMs < confirmSec * 1000) {
-              this.lastDecision = `Hard stop arming: −${realAdverse}¢ on ${trade.symbol} — confirming for ${confirmSec}s (${((confirmSec * 1000 - breachedMs) / 1000).toFixed(1)}s left).`;
+            const leanLabel = _leanFlipped ? 'lean flipped' : _leanRising ? 'lean rising' : _leanFirm ? 'lean firm' : 'lean soft';
+            if (breachedMs < effectiveConfirmSec * 1000) {
+              this.lastDecision = `Hard stop arming: −${realAdverse}¢ on ${trade.symbol} — confirming ${effectiveConfirmSec}s (${leanLabel}, ${((effectiveConfirmSec * 1000 - breachedMs) / 1000).toFixed(1)}s left).`;
               // Don't return — let other checks run in case lean exits fire first.
             } else {
               const tightened = maxAdverse < baseMaxAdverse;
               this.lastDecision = tightened
                 ? `No-progress stop tighten: −${realAdverse}¢ (≥${maxAdverse}¢, tightened from ${baseMaxAdverse}¢) on ${trade.symbol} — cutting.`
-                : `Hard adverse stop: −${realAdverse}¢ (≥${maxAdverse}¢, confirmed ${Math.round(breachedMs / 1000)}s) on ${trade.symbol} — cutting.`;
+                : `Hard adverse stop: −${realAdverse}¢ (≥${maxAdverse}¢, confirmed ${Math.round(breachedMs / 1000)}s, ${leanLabel}) on ${trade.symbol} — cutting.`;
               await tryModelAgainstCut('model_hard_stop');
               return;
             }
@@ -10415,6 +10444,16 @@ class TradingBot {
 
     // Model holds to settle / lean-flip only — no hard stop.
     if (isModelTrade(trade)) return null;
+
+    // Manual trades: use the per-trade manualStopCents stamped at injection time,
+    // falling back to the global manualStopLossCents config setting.
+    if (isManualTrade(trade)) {
+      const manualDrop = Number(trade.manualStopCents) > 0
+        ? Number(trade.manualStopCents)
+        : Number(this.config.manualStopLossCents);
+      if (!Number.isFinite(manualDrop) || manualDrop <= 0) return null;
+      return Math.max(1, Math.round(entry - manualDrop));
+    }
 
     if (!isSettleTrade(trade)) {
       const beAfter = Number(this.config.edgeBreakevenAfterMinutes);
@@ -11370,6 +11409,148 @@ class TradingBot {
   }
 
   /**
+   * Poll Kalshi /portfolio/positions and inject any position the bot did not
+   * open itself as a `strategy:'manual'` open trade. Called once per cycle
+   * in live mode only. Rate-limited to once every 20 s to avoid hammering the
+   * API — the bot's own stop-loss check still runs every second once the trade
+   * is in the ledger.
+   *
+   * Kalshi `market_positions` fields used:
+   *   ticker   — market ticker, e.g. "KXBTC15M-25MAR2119:05"
+   *   position — signed integer: > 0 means YES contracts held, < 0 means NO
+   */
+  async _detectAndInjectExternalPositions() {
+    if (this.config.mode !== 'live') return;
+    if (String(this.config.manualPositionSyncEnabled || 'on').toLowerCase() === 'off') return;
+    if (!this.client || !this.client.hasCredentials) return;
+
+    const now = Date.now();
+    const SYNC_INTERVAL_MS = 20_000;
+    if (this._lastExternalPositionSyncAt && now - this._lastExternalPositionSyncAt < SYNC_INTERVAL_MS) return;
+    this._lastExternalPositionSyncAt = now;
+
+    let positions;
+    try {
+      positions = await this.client.getPositions();
+    } catch (err) {
+      // Non-fatal — log and skip this cycle.
+      console.warn('[bot] external-position sync failed:', err.message);
+      return;
+    }
+
+    if (!Array.isArray(positions) || positions.length === 0) return;
+
+    // Build a set of tickers the bot already has open (by ticker+side).
+    const knownTickerSide = new Set();
+    for (const t of this.openTrades) {
+      if (t.ticker && t.side) {
+        knownTickerSide.add(`${String(t.ticker).toUpperCase()}:${String(t.side).toLowerCase()}`);
+      }
+    }
+    // Also skip tickers we already injected in a previous cycle (de-dup across rotations).
+    if (!this._injectedExternalTickers) this._injectedExternalTickers = new Set();
+
+    // Build a reverse map from Kalshi series prefix → symbol.
+    const SERIES_TO_SYMBOL = Object.create(null);
+    for (const [sym, series] of Object.entries(SERIES_BY_SYMBOL)) {
+      SERIES_TO_SYMBOL[series.toUpperCase()] = sym;
+    }
+
+    for (const pos of positions) {
+      const ticker = String(pos.ticker || pos.market_ticker || '').toUpperCase();
+      if (!ticker) continue;
+
+      const contracts = Number(pos.position);
+      if (!Number.isFinite(contracts) || contracts === 0) continue;
+
+      const side = contracts > 0 ? 'yes' : 'no';
+      const absContracts = Math.abs(contracts);
+      const tickerSideKey = `${ticker}:${side}`;
+
+      // Already tracked by the bot or already injected.
+      if (knownTickerSide.has(tickerSideKey)) continue;
+      if (this._injectedExternalTickers.has(tickerSideKey)) continue;
+
+      // Resolve the symbol from the ticker prefix (e.g. KXBTC15M-… → BTC).
+      const seriesPrefix = ticker.split('-')[0];
+      const symbol = SERIES_TO_SYMBOL[seriesPrefix] || null;
+      if (!symbol) continue; // unknown series — skip
+
+      // Fetch the current market to get close_time and current bid for entry estimate.
+      let market = null;
+      try {
+        market = await this._getMarketBounded(ticker, 3000);
+      } catch { /* best-effort */ }
+
+      const closeTime = market ? this._marketCloseMs(market) : NaN;
+
+      // If the window has already closed, skip — nothing to guard.
+      if (Number.isFinite(closeTime) && now >= closeTime) continue;
+
+      // Estimate entry price from current held-side bid; fall back to 50¢ if unavailable.
+      const bidNow = market ? this._sideBidCents(market, side) : null;
+      const entryEstimate = (Number.isFinite(bidNow) && bidNow >= 1 && bidNow <= 99)
+        ? Math.round(bidNow)
+        : 50;
+
+      const manualStopCents = Math.max(1, Math.round(
+        Number(this.config.manualStopLossCents) > 0
+          ? Number(this.config.manualStopLossCents)
+          : MANUAL_STOP_LOSS_DEFAULT_CENTS
+      ));
+
+      const trade = {
+        id: crypto.randomUUID ? crypto.randomUUID() : `manual-${Date.now()}-${Math.random()}`,
+        mode: 'live',
+        strategy: 'manual',
+        symbol,
+        ticker,
+        side,
+        contracts: absContracts,
+        stakeDollars: +((absContracts * entryEstimate) / 100).toFixed(2),
+        entryPriceCents: entryEstimate,
+        manualStopCents,
+        openedAt: now,
+        windowCloseTime: Number.isFinite(closeTime) ? closeTime : now + 15 * 60 * 1000,
+        engineProbability: null,
+        engineConfidence: null,
+        status: 'open',
+        // Flag: entry price is an estimate from current bid, not a real fill price.
+        manualEntryEstimated: true,
+      };
+
+      this.ledger.trades.unshift(trade);
+      if (this.ledger.trades.length > 200) this.ledger.trades.length = 200;
+      this._injectedExternalTickers.add(tickerSideKey);
+      this._persist();
+
+      const stopLevel = Math.max(1, entryEstimate - manualStopCents);
+      const msg = `[bot] Detected external manual position: ${symbol} ${side.toUpperCase()} ${absContracts}ct @ ~${entryEstimate}¢ (ticker ${ticker}). Stop-loss armed at ${stopLevel}¢ (−${manualStopCents}¢).`;
+      console.log(msg);
+      this._logActivity(
+        `Manual position detected: ${symbol} ${side.toUpperCase()} ~${entryEstimate}¢ · stop at ${stopLevel}¢`,
+        { kind: 'open', symbol, side, strategy: 'manual', tradeId: trade.id }
+      );
+      this._upsertTradeLog({
+        id: trade.id,
+        mode: trade.mode,
+        strategy: trade.strategy,
+        symbol: trade.symbol,
+        ticker: trade.ticker,
+        side: trade.side,
+        contracts: trade.contracts,
+        stakeDollars: trade.stakeDollars,
+        entryPriceCents: trade.entryPriceCents,
+        manualStopCents: trade.manualStopCents,
+        manualEntryEstimated: true,
+        openedAt: trade.openedAt,
+        windowCloseTime: trade.windowCloseTime,
+        status: 'open',
+      });
+    }
+  }
+
+  /**
    * predictions: the full result object from buildPredictions() — i.e. has
    * both .BTC and .XRP, each with .windows.w5/w10/w15. The bot trades
    * whichever one matches this.config.symbol, but will still manage
@@ -11401,6 +11582,11 @@ class TradingBot {
         this.lastError = `Unable to refresh live balance: ${err.message}`;
       }
     }
+
+    // Detect positions opened outside the bot and arm a stop-loss on them.
+    await this._detectAndInjectExternalPositions().catch((err) =>
+      console.warn('[bot] external-position detect error:', err.message)
+    );
 
     // --- first, manage every currently open trade by its own ticker,
     // regardless of what symbol is currently selected to trade next ---
@@ -13588,6 +13774,7 @@ module.exports = {
   isSettleTrade,
   isModelStrategyMode,
   isModelTrade,
+  isManualTrade,
   isModelInvertSide,
   modelSignalSideFromDirection,
   flipKalshiSide,

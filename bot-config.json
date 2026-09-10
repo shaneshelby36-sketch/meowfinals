@@ -77,7 +77,7 @@
   "modelLeanFloorBaseEntry": 65,
   "modelMaxLossCents": 0,
   "modelHardStopFloorCents": 50,
-  "modelHardStopConfirmSeconds": 3,
+  "modelHardStopConfirmSeconds": 10,
   "modelMinRoomToFloorCents": 3,
   "modelLeanStopBarrierCents": 50,
   "modelLeanStopPaceDrawdownPct": 35,
