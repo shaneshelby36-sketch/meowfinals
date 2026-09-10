@@ -11420,7 +11420,6 @@ class TradingBot {
    *   position — signed integer: > 0 means YES contracts held, < 0 means NO
    */
   async _detectAndInjectExternalPositions() {
-    if (this.config.mode !== 'live') return;
     if (String(this.config.manualPositionSyncEnabled || 'on').toLowerCase() === 'off') return;
     if (!this.client || !this.client.hasCredentials) return;
 

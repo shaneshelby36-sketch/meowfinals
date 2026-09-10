@@ -400,14 +400,14 @@
               <input id="bot-manual-stoploss" type="range" min="1" max="40" step="1" />
               <span class="slider-value" id="bot-manual-stoploss-value">—</span>
             </div>
-            <span class="field-hint">When you place an order directly on Kalshi (outside the bot), the bot detects it and arms a stop-loss automatically. This sets how many cents below your entry price the stop fires. Default <strong>15¢</strong>. Live mode only.</span>
+            <span class="field-hint">When you place an order directly on Kalshi (outside the bot), the bot detects it and arms a stop-loss automatically. This sets how many cents below your entry price the stop fires. Default <strong>15¢</strong>.</span>
           </label>
           <label>Auto-detect manual orders
             <select id="bot-manual-position-sync">
               <option value="on">On — watch for orders placed outside the bot (default)</option>
               <option value="off">Off — ignore external positions</option>
             </select>
-            <span class="field-hint">Polls Kalshi every 20 s for positions the bot did not open, then arms a stop-loss on them. Live mode only.</span>
+            <span class="field-hint">Polls Kalshi every 20 s for positions the bot did not open, then arms a stop-loss on them. Works in both paper and live mode (requires Kalshi credentials).</span>
           </label>
           <label class="bot-exit-sound-toggle">
             <span>Exit sound</span>
