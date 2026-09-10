@@ -694,9 +694,48 @@ body[data-view-mode="bot"] .asset-picker {
 }
 .rotate-icon { font-size: 3rem; color: var(--accent); }
 
-@media (orientation: portrait) and (max-width: 900px) {
+@media (orientation: portrait) and (max-width: 500px) {
+  /* Only block truly tiny phones — tablets are fine in portrait */
   #rotate-notice { display: flex; }
   #app { display: none; }
+}
+
+@media (orientation: portrait) and (max-width: 900px) and (min-width: 501px) {
+  /* Tablet portrait: show the app, stack layout vertically */
+  .grid {
+    grid-template-columns: 1fr;
+    padding: 10px 12px;
+    gap: 10px;
+  }
+  #lean-bar {
+    flex-direction: column;
+  }
+  #lean-bar-commo,
+  #lean-bar-crypto {
+    flex-wrap: wrap;
+  }
+  .commo-lean-cell {
+    min-width: 80px;
+    flex: 1 1 80px;
+  }
+  .bot-card {
+    width: min(96vw, 640px);
+    max-height: 92vh;
+  }
+  .topbar {
+    padding: 10px 14px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .asset-picker {
+    padding: 8px 12px 0;
+  }
+  .asset-panel {
+    padding: 14px;
+  }
+  .bot-field-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* ---------- Bot overlay ---------- */
