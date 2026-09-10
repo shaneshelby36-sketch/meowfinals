@@ -6137,6 +6137,24 @@ class TradingBot {
         source: row.source || 'kalshi',
       };
     }
+    // Fill ticker for any symbol not yet seen in _engineStrikeTargets
+    // (e.g. commodities with no open trade) using the live market cache.
+    if (this._lastLiveMarket) {
+      for (const [sym, seriesTicker] of Object.entries(SERIES_BY_SYMBOL)) {
+        if (out[sym] && out[sym].ticker) continue; // already have it
+        const market = this._lastLiveMarket[seriesTicker];
+        if (!market || !market.ticker) continue;
+        const closeMs = parseMarketCloseMs(market);
+        if (Number.isFinite(closeMs) && closeMs + 60_000 < now) continue;
+        const strike = Number(marketStrikePrice(market));
+        out[sym] = {
+          price: Number.isFinite(strike) && strike > 0 ? strike : (out[sym] && out[sym].price) || 0,
+          closeTime: Number.isFinite(closeMs) ? closeMs : (out[sym] && out[sym].closeTime) || null,
+          ticker: market.ticker,
+          source: 'kalshi',
+        };
+      }
+    }
     return out;
   }
 
@@ -6740,6 +6758,16 @@ class TradingBot {
     const inactive = Object.keys(SERIES_BY_SYMBOL).filter(
       sym => !active.has(sym) && !isCommoditySymbol(sym)
     );
+
+    // Warm the ticker cache for inactive commodities so their lean bar trade
+    // buttons show even when no position is open.
+    const inactiveCommodities = Object.keys(SERIES_BY_SYMBOL).filter(
+      sym => !active.has(sym) && isCommoditySymbol(sym)
+    );
+    if (inactiveCommodities.length) {
+      await this._prefetchKalshiForSymbols(inactiveCommodities, 5000);
+    }
+
     if (!inactive.length) return;
 
     // Warm the market cache for all inactive coins while NOT in shadow mode,
@@ -10203,8 +10231,18 @@ class TradingBot {
       return;
     }
 
-    // Manual trades: pure stop-loss only — ride everything else to settlement.
-    if (isManualTrade(trade)) return;
+    // Manual trades: bank at near-certain (≥97¢ by default) then ride to settlement.
+    if (isManualTrade(trade)) {
+      if (nearCertainHit) {
+        const fill = this.config.mode === 'paper'
+          ? Math.min(99, Math.max(nearCertainExitCents, heldSideBidCents))
+          : heldSideBidCents;
+        await this._closePosition(trade, fill, 'near_certain', {
+          liveSellPriceCents: heldSideBidCents,
+        });
+      }
+      return;
+    }
 
     // Settle strategy: stop (above); weak-ticket lean-switch; optional entry-tiered
     // TP/stale/stuck; else hold for official settlement — no edge signal-flip exits
