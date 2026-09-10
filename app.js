@@ -1072,6 +1072,7 @@ const CRYPTO_SYMS = [
   { sym: 'NEAR', id: 'commo-lean-near' },
   { sym: 'HYPE', id: 'commo-lean-hype' },
   { sym: 'ZEC',  id: 'commo-lean-zec' },
+  { sym: 'DOGE', id: 'commo-lean-doge' },
 ];
 
 const ALL_LEAN_SYMS = [...COMMO_SYMS, ...CRYPTO_SYMS];
