@@ -8982,9 +8982,9 @@ class TradingBot {
     }
 
     const heldSideBidCents = this._heldSideBidCents(trade, market);
-    // Peak held bid: settle (weak-ticket) + model (trail before dumps).
+    // Peak held bid: settle (weak-ticket) + model (trail before dumps) + manual (trailing stop).
     if (
-      (isSettleTrade(trade) || isModelTrade(trade)) &&
+      (isSettleTrade(trade) || isModelTrade(trade) || isManualTrade(trade)) &&
       heldSideBidCents != null &&
       Number.isFinite(heldSideBidCents) &&
       heldSideBidCents >= 1 &&
@@ -10485,14 +10485,16 @@ class TradingBot {
     // Model holds to settle / lean-flip only — no hard stop.
     if (isModelTrade(trade)) return null;
 
-    // Manual trades: use the per-trade manualStopCents stamped at injection time,
-    // falling back to the global manualStopLossCents config setting.
+    // Manual trades: trailing stop from peak (never below entry).
+    // stop = max(entry − drop, peak − drop) so the floor ratchets up as price runs.
     if (isManualTrade(trade)) {
       const manualDrop = Number(trade.manualStopCents) > 0
         ? Number(trade.manualStopCents)
         : Number(this.config.manualStopLossCents);
       if (!Number.isFinite(manualDrop) || manualDrop <= 0) return null;
-      return Math.max(1, Math.round(entry - manualDrop));
+      const peak = Number(trade.peakHeldBidCents);
+      const base = Number.isFinite(peak) && peak > entry ? peak : entry;
+      return Math.max(1, Math.round(base - manualDrop));
     }
 
     if (!isSettleTrade(trade)) {
