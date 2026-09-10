@@ -990,13 +990,17 @@ app.get("/", (req, res) => {
     res.status(result.ok ? 200 : 400).json(result);
   });
 
-  app.post('/api/bot/manual-trade', (req, res) => {
+  app.post('/api/bot/manual-trade', async (req, res) => {
     if (!bot) {
       res.status(404).json({ enabled: false, message: 'Bot is not enabled (set KALSHI_ENABLED=true).' });
       return;
     }
-    const result = bot.addManualTrade(req.body || {});
-    res.status(result.ok ? 200 : 400).json(result);
+    try {
+      const result = await bot.addManualTrade(req.body || {});
+      res.status(result.ok ? 200 : 400).json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message || 'Internal error placing manual trade.' });
+    }
   });
 
   const SYMBOL_TO_PRODUCT = {

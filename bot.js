@@ -11451,14 +11451,13 @@ class TradingBot {
   }
 
   /**
-   * Register a manual trade entered from the dashboard lean bar.
-   * The trade is injected directly into the ledger as strategy:'manual'
-   * and the existing _manageOpenTrade loop watches it every second,
-   * firing _closePosition (real live sell) when the bid hits the stop.
+   * Place a real Kalshi buy order from the dashboard lean bar, then register
+   * it in the ledger as strategy:'manual'. In paper mode or when credentials
+   * are absent, falls back to ledger-only (no live order).
    *
    * Returns { ok, message, trade } or { ok: false, error }.
    */
-  addManualTrade({ symbol, ticker, side, entryPriceCents, contracts, windowCloseTime, manualStopCents }) {
+  async addManualTrade({ symbol, ticker, side, entryPriceCents, contracts, windowCloseTime, manualStopCents }) {
     const sym = String(symbol || '').toUpperCase();
     const s   = String(side   || '').toLowerCase();
     if (!sym || !ticker) return { ok: false, error: 'symbol and ticker are required' };
@@ -11471,6 +11470,66 @@ class TradingBot {
     ));
     const closeTime = Number(windowCloseTime) > 0 ? Number(windowCloseTime) : Date.now() + 15 * 60 * 1000;
 
+    const isLive = this.config.mode === 'live' && this.client && this.client.hasCredentials;
+
+    let actualEntry = entry;
+    let liveOrderId = null;
+    let entryFeesCents = 0;
+
+    if (isLive) {
+      // Place IOC buy on Kalshi — up to 3 attempts re-quoting ask each time.
+      let soldOk = false;
+      let lastErr = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (attempt > 0) await this._sleep(70);
+        // Re-quote the live ask before each attempt.
+        const freshAsk = await this._refreshLiveEntryAskCents(String(ticker).toUpperCase(), s).catch(() => null);
+        const buyPrice = Math.min(99, Math.max(1, Math.round(
+          Number.isFinite(freshAsk) ? freshAsk + attempt : entry + attempt
+        )));
+        try {
+          const order = await this.client.createOrder({
+            ticker: String(ticker).toUpperCase(),
+            side: s,
+            action: 'buy',
+            count: ct,
+            priceCents: buyPrice,
+            timeInForce: 'immediate_or_cancel',
+          });
+          const orderId = this._extractOrderId(order);
+          if (!orderId) throw new Error('buy response missing order_id');
+          const fill = await this._awaitOrderFill(orderId, {
+            minFill: ct,
+            attempts: 3,
+            delayMs: 120,
+            seedOrder: order,
+            heldSide: s,
+            action: 'buy',
+          });
+          const filled = Math.max(0, Number(fill.filled) || 0);
+          if (filled < ct) throw new Error(`buy only filled ${filled}/${ct} contracts`);
+          // Stamp actual fill price and fees.
+          const avgFill = this._orderAvgFillPriceCents(fill.order, s, 'buy', buyPrice);
+          if (Number.isFinite(avgFill)) {
+            actualEntry = this._sanityCheckEntryFillCents(avgFill, buyPrice);
+          } else {
+            actualEntry = buyPrice;
+          }
+          liveOrderId = orderId;
+          entryFeesCents = this._resolveOrderFeesCents(fill.order, actualEntry, ct);
+          soldOk = true;
+          break;
+        } catch (err) {
+          lastErr = err;
+          console.error(`[bot] manual buy attempt ${attempt + 1}/3 on ${ticker}: ${err.message}`);
+        }
+      }
+      if (!soldOk) {
+        const msg = (lastErr && lastErr.message) || 'buy failed';
+        return { ok: false, error: `Manual buy failed on Kalshi: ${msg}` };
+      }
+    }
+
     const trade = {
       id: crypto.randomUUID ? crypto.randomUUID() : `manual-${Date.now()}-${Math.random()}`,
       mode: this.config.mode,
@@ -11479,8 +11538,10 @@ class TradingBot {
       ticker: String(ticker).toUpperCase(),
       side: s,
       contracts: ct,
-      stakeDollars: +((ct * entry) / 100).toFixed(2),
-      entryPriceCents: entry,
+      stakeDollars: +((ct * actualEntry) / 100).toFixed(2),
+      entryPriceCents: actualEntry,
+      entryFeesCents,
+      ...(liveOrderId ? { liveOrderId } : {}),
       manualStopCents: stopCents,
       openedAt: Date.now(),
       windowCloseTime: closeTime,
@@ -11493,14 +11554,15 @@ class TradingBot {
     if (this.ledger.trades.length > 200) this.ledger.trades.length = 200;
     this._persist();
 
-    const stopLevel = Math.max(1, entry - stopCents);
-    const msg = `Manual trade logged: ${sym} ${s.toUpperCase()} ${ct}ct @ ${entry}¢ · stop at ${stopLevel}¢ (−${stopCents}¢)`;
+    const stopLevel = Math.max(1, actualEntry - stopCents);
+    const msg = `Manual trade${isLive ? '' : ' (paper)'}: ${sym} ${s.toUpperCase()} ${ct}ct @ ${actualEntry}¢ · stop at ${stopLevel}¢ (−${stopCents}¢)`;
     this._logActivity(msg, { kind: 'open', symbol: sym, side: s, strategy: 'manual', tradeId: trade.id });
     this._upsertTradeLog({
       id: trade.id, mode: trade.mode, strategy: 'manual',
       symbol: trade.symbol, ticker: trade.ticker, side: trade.side,
       contracts: trade.contracts, stakeDollars: trade.stakeDollars,
-      entryPriceCents: trade.entryPriceCents, manualStopCents: trade.manualStopCents,
+      entryPriceCents: trade.entryPriceCents, entryFeesCents: trade.entryFeesCents || 0,
+      manualStopCents: trade.manualStopCents,
       openedAt: trade.openedAt, windowCloseTime: trade.windowCloseTime, status: 'open',
     });
     console.log(`[bot] ${msg}`);
