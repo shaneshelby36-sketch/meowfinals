@@ -1588,34 +1588,38 @@ function renderCommodityLeanBar(data) {
     const yesPct = kalshiCentsDisplay != null ? kalshiCentsDisplay : null;
     const noPct  = yesPct != null ? 100 - yesPct : null;
     const closeAttr = d.targetCloseTime ? `data-close="${Number(d.targetCloseTime)}"` : '';
-    // Entry lock: buttons disabled (dimmed + countdown) when >5 min remains
+    // Entry lock: buttons disabled when >10 min remains, or when price is below 80¢ (too cheap).
+    const MANUAL_MIN_ENTRY_PCT = 80;
     const ctMs = d.targetCloseTime ? Number(d.targetCloseTime) : null;
     const msLeftNow = ctMs ? ctMs - Date.now() : null;
-    const entryLocked = msLeftNow != null && msLeftNow > 10 * 60 * 1000;
-    const lockMinsLeft = entryLocked ? Math.ceil(msLeftNow / 60000) : null;
-    const yesHot = !entryLocked && isHotSignal && hotDir === 'YES';
-    const noHot  = !entryLocked && isHotSignal && hotDir === 'NO';
+    const timeLocked = msLeftNow != null && msLeftNow > 10 * 60 * 1000;
+    const lockMinsLeft = timeLocked ? Math.ceil(msLeftNow / 60000) : null;
+    const yesLocked = timeLocked || (yesPct != null && yesPct < MANUAL_MIN_ENTRY_PCT);
+    const noLocked  = timeLocked || (noPct  != null && noPct  < MANUAL_MIN_ENTRY_PCT);
+    const entryLocked = yesLocked && noLocked; // both locked (for back-compat references below)
+    const yesHot = !yesLocked && isHotSignal && hotDir === 'YES';
+    const noHot  = !noLocked  && isHotSignal && hotDir === 'NO';
     const tradeButtons = ticker && !isStale && yesPct != null ? `
       <div style="display:flex;gap:4px;width:100%;margin-top:4px;">
         <button class="lqt-yes-btn"
           data-sym="${sym}" data-ticker="${ticker}"
           data-price="${yesPct}" ${closeAttr}
-          ${entryLocked ? 'data-locked="1"' : ''}
-          style="flex:1;background:${entryLocked ? '#0d1117' : yesHot ? '#064e3b' : '#052e16'};border:${yesHot ? '2px solid #22c55e' : '1px solid #166534'};border-radius:6px;
-                 color:${entryLocked ? '#30363d' : '#22c55e'};font-weight:800;font-size:13px;padding:9px 0;
-                 cursor:${entryLocked ? 'not-allowed' : 'pointer'};line-height:1;min-width:0;touch-action:manipulation;
+          ${yesLocked ? 'data-locked="1"' : ''}
+          style="flex:1;background:${yesLocked ? '#0d1117' : yesHot ? '#064e3b' : '#052e16'};border:${yesHot ? '2px solid #22c55e' : '1px solid #166534'};border-radius:6px;
+                 color:${yesLocked ? '#30363d' : '#22c55e'};font-weight:800;font-size:13px;padding:9px 0;
+                 cursor:${yesLocked ? 'not-allowed' : 'pointer'};line-height:1;min-width:0;touch-action:manipulation;
                  ${yesHot ? 'box-shadow:0 0 6px 1px rgba(34,197,94,0.5);' : ''}">
-          ${entryLocked ? `🔒 ${lockMinsLeft}m` : `YES ${yesPct}%${yesHot ? ' ⚡' : ''}`}
+          ${timeLocked ? `🔒 ${lockMinsLeft}m` : yesLocked ? `YES ${yesPct}% 🚫` : `YES ${yesPct}%${yesHot ? ' ⚡' : ''}`}
         </button>
         <button class="lqt-no-btn"
           data-sym="${sym}" data-ticker="${ticker}"
           data-price="${noPct}" ${closeAttr}
-          ${entryLocked ? 'data-locked="1"' : ''}
-          style="flex:1;background:${entryLocked ? '#0d1117' : noHot ? '#450a0a' : '#2d0a0a'};border:${noHot ? '2px solid #ef4444' : '1px solid #7f1d1d'};border-radius:6px;
-                 color:${entryLocked ? '#30363d' : '#ef4444'};font-weight:800;font-size:13px;padding:9px 0;
-                 cursor:${entryLocked ? 'not-allowed' : 'pointer'};line-height:1;min-width:0;touch-action:manipulation;
+          ${noLocked ? 'data-locked="1"' : ''}
+          style="flex:1;background:${noLocked ? '#0d1117' : noHot ? '#450a0a' : '#2d0a0a'};border:${noHot ? '2px solid #ef4444' : '1px solid #7f1d1d'};border-radius:6px;
+                 color:${noLocked ? '#30363d' : '#ef4444'};font-weight:800;font-size:13px;padding:9px 0;
+                 cursor:${noLocked ? 'not-allowed' : 'pointer'};line-height:1;min-width:0;touch-action:manipulation;
                  ${noHot ? 'box-shadow:0 0 6px 1px rgba(239,68,68,0.5);' : ''}">
-          ${entryLocked ? `🔒 ${lockMinsLeft}m` : `NO ${noPct}%${noHot ? ' ⚡' : ''}`}
+          ${timeLocked ? `🔒 ${lockMinsLeft}m` : noLocked ? `NO ${noPct}% 🚫` : `NO ${noPct}%${noHot ? ' ⚡' : ''}`}
         </button>
       </div>` : '';
 

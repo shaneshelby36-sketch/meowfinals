@@ -809,6 +809,18 @@ app.get("/", (req, res) => {
     res.json({ enabled: true, ...bot.getTradeLog({ limit, offset }) });
   });
 
+  app.get('/api/bot/trades/download', (req, res) => {
+    if (!bot) {
+      res.status(404).json({ enabled: false, message: 'Bot is not enabled.' });
+      return;
+    }
+    const { total, trades } = bot.getTradeLog({ limit: 5000, offset: 0 });
+    const ts = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="trade-log-${ts}.json"`);
+    res.json({ exportedAt: new Date().toISOString(), total, trades });
+  });
+
   // Engine-level calibration: every prediction the engine has ever made for
   // this symbol, whether or not the bot actually traded it — a broader,
   // complementary view to /api/bot/calibration (which only covers actual

@@ -8218,6 +8218,12 @@ class TradingBot {
         troughHeldBidCents: trade.troughHeldBidCents,
         beChaseResult: trade.beChaseResult || undefined,
         exitIsStallBank: trade.exitIsStallBank === true || undefined,
+        // Manual trade extra fields — carried through from open upsert
+        ...(isManualTrade(trade) ? {
+          manualStopCents: trade.manualStopCents,
+          minutesRemainingAtEntry: trade.minutesRemainingAtEntry,
+          manualConfig: trade.manualConfig,
+        } : {}),
       });
     this._persist();
       return true;
@@ -11625,6 +11631,9 @@ class TradingBot {
     const stopLevel = Math.max(1, actualEntry - stopCents);
     const msg = `Manual trade${isLive ? '' : ' (paper)'}: ${sym} ${s.toUpperCase()} ${ct}ct @ ${actualEntry}¢ · stop at ${stopLevel}¢ (−${stopCents}¢)`;
     this._logActivity(msg, { kind: 'open', symbol: sym, side: s, strategy: 'manual', tradeId: trade.id });
+    const _minsAtEntry = trade.windowCloseTime && trade.openedAt
+      ? Math.max(0, (Number(trade.windowCloseTime) - Number(trade.openedAt)) / 60000)
+      : undefined;
     this._upsertTradeLog({
       id: trade.id, mode: trade.mode, strategy: 'manual',
       symbol: trade.symbol, ticker: trade.ticker, side: trade.side,
@@ -11632,6 +11641,12 @@ class TradingBot {
       entryPriceCents: trade.entryPriceCents, entryFeesCents: trade.entryFeesCents || 0,
       manualStopCents: trade.manualStopCents,
       openedAt: trade.openedAt, windowCloseTime: trade.windowCloseTime, status: 'open',
+      minutesRemainingAtEntry: Number.isFinite(_minsAtEntry) ? Math.round(_minsAtEntry * 10) / 10 : undefined,
+      manualConfig: {
+        manualStopLossCents: this.config.manualStopLossCents,
+        manualStopFreefallCents: this.config.manualStopFreefallCents || 0,
+        manualMinEntryPct: 80, // lean bar price gate (MANUAL_MIN_ENTRY_PCT in app.js)
+      },
     });
     console.log(`[bot] ${msg}`);
     return { ok: true, message: msg, trade };
