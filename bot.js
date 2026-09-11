@@ -10242,7 +10242,7 @@ class TradingBot {
       return;
     }
 
-    // Manual trades: bank at near-certain (≥97¢ by default) then ride to settlement.
+    // Manual trades: bank at near-certain (≥97¢ by default), or auto-cashout near settlement end.
     if (isManualTrade(trade)) {
       if (nearCertainHit) {
         const fill = this.config.mode === 'paper'
@@ -10251,6 +10251,19 @@ class TradingBot {
         await this._closePosition(trade, fill, 'near_certain', {
           liveSellPriceCents: heldSideBidCents,
         });
+        return;
+      }
+      // Auto-cashout: ≤90s left + price is above entry (green) — sell now rather than risk settlement going wrong.
+      const closeAt = Number(trade.windowCloseTime);
+      const msLeft = Number.isFinite(closeAt) ? closeAt - now : Infinity;
+      const entry = Number(trade.entryPriceCents);
+      const isGreen = heldSideBidCents != null && Number.isFinite(entry) && heldSideBidCents > entry;
+      if (msLeft <= 90_000 && msLeft > 0 && isGreen && heldSideBidCents != null) {
+        const fill = this.config.mode === 'paper' ? heldSideBidCents : heldSideBidCents;
+        await this._closePosition(trade, fill, 'pre_close_bank', {
+          liveSellPriceCents: heldSideBidCents,
+        });
+        return;
       }
       return;
     }

@@ -1117,94 +1117,46 @@ function _wasRecentlyUnstable(sym, minCount = 2) {
   return hist.filter((h) => h.isUnstable).length >= minCount;
 }
 
-// Update the full-width warning bar above the lean symbol rows.
-// Shows when ≥1 visible symbol is inside its GO window AND has been unstable recently.
+// Update the full-width warning bar — shows cashout nudge when open manual trades are near settlement.
 function updateLeanBarWarning(data) {
   const el = document.getElementById('lean-bar-warning');
   if (!el) return;
 
   const now = Date.now();
-  const activeSyms = _leanBarTab === 'commo' ? COMMO_SYMS : CRYPTO_SYMS;
+  const openTrades = (_latestBotStatus && Array.isArray(_latestBotStatus.openTrades))
+    ? _latestBotStatus.openTrades : [];
+  const manualNearEnd = openTrades.filter((t) => {
+    if (String(t.strategy || '').toLowerCase() !== 'manual') return false;
+    const closeTime = Number(t.windowCloseTime);
+    if (!Number.isFinite(closeTime)) return false;
+    const msLeft = closeTime - now;
+    return msLeft > 0 && msLeft <= 2.5 * 60 * 1000; // ≤2.5 min left
+  });
 
-  // Collect symbols that are: in GO window, currently or recently unstable
-  const warnings = [];
-  for (const { sym } of activeSyms) {
-    const d = data && data[sym];
-    if (!d || !d.ready || !d.windows) continue;
-    const ct = d.targetCloseTime ? Number(d.targetCloseTime) : null;
-    if (!ct) continue;
-    const msLeft = ct - now;
-    const inGoWindow = msLeft > 2 * 60 * 1000 && msLeft <= 6.5 * 60 * 1000;
-    if (!inGoWindow) {
-      _recordUnstableSnapshot(sym, false, false, []);
-      continue;
-    }
-
-    // Derive instability — same logic as the per-cell banner
-    const w5 = d.windows.w5; const w10 = d.windows.w10; const w15 = d.windows.w15;
-    const dirs = [w5, w10, w15].filter(Boolean).map((w) => Number(w.probabilityUp) >= 50 ? 'YES' : 'NO');
-    const allAgree = dirs.length === 3 && dirs.every((v) => v === dirs[0]);
-    const leans = [w5, w10, w15].filter(Boolean).map((w) => {
-      const u = Number(w.probabilityUp); return u >= 50 ? u : 100 - u;
-    });
-    const allLeanOk = leans.length === 3 && leans.every((l) => l >= 78);
-    const confs = [w5, w10, w15].filter(Boolean).map((w) => Number(w.confidence)).filter(Number.isFinite);
-    const avgConf = confs.length ? Math.round(confs.reduce((a, b) => a + b, 0) / confs.length) : null;
-    const confOk = avgConf != null && avgConf >= 70;
-    const trends = [w5, w10, w15].filter(Boolean).map((w) => w.signalScore && w.signalScore.trend);
-    const weakeningCount = trends.filter((t) => t === 'weakening').length;
-
-    const snap = d.indicatorsSnapshot;
-    const vol = snap ? Number(snap.volatilityPct) : NaN;
-    const atrPct = snap ? Number(snap.atrPct) : NaN;
-    const volElevated = Number.isFinite(vol) && vol > 0.35;
-    const atrHigh = Number.isFinite(atrPct) && atrPct > 0.5;
-
-    const reasons = [];
-    if (!allAgree)       reasons.push('windows disagree');
-    if (!allLeanOk)      reasons.push('lean weak');
-    if (!confOk)         reasons.push(`conf ${avgConf ?? '?'}%`);
-    if (weakeningCount >= 2) reasons.push(`${weakeningCount} windows weakening`);
-    if (volElevated)     reasons.push(`vol ${Number.isFinite(vol) ? vol.toFixed(2) : '?'}%`);
-    if (atrHigh)         reasons.push(`ATR ${Number.isFinite(atrPct) ? atrPct.toFixed(2) : '?'}%`);
-
-    const isUnstable = reasons.length > 0;
-    _recordUnstableSnapshot(sym, true, isUnstable, reasons);
-
-    const recentlyUnstable = _wasRecentlyUnstable(sym, 2);
-    if (isUnstable || recentlyUnstable) {
-      const minsLeft = (msLeft / 60000).toFixed(1);
-      const severe = volElevated || atrHigh || weakeningCount >= 2;
-      const hist = _unstableHistory[sym] || [];
-      const unstableStreak = hist.filter((h) => h.isUnstable).length;
-      warnings.push({ sym, reasons, minsLeft, severe, unstableStreak, isUnstable });
-    }
-  }
-
-  if (warnings.length === 0) {
+  if (manualNearEnd.length === 0) {
     el.style.display = 'none';
     el.innerHTML = '';
     return;
   }
 
-  const anySevere = warnings.some((w) => w.severe);
-  const bgColor    = anySevere ? '#1a0404' : '#1a1000';
-  const borderColor = anySevere ? '#ef4444' : '#d97706';
-  const textColor  = anySevere ? '#ef4444' : '#f59e0b';
-
-  const symTags = warnings.map(({ sym, reasons, minsLeft, severe, unstableStreak, isUnstable }) => {
-    const col = severe ? '#fca5a5' : '#fde68a';
-    const reasonStr = reasons.length ? reasons.join(', ') : 'was unstable recently';
-    const histNote = !isUnstable && unstableStreak > 0 ? ` (unstable ${unstableStreak}/${UNSTABLE_HISTORY_LEN} recent polls)` : '';
-    return `<span style="color:${col};font-size:9px;" title="${sym}: ${reasonStr}${histNote}">${sym} ${minsLeft}m left — ${reasonStr}${histNote}</span>`;
+  const tags = manualNearEnd.map((t) => {
+    const msLeft = Number(t.windowCloseTime) - now;
+    const secLeft = Math.round(msLeft / 1000);
+    const mm = Math.floor(secLeft / 60);
+    const ss = secLeft % 60;
+    const timeStr = `${mm}:${String(ss).padStart(2, '0')}`;
+    const bid = Number.isFinite(t.liveAskCents) ? t.liveAskCents : Number.isFinite(t.liveBidCents) ? t.liveBidCents : null;
+    const entry = Number.isFinite(t.entryPriceCents) ? t.entryPriceCents : null;
+    const pnl = bid != null && entry != null ? Math.round(bid - entry) : null;
+    const pnlStr = pnl != null ? ` · ${pnl >= 0 ? '+' : ''}${pnl}¢` : '';
+    return `<span style="color:#fde68a;font-size:9px;">${t.symbol} ${String(t.side || '').toUpperCase()}${pnlStr} — ${timeStr} left</span>`;
   }).join('<span style="color:#30363d;margin:0 5px;">|</span>');
 
-  el.style.display = 'flex';
-  el.style.cssText = `display:flex;align-items:center;gap:6px;padding:2px 8px;background:${bgColor};border-top:1px solid ${borderColor};border-bottom:1px solid ${borderColor};flex-wrap:wrap;`;
+  el.style.cssText = 'display:flex;align-items:center;gap:6px;padding:3px 8px;background:#1a1200;border-top:1px solid #d97706;border-bottom:1px solid #d97706;flex-wrap:wrap;';
   el.innerHTML = `
-    <span style="color:${textColor};font-size:10px;font-weight:800;letter-spacing:0.5px;white-space:nowrap;flex-shrink:0;">⚠ UNSTABLE — skip manual trades</span>
+    <span style="color:#f59e0b;font-size:10px;font-weight:800;letter-spacing:0.5px;white-space:nowrap;flex-shrink:0;">⏱ Near settlement — consider cashing out</span>
     <span style="color:#30363d;flex-shrink:0;">·</span>
-    ${symTags}
+    ${tags}
   `;
 }
 
@@ -1477,11 +1429,7 @@ function renderCommodityLeanBar(data) {
          </div>`
       : '';
 
-    if (isUnstable) {
-      cell.style.outline = `1px solid ${unstableSevere ? '#ef444466' : '#d9770666'}`;
-    } else {
-      cell.style.outline = '';
-    }
+    cell.style.outline = '';
 
     const microPct = snap && snap.microMomentumPct != null ? snap.microMomentumPct : null;
     const microHtml = (() => {
@@ -1536,7 +1484,6 @@ function renderCommodityLeanBar(data) {
         <span style="color:#30363d;">│</span>
         <span style="color:#57606a;">15m</span>${windowLeanHtml(w15)}
       </div>
-      ${unstableHtml}
       ${tradeButtons}
     `;
   }
