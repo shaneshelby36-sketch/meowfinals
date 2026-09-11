@@ -816,9 +816,11 @@ app.get("/", (req, res) => {
     }
     const { total, trades } = bot.getTradeLog({ limit: 5000, offset: 0 });
     const ts = new Date().toISOString().slice(0, 10);
-    res.setHeader('Content-Type', 'application/json');
+    const body = JSON.stringify({ exportedAt: new Date().toISOString(), total, trades }, null, 2);
+    res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="trade-log-${ts}.json"`);
-    res.json({ exportedAt: new Date().toISOString(), total, trades });
+    res.setHeader('Content-Length', Buffer.byteLength(body));
+    res.send(body);
   });
 
   // Engine-level calibration: every prediction the engine has ever made for

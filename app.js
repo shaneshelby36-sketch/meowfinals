@@ -1007,7 +1007,7 @@ function checkGoAlerts(data) {
     const leans = [w5, w10, w15].filter(Boolean).map((w) => {
       const u = Number(w.probabilityUp); return u >= 50 ? u : 100 - u;
     });
-    const allLeanOk = leans.length === 3 && leans.every((l) => l >= 78);
+    const allLeanOk = leans.length === 3 && leans.every((l) => l >= 65);
     const allLeanStrong = leans.length === 3 && leans.every((l) => l >= 80);
 
     const confs = [w5, w10, w15].filter(Boolean).map((w) => Number(w.confidence)).filter(Number.isFinite);
@@ -1400,7 +1400,7 @@ function renderCommodityLeanBar(data) {
         const u = Number(w.probabilityUp);
         return u >= 50 ? u : 100 - u;
       });
-      const allLeanOk = leans.length === 3 && leans.every((l) => l >= 78);
+      const allLeanOk = leans.length === 3 && leans.every((l) => l >= 65);
       const allLeanStrong = leans.length === 3 && leans.every((l) => l >= 80);
       // Conf ok
       const confOk = avgConf != null && avgConf >= 70;
@@ -1589,39 +1589,46 @@ function renderCommodityLeanBar(data) {
     const noPct  = yesPct != null ? 100 - yesPct : null;
     const closeAttr = d.targetCloseTime ? `data-close="${Number(d.targetCloseTime)}"` : '';
     // Entry lock: buttons disabled when >10 min remains.
-    // Low-price warning: price below MANUAL_LOW_PRICE_PCT shows a ⚠ label — still clickable,
-    // but submitManualTrade will cap the stake to MANUAL_LOW_PRICE_MAX_STAKE_DOLLARS.
-    const MANUAL_LOW_PRICE_PCT = 80;         // warn threshold — easy to change
+    // Low-price gate: price below MANUAL_LOW_PRICE_PCT is only clickable when all 3 lean
+    // windows agree on direction AND goSignal is GO — otherwise locked with ⚠.
+    // At or above MANUAL_LOW_PRICE_PCT: always clickable (stake cap still applies below threshold).
+    const MANUAL_LOW_PRICE_PCT = 80;         // gate threshold — easy to change
     const ctMs = d.targetCloseTime ? Number(d.targetCloseTime) : null;
     const msLeftNow = ctMs ? ctMs - Date.now() : null;
     const timeLocked = msLeftNow != null && msLeftNow > 10 * 60 * 1000;
     const lockMinsLeft = timeLocked ? Math.ceil(msLeftNow / 60000) : null;
     const entryLocked = timeLocked; // back-compat
+    // Lean confirmed = all 3 windows agree on direction + goSignal is GO
+    const leanConfirmed = allAgree && goSignal === 'GO';
+    // Per-button: is this side's price below the threshold AND lean not confirmed?
     const yesLow = !timeLocked && yesPct != null && yesPct < MANUAL_LOW_PRICE_PCT;
     const noLow  = !timeLocked && noPct  != null && noPct  < MANUAL_LOW_PRICE_PCT;
-    const yesHot = !timeLocked && isHotSignal && hotDir === 'YES';
-    const noHot  = !timeLocked && isHotSignal && hotDir === 'NO';
+    // Low-price button is locked unless lean is confirmed for that direction
+    const yesLocked = timeLocked || (yesLow && !(leanConfirmed && agreeDir === 'YES'));
+    const noLocked  = timeLocked || (noLow  && !(leanConfirmed && agreeDir === 'NO'));
+    const yesHot = !yesLocked && isHotSignal && hotDir === 'YES';
+    const noHot  = !noLocked  && isHotSignal && hotDir === 'NO';
     const tradeButtons = ticker && !isStale && yesPct != null ? `
       <div style="display:flex;gap:4px;width:100%;margin-top:4px;">
         <button class="lqt-yes-btn"
           data-sym="${sym}" data-ticker="${ticker}"
           data-price="${yesPct}" ${closeAttr}
-          ${timeLocked ? 'data-locked="1"' : ''}
-          style="flex:1;background:${timeLocked ? '#0d1117' : yesHot ? '#064e3b' : '#052e16'};border:${yesHot ? '2px solid #22c55e' : yesLow ? '1px solid #854d0e' : '1px solid #166534'};border-radius:6px;
-                 color:${timeLocked ? '#30363d' : yesLow ? '#fbbf24' : '#22c55e'};font-weight:800;font-size:13px;padding:9px 0;
-                 cursor:${timeLocked ? 'not-allowed' : 'pointer'};line-height:1;min-width:0;touch-action:manipulation;
+          ${yesLocked ? 'data-locked="1"' : ''}
+          style="flex:1;background:${yesLocked ? '#0d1117' : yesHot ? '#064e3b' : '#052e16'};border:${yesHot ? '2px solid #22c55e' : yesLow && !yesLocked ? '1px solid #854d0e' : '1px solid #166534'};border-radius:6px;
+                 color:${yesLocked ? '#30363d' : yesLow && !yesLocked ? '#fbbf24' : '#22c55e'};font-weight:800;font-size:13px;padding:9px 0;
+                 cursor:${yesLocked ? 'not-allowed' : 'pointer'};line-height:1;min-width:0;touch-action:manipulation;
                  ${yesHot ? 'box-shadow:0 0 6px 1px rgba(34,197,94,0.5);' : ''}">
-          ${timeLocked ? `🔒 ${lockMinsLeft}m` : yesLow ? `YES ${yesPct}% ⚠` : `YES ${yesPct}%${yesHot ? ' ⚡' : ''}`}
+          ${timeLocked ? `🔒 ${lockMinsLeft}m` : yesLocked && yesLow ? `YES ${yesPct}% ⚠` : `YES ${yesPct}%${yesHot ? ' ⚡' : ''}`}
         </button>
         <button class="lqt-no-btn"
           data-sym="${sym}" data-ticker="${ticker}"
           data-price="${noPct}" ${closeAttr}
-          ${timeLocked ? 'data-locked="1"' : ''}
-          style="flex:1;background:${timeLocked ? '#0d1117' : noHot ? '#450a0a' : '#2d0a0a'};border:${noHot ? '2px solid #ef4444' : noLow ? '1px solid #854d0e' : '1px solid #7f1d1d'};border-radius:6px;
-                 color:${timeLocked ? '#30363d' : noLow ? '#fbbf24' : '#ef4444'};font-weight:800;font-size:13px;padding:9px 0;
-                 cursor:${timeLocked ? 'not-allowed' : 'pointer'};line-height:1;min-width:0;touch-action:manipulation;
+          ${noLocked ? 'data-locked="1"' : ''}
+          style="flex:1;background:${noLocked ? '#0d1117' : noHot ? '#450a0a' : '#2d0a0a'};border:${noHot ? '2px solid #ef4444' : noLow && !noLocked ? '1px solid #854d0e' : '1px solid #7f1d1d'};border-radius:6px;
+                 color:${noLocked ? '#30363d' : noLow && !noLocked ? '#fbbf24' : '#ef4444'};font-weight:800;font-size:13px;padding:9px 0;
+                 cursor:${noLocked ? 'not-allowed' : 'pointer'};line-height:1;min-width:0;touch-action:manipulation;
                  ${noHot ? 'box-shadow:0 0 6px 1px rgba(239,68,68,0.5);' : ''}">
-          ${timeLocked ? `🔒 ${lockMinsLeft}m` : noLow ? `NO ${noPct}% ⚠` : `NO ${noPct}%${noHot ? ' ⚡' : ''}`}
+          ${timeLocked ? `🔒 ${lockMinsLeft}m` : noLocked && noLow ? `NO ${noPct}% ⚠` : `NO ${noPct}%${noHot ? ' ⚡' : ''}`}
         </button>
       </div>` : '';
 
