@@ -11530,6 +11530,7 @@ class TradingBot {
       }
       if (!soldOk) {
         const msg = (lastErr && lastErr.message) || 'buy failed';
+        this.lastError = `Manual trade failed: ${msg}`;
         return { ok: false, error: `Manual buy failed on Kalshi: ${msg}` };
       }
     }

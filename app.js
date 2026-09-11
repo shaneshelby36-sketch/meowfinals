@@ -1613,6 +1613,18 @@ function wireLeanBarQuickTrade() {
       btn.style.background = '#1a0000';
       btn.textContent = '✗';
       console.error('[manual-trade]', err.message);
+      // Show the reason in the Decision chip immediately without waiting for next poll
+      const body = document.getElementById('bot-status-body');
+      if (body) {
+        const existing = body.querySelector('.lqt-error-notice');
+        if (existing) existing.remove();
+        const notice = document.createElement('div');
+        notice.className = 'lqt-error-notice';
+        notice.style.cssText = 'background:#1a0000;border:1px solid #7f1d1d;border-radius:6px;color:#fca5a5;font-size:12px;padding:6px 10px;margin-bottom:8px;';
+        notice.textContent = `⚠ Trade failed: ${err.message}`;
+        body.prepend(notice);
+        setTimeout(() => notice.remove(), 8000);
+      }
       setTimeout(() => {
         btn.textContent = origText;
         btn.disabled = false;
