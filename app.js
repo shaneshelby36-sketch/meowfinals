@@ -2131,11 +2131,24 @@ function buildOpenPositionsHtml(openTrades) {
       const stopNote = isManual && Number.isFinite(t.manualStopCents)
         ? ` · stop −${t.manualStopCents}¢`
         : '';
+      // Live P&L vs entry
+      const liveBid = Number.isFinite(t.liveBidCents) ? t.liveBidCents : null;
+      const entry   = Number.isFinite(t.entryPriceCents) ? t.entryPriceCents : null;
+      const ct      = Number.isFinite(t.contracts) ? t.contracts : 1;
+      let pnlHtml = '';
+      if (liveBid != null && entry != null) {
+        const diffCents = liveBid - entry;
+        const diffDollars = (diffCents * ct / 100).toFixed(2);
+        const sign = diffCents >= 0 ? '+' : '';
+        const col  = diffCents > 0 ? '#22c55e' : diffCents < 0 ? '#ef4444' : '#8b949e';
+        pnlHtml = `<span style="color:${col};font-weight:700;font-size:12px;">${sign}${diffCents}¢ (${sign}$${diffDollars})</span>`;
+      }
       return `
         <div class="bot-position-row${isManual ? ' bot-position-manual' : ''}">
           <div class="bot-position-main">
             <strong>${t.symbol || '?'} ${side}</strong>
             <span>${entryLabel} · ${contracts} ct · ${stake} · ${strategy}${stopNote}</span>
+            ${pnlHtml}
           </div>
           <div class="bot-position-meta">
             <span>Opened ${formatTradeTime(t.openedAt)}</span>
