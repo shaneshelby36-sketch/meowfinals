@@ -106,6 +106,14 @@
           width:30px;height:26px;background:#161b22;border:1px solid #30363d;border-radius:4px;
           color:#c9d1d9;font-size:16px;font-weight:700;cursor:pointer;line-height:1;touch-action:manipulation;">+</button>
       </div>
+      <!-- Lean threshold slider -->
+      <div style="display:flex;align-items:center;gap:5px;border-left:1px solid #21262d;padding:0 8px;" title="Highlight threshold: avg lean must be at least this % to trigger the strong-signal glow">
+        <span style="color:#57606a;font-size:11px;font-weight:600;white-space:nowrap;">lean</span>
+        <input id="lean-threshold-slider" type="range" min="50" max="85" step="1" value="55"
+          oninput="leanThresholdChange(this.value)"
+          style="width:64px;accent-color:#22c55e;cursor:pointer;touch-action:manipulation;">
+        <span id="lean-threshold-value" style="min-width:26px;color:#c9d1d9;font-size:12px;font-weight:700;text-align:right;">55%</span>
+      </div>
       <button onclick="playGoAlert('TEST','YES')" style="
         flex:0 0 auto;padding:0 14px;background:transparent;border:none;color:#57606a;
         font-size:14px;font-weight:700;cursor:pointer;border-left:1px solid #21262d;touch-action:manipulation;"

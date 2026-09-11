@@ -781,6 +781,7 @@ async function fetchLatest() {
     renderCommodityLeanBar(data);
     checkGoAlerts(data);
     checkEntryOpenAlerts(data);
+    checkLeanDropExits();
     refreshBotStatus();
     renderUpdatedTime();
     setStatus('live', 'Live');
@@ -1107,6 +1108,55 @@ function checkEntryOpenAlerts(data) {
       _leanEntryOpenState[sym] = 'open';
     } else {
       _leanEntryOpenState[sym] = 'locked';
+    }
+  }
+}
+
+// ── Lean-drop early exit ───────────────────────────────────────────────────
+// When a manual trade is open on a symbol and the rolling avg lean for that
+// symbol drops to ≤50 (direction has flipped or gone flat), cancel the trade.
+const _leanDropExitFired = {}; // sym+tradeId → true, prevents repeat calls
+
+async function checkLeanDropExits() {
+  if (!_latestBotStatus || !Array.isArray(_latestBotStatus.openTrades)) return;
+  const manualTrades = _latestBotStatus.openTrades.filter(
+    (t) => t && String(t.strategy || '').toLowerCase() === 'manual' && t.status === 'open'
+  );
+  if (!manualTrades.length) return;
+
+  for (const trade of manualTrades) {
+    const sym = String(trade.symbol || '').toUpperCase();
+    const key = `${sym}:${trade.id}`;
+    if (_leanDropExitFired[key]) continue;
+
+    const hist = _leanHistory[sym];
+    if (!hist || hist.length < 5) continue;
+
+    const last = hist[hist.length - 1];
+    // Direction we entered on: trade.side yes→UP, no→DOWN
+    const entryDir = String(trade.side || '').toLowerCase() === 'yes' ? 'UP' : 'DOWN';
+    // Avg lean on the entry side
+    const heldVals = hist.map((h) => entryDir === 'UP' ? h.up : h.down);
+    const avgLean = heldVals.reduce((a, b) => a + b, 0) / heldVals.length;
+
+    if (avgLean <= 50) {
+      _leanDropExitFired[key] = true;
+      console.log(`[lean-drop-exit] ${sym} avg lean dropped to ${avgLean.toFixed(1)}% — cancelling manual trade ${trade.id}`);
+      try {
+        const { engineUrl } = loadSettings();
+        const res = await fetch(`${engineUrl}/api/bot/manual-trade/cancel`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tradeId: trade.id }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+        console.log(`[lean-drop-exit] ${sym} cancelled OK`);
+      } catch (err) {
+        console.error(`[lean-drop-exit] failed to cancel ${sym}:`, err.message);
+        // Allow retry next cycle
+        delete _leanDropExitFired[key];
+      }
     }
   }
 }
@@ -1499,7 +1549,21 @@ function renderCommodityLeanBar(data) {
         // Kalshi market must be pricing the same side (if available) — no cross-direction highlights
         const kalshiAgrees = kalshiCentsDisplay == null ||
           (histYesNo === 'YES' ? kalshiCentsDisplay >= 50 : kalshiCentsDisplay < 50);
-        if (avgLeanHist >= 67 && consistencyHist >= 75 && priceAgrees && kalshiAgrees) {
+        // Tier 1: avg lean ≥ threshold (slider) + consistency ≥75% + price/Kalshi agree
+        const tier1 = avgLeanHist >= _leanThreshold && consistencyHist >= 75 && priceAgrees && kalshiAgrees;
+        // Tier 2: Kalshi price ≥90% on the dominant side + consistency ≥75% + all direction checks agree
+        // (Kalshi itself is extremely confident — no lean threshold needed)
+        const kalshiDomPct = kalshiCentsDisplay != null
+          ? (kalshiCentsDisplay >= 50 ? kalshiCentsDisplay : 100 - kalshiCentsDisplay)
+          : null;
+        const kalshiDomSide = kalshiCentsDisplay != null
+          ? (kalshiCentsDisplay >= 50 ? 'YES' : 'NO')
+          : null;
+        const tier2 = kalshiDomPct != null && kalshiDomPct >= 90 &&
+          consistencyHist >= 75 &&
+          kalshiDomSide === histYesNo &&
+          priceAgrees;
+        if (tier1 || tier2) {
           isHotSignal = true;
           hotDir = histYesNo;
         }
@@ -1590,6 +1654,13 @@ function renderCommodityLeanBar(data) {
 // ---------- lean bar quick-trade ----------
 
 let _leanBarStakeDollars = 1;
+let _leanThreshold = 55;
+
+function leanThresholdChange(val) {
+  _leanThreshold = Math.max(50, Math.min(85, Number(val)));
+  const label = document.getElementById('lean-threshold-value');
+  if (label) label.textContent = `${_leanThreshold}%`;
+}
 
 function leanBarStakeAdj(delta) {
   _leanBarStakeDollars = Math.max(1, Math.min(100, _leanBarStakeDollars + delta));
