@@ -4140,6 +4140,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'paperStartingBalanceDollars',
   'dailyLossLimitDollars',
   'manualStopLossCents',
+  'manualStopFreefallCents', // if bid drops this many ¢ past the stop level, bypass recovery window. 0 = off
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -5420,6 +5421,7 @@ class TradingBot {
       insuranceOverflowDollars: INSURANCE_OVERFLOW_DEFAULT,
       dailyLossLimitDollars: DAILY_LOSS_LIMIT_DEFAULT_DOLLARS, // kill-switch: halt new entries when day P&L hits this loss
       manualStopLossCents: MANUAL_STOP_LOSS_DEFAULT_CENTS, // stop-loss for lean-bar quick manual trades
+      manualStopFreefallCents: 0, // bypass recovery window if bid falls this far past stop. 0 = off
       paperStartingBalanceDollars: 100, // trading bankroll (also the capital backing paper trades)
       mode: 'paper', // 'paper' | 'live'
       liveAuthorized: false,
@@ -10239,11 +10241,48 @@ class TradingBot {
         !isManualTrade(trade) &&
         Number.isFinite(entry) &&
         stopLevel >= entry;
+
+      // Manual trades: require a sustained breach before firing — blips on a thin
+      // book at 8+ minutes left should not stop you out. Confirm window scales
+      // down to zero as settlement approaches so there's no hesitation when it matters.
+      // Freefall override: if bid has crashed more than manualStopFreefallCents past the
+      // stop level, skip the window and fire immediately — it's a real collapse, not noise.
+      if (isManualTrade(trade)) {
+        const freefallCents = Number(this.config.manualStopFreefallCents);
+        const freefallActive = Number.isFinite(freefallCents) && freefallCents > 0;
+        const isFreefall = freefallActive && (stopLevel - heldSideBidCents) >= freefallCents;
+        const confirmSec = isFreefall ? 0 :
+          minutesRemaining > 5 ? 90 :
+          minutesRemaining > 2 ? 30 :
+          0;
+        if (confirmSec > 0) {
+          if (!Number.isFinite(Number(trade._manualStopBreachedSince))) {
+            trade._manualStopBreachedSince = now;
+            this._persist();
+          }
+          const breachedMs = now - Number(trade._manualStopBreachedSince);
+          if (breachedMs < confirmSec * 1000) {
+            const secsLeft = ((confirmSec * 1000 - breachedMs) / 1000).toFixed(1);
+            this.lastDecision = `[manual-stop] ${trade.symbol} bid=${heldSideBidCents}¢ ≤ stop=${stopLevel}¢ — confirming ${confirmSec}s (${secsLeft}s left, ${minutesRemaining.toFixed(1)}m to settle).`;
+            return;
+          }
+        }
+        if (isFreefall) {
+          this.lastDecision = `[manual-stop] freefall: bid=${heldSideBidCents}¢ is ${stopLevel - heldSideBidCents}¢ past stop=${stopLevel}¢ on ${trade.symbol} — firing immediately.`;
+        }
+      } else if (Number.isFinite(Number(trade._manualStopBreachedSince))) {
+        delete trade._manualStopBreachedSince;
+      }
+
       const stopFill = this.config.mode === 'paper' ? stopLevel : heldSideBidCents;
       await this._closePosition(trade, stopFill, beStop ? 'breakeven' : 'stop_loss', {
         liveSellPriceCents: heldSideBidCents,
       });
       return;
+    } else if (isManualTrade(trade) && Number.isFinite(Number(trade._manualStopBreachedSince))) {
+      // Bid recovered above stop — clear the breach stamp.
+      delete trade._manualStopBreachedSince;
+      this._persist();
     }
 
     // Manual trades: bank at near-certain (≥97¢ by default), or auto-cashout near settlement end.
