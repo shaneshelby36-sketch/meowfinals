@@ -4146,7 +4146,7 @@ const EDITABLE_NUMERIC_FIELDS = [
 // DAILY LOSS LIMIT — change this number to adjust the default kill-switch level.
 // Set to 0 in config to disable entirely.
 // ─────────────────────────────────────────────────────────────────────────────
-const DAILY_LOSS_LIMIT_DEFAULT_DOLLARS = 5.00;
+const DAILY_LOSS_LIMIT_DEFAULT_DOLLARS = 0; // off by default
 
 /** Default arm ($10) / floor ($6) for insurance hysteresis; soft fill ceiling ($15). */
 const INSURANCE_ARM_DEFAULT = 10;

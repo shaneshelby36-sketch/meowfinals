@@ -1915,8 +1915,8 @@ async function refreshBotStatus() {
       chips.push(chip('Overdue (force-settling)', data.overdueOpenCount));
     }
     const capital = data.capital;
-    if (capital && data.config.mode === 'live') {
-      chips.push(chip('Kalshi available', capital.liveAvailableCents == null ? 'Checking…' : `$${(capital.liveAvailableCents / 100).toFixed(2)}`));
+    if (capital && capital.liveAvailableCents != null) {
+      chips.push(chip('Kalshi available', `$${(capital.liveAvailableCents / 100).toFixed(2)}`));
     }
     if (data.lastDecision) chips.push(chip('Decision', data.lastDecision));
     // Show/hide the daily loss reset button based on halt state.

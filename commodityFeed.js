@@ -95,26 +95,27 @@ class CommodityFeed extends EventEmitter {
       try {
         const url = `${POLYGON_REST_BASE}/v2/snapshot/locale/global/markets/forex/tickers/${encodeURIComponent(ticker)}?apiKey=${this.apiKey}`;
         const res = await fetch(url, { headers: { 'User-Agent': 'crypto-prediction-engine' } });
-        if (res.ok) {
-          const data = await res.json();
+        const data = await res.json().catch(() => null);
+        console.log(`[commodity-feed] snapshot ${ticker} status=${res.status} data=${JSON.stringify(data).slice(0, 200)}`);
+        if (res.ok && data) {
           const snap = data.ticker && data.ticker.day;
           const fmv = data.ticker && data.ticker.fmv;
           if (Number.isFinite(fmv) && fmv > 0) return fmv;
           if (snap && Number.isFinite(snap.c) && snap.c > 0) return snap.c;
         }
-      } catch (_) {}
+      } catch (e) { console.log(`[commodity-feed] snapshot error ${ticker}: ${e.message}`); }
       // Try 2: last-minute aggregate bar close price.
       try {
-        const url = `${POLYGON_REST_BASE}/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/minute/${
-          new Date(Date.now() - 5 * 60_000).toISOString().slice(0, 10)
-        }/${new Date().toISOString().slice(0, 10)}?adjusted=false&sort=desc&limit=1&apiKey=${this.apiKey}`;
+        const today = new Date().toISOString().slice(0, 10);
+        const url = `${POLYGON_REST_BASE}/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/minute/${today}/${today}?adjusted=false&sort=desc&limit=1&apiKey=${this.apiKey}`;
         const res = await fetch(url, { headers: { 'User-Agent': 'crypto-prediction-engine' } });
-        if (res.ok) {
-          const data = await res.json();
+        const data = await res.json().catch(() => null);
+        console.log(`[commodity-feed] aggs ${ticker} status=${res.status} data=${JSON.stringify(data).slice(0, 200)}`);
+        if (res.ok && data) {
           const bar = Array.isArray(data.results) && data.results[0];
           if (bar && Number.isFinite(bar.c) && bar.c > 0) return bar.c;
         }
-      } catch (_) {}
+      } catch (e) { console.log(`[commodity-feed] aggs error ${ticker}: ${e.message}`); }
       return null;
     };
 
@@ -124,10 +125,11 @@ class CommodityFeed extends EventEmitter {
         if (!ticker) continue;
         try {
           const price = await fetchPrice(ticker);
+          console.log(`[commodity-feed] poll ${sym} (${ticker}) → price=${price}`);
           if (price != null) {
             this.emit('trade', { productId: sym, price, size: 1, time: Date.now() });
           }
-        } catch (_) {}
+        } catch (e) { console.log(`[commodity-feed] poll error ${sym}: ${e.message}`); }
         await sleep(400);
       }
     };
