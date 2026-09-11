@@ -10214,6 +10214,9 @@ class TradingBot {
       return;
     }
 
+    if (isManualTrade(trade)) {
+      console.log(`[manual-stop] ${trade.symbol} bid=${heldSideBidCents} stop=${stopLevel} peak=${trade.peakHeldBidCents} entry=${trade.entryPriceCents} pendingForce=${trade.pendingForceExit || 'none'}`);
+    }
     if (heldSideBidCents != null && stopLevel != null && heldSideBidCents <= stopLevel) {
       // Trigger on the live bid. Paper books the stop level (entry − drop).
       // Live sells at the real bid — markets don't owe you the stop price.
@@ -11470,7 +11473,7 @@ class TradingBot {
     ));
     const closeTime = Number(windowCloseTime) > 0 ? Number(windowCloseTime) : Date.now() + 15 * 60 * 1000;
 
-    const isLive = this.config.mode === 'live' && this.client && this.client.hasCredentials;
+    const isLive = this.client && this.client.hasCredentials;
 
     let actualEntry = entry;
     let liveOrderId = null;
@@ -11485,7 +11488,7 @@ class TradingBot {
         // Re-quote the live ask before each attempt.
         const freshAsk = await this._refreshLiveEntryAskCents(String(ticker).toUpperCase(), s).catch(() => null);
         const buyPrice = Math.min(99, Math.max(1, Math.round(
-          Number.isFinite(freshAsk) ? freshAsk + attempt : entry + attempt
+          Number.isFinite(freshAsk) ? freshAsk + attempt * 2 : entry + attempt * 2
         )));
         try {
           const order = await this.client.createOrder({
