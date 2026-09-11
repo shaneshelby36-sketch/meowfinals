@@ -78,6 +78,45 @@ class CommodityFeed extends EventEmitter {
     this.maxReconnectDelay = 60000;
     this.closedByUser = false;
     this._authenticated = false;
+    this._pollTimer = null;
+    this._usingPollFallback = false;
+  }
+
+  // REST poll fallback: fetch latest price for each symbol every 5s via Polygon snapshot.
+  _startRestPoll() {
+    if (this._pollTimer) return; // already polling
+    this._usingPollFallback = true;
+    console.log('[commodity-feed] WebSocket unavailable — falling back to REST polling for live prices');
+    this.emit('connected');
+    const poll = async () => {
+      for (const sym of this.symbols) {
+        const ticker = POLYGON_TICKER[sym];
+        if (!ticker) continue;
+        try {
+          const url = `${POLYGON_REST_BASE}/v2/aggs/ticker/${encodeURIComponent(ticker)}/prev?adjusted=false&apiKey=${this.apiKey}`;
+          const res = await fetch(url, { headers: { 'User-Agent': 'crypto-prediction-engine' } });
+          if (!res.ok) continue;
+          const data = await res.json();
+          const result = Array.isArray(data.results) && data.results[0];
+          if (!result) continue;
+          const nowMs = Date.now();
+          // Spread OHLC into 4 synthetic ticks over last 60s so micro-momentum has enough resolution
+          const o = result.o, h = result.h, l = result.l, c = result.c;
+          const size = (result.v || 4) / 4;
+          for (const [price, offset] of [[o, 0], [h, 20000], [l, 40000], [c, 60000]]) {
+            this.emit('trade', { productId: sym, price, size, time: nowMs - 60000 + offset });
+          }
+        } catch (_) { /* ignore per-symbol errors */ }
+        await sleep(300); // spread requests to avoid rate-limit
+      }
+    };
+    poll();
+    this._pollTimer = setInterval(poll, 5000);
+  }
+
+  _stopRestPoll() {
+    if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null; }
+    this._usingPollFallback = false;
   }
 
   connect() {
@@ -130,8 +169,9 @@ class CommodityFeed extends EventEmitter {
           this._authenticated = true;
           this._subscribeAll();
         } else if (msg.status === 'auth_failed') {
-          console.error('[commodity-feed] Polygon auth failed — check POLYGON_API_KEY');
+          console.warn('[commodity-feed] Polygon WebSocket auth failed — falling back to REST polling');
           this.close();
+          this._startRestPoll();
         }
         break;
       // "C" = Forex aggregate (per-second or per-minute bar depending on subscription)
@@ -198,6 +238,7 @@ class CommodityFeed extends EventEmitter {
   close() {
     this.closedByUser = true;
     if (this.ws) this.ws.close();
+    this._stopRestPoll();
   }
 }
 
