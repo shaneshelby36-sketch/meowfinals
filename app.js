@@ -780,6 +780,7 @@ async function fetchLatest() {
     renderAssetTabs(assetSymbols, data);
     renderCommodityLeanBar(data);
     checkGoAlerts(data);
+    checkEntryOpenAlerts(data);
     refreshBotStatus();
     renderUpdatedTime();
     setStatus('live', 'Live');
@@ -1051,7 +1052,64 @@ function checkGoAlerts(data) {
   }
 }
 
+// ── Entry-open alert (≤5 min remaining) ──────────────────────────────────────
+// Plays a distinctive two-tone "entry open" chime the first time a symbol
+// crosses into the ≤5-minute window. Resets when the window closes/goes stale.
+const _leanEntryOpenState = {}; // sym → 'locked' | 'open' | 'stale'
 
+function playEntryOpenSound() {
+  try {
+    const ctx = _ensureGoAudio();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    // Two-tone descending pulse: G5 (784) → D5 (587) — distinctly different from
+    // the GO alert's ascending three-tone arpeggio.
+    const notes = [
+      { freq: 784, t: 0,    dur: 0.18 },
+      { freq: 587, t: 0.22, dur: 0.28 },
+    ];
+    notes.forEach(({ freq, t, dur }) => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + t);
+      gain.gain.setValueAtTime(0.0001, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.6, now + t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + t + dur);
+      osc.start(now + t);
+      osc.stop(now + t + dur + 0.05);
+    });
+  } catch (_) {}
+}
+
+function checkEntryOpenAlerts(data) {
+  const ENTRY_OPEN_MS = 10 * 60 * 1000; // ≤10 min remaining = entry window open
+  const now = Date.now();
+  for (const { sym } of ALL_LEAN_SYMS) {
+    const d = data && data[sym];
+    const closeTime = d && d.targetCloseTime ? Number(d.targetCloseTime) : null;
+    const isStale = !closeTime || now > closeTime;
+    if (isStale) {
+      _leanEntryOpenState[sym] = 'stale';
+      continue;
+    }
+    const msLeft = closeTime - now;
+    const isOpen = msLeft <= ENTRY_OPEN_MS;
+    const prev = _leanEntryOpenState[sym];
+    if (isOpen) {
+      // Transition from locked→open: fire the chime once
+      if (prev !== 'open' && prev !== undefined) {
+        playEntryOpenSound();
+        console.log(`[entry-open] ${sym} crossed into ≤5 min — chime fired`);
+      }
+      _leanEntryOpenState[sym] = 'open';
+    } else {
+      _leanEntryOpenState[sym] = 'locked';
+    }
+  }
+}
 
 const COMMO_SYMS = [
   { sym: 'GOLD',   id: 'commo-lean-gold' },
@@ -1462,27 +1520,34 @@ function renderCommodityLeanBar(data) {
     const yesPct = kalshiCentsDisplay != null ? kalshiCentsDisplay : null;
     const noPct  = yesPct != null ? 100 - yesPct : null;
     const closeAttr = d.targetCloseTime ? `data-close="${Number(d.targetCloseTime)}"` : '';
-    const yesHot = isHotSignal && hotDir === 'YES';
-    const noHot  = isHotSignal && hotDir === 'NO';
+    // Entry lock: buttons disabled (dimmed + countdown) when >5 min remains
+    const ctMs = d.targetCloseTime ? Number(d.targetCloseTime) : null;
+    const msLeftNow = ctMs ? ctMs - Date.now() : null;
+    const entryLocked = msLeftNow != null && msLeftNow > 10 * 60 * 1000;
+    const lockMinsLeft = entryLocked ? Math.ceil(msLeftNow / 60000) : null;
+    const yesHot = !entryLocked && isHotSignal && hotDir === 'YES';
+    const noHot  = !entryLocked && isHotSignal && hotDir === 'NO';
     const tradeButtons = ticker && !isStale && yesPct != null ? `
       <div style="display:flex;gap:4px;width:100%;margin-top:4px;">
         <button class="lqt-yes-btn"
           data-sym="${sym}" data-ticker="${ticker}"
           data-price="${yesPct}" ${closeAttr}
-          style="flex:1;background:${yesHot ? '#064e3b' : '#052e16'};border:${yesHot ? '2px solid #22c55e' : '1px solid #166534'};border-radius:6px;
-                 color:#22c55e;font-weight:800;font-size:13px;padding:9px 0;
-                 cursor:pointer;line-height:1;min-width:0;touch-action:manipulation;
+          ${entryLocked ? 'data-locked="1"' : ''}
+          style="flex:1;background:${entryLocked ? '#0d1117' : yesHot ? '#064e3b' : '#052e16'};border:${yesHot ? '2px solid #22c55e' : '1px solid #166534'};border-radius:6px;
+                 color:${entryLocked ? '#30363d' : '#22c55e'};font-weight:800;font-size:13px;padding:9px 0;
+                 cursor:${entryLocked ? 'not-allowed' : 'pointer'};line-height:1;min-width:0;touch-action:manipulation;
                  ${yesHot ? 'box-shadow:0 0 6px 1px rgba(34,197,94,0.5);' : ''}">
-          YES ${yesPct}%${yesHot ? ' ⚡' : ''}
+          ${entryLocked ? `🔒 ${lockMinsLeft}m` : `YES ${yesPct}%${yesHot ? ' ⚡' : ''}`}
         </button>
         <button class="lqt-no-btn"
           data-sym="${sym}" data-ticker="${ticker}"
           data-price="${noPct}" ${closeAttr}
-          style="flex:1;background:${noHot ? '#450a0a' : '#2d0a0a'};border:${noHot ? '2px solid #ef4444' : '1px solid #7f1d1d'};border-radius:6px;
-                 color:#ef4444;font-weight:800;font-size:13px;padding:9px 0;
-                 cursor:pointer;line-height:1;min-width:0;touch-action:manipulation;
+          ${entryLocked ? 'data-locked="1"' : ''}
+          style="flex:1;background:${entryLocked ? '#0d1117' : noHot ? '#450a0a' : '#2d0a0a'};border:${noHot ? '2px solid #ef4444' : '1px solid #7f1d1d'};border-radius:6px;
+                 color:${entryLocked ? '#30363d' : '#ef4444'};font-weight:800;font-size:13px;padding:9px 0;
+                 cursor:${entryLocked ? 'not-allowed' : 'pointer'};line-height:1;min-width:0;touch-action:manipulation;
                  ${noHot ? 'box-shadow:0 0 6px 1px rgba(239,68,68,0.5);' : ''}">
-          NO ${noPct}%${noHot ? ' ⚡' : ''}
+          ${entryLocked ? `🔒 ${lockMinsLeft}m` : `NO ${noPct}%${noHot ? ' ⚡' : ''}`}
         </button>
       </div>` : '';
 
@@ -1550,6 +1615,22 @@ function wireLeanBarQuickTrade() {
     const btn = e.target.closest('.lqt-yes-btn, .lqt-no-btn');
     if (!btn) return;
     e.stopPropagation();
+
+    // Hard block: >5 min remaining — buttons are locked
+    if (btn.dataset.locked === '1') {
+      const rawClose = btn.dataset.close;
+      const msLeft = rawClose ? Number(rawClose) - Date.now() : null;
+      const minsLeft = msLeft != null ? Math.ceil(msLeft / 60000) : '?';
+      btn.textContent = `🔒 ${minsLeft}m`;
+      setTimeout(() => {
+        // restore label from price data since original text is gone
+        const p = parseInt(btn.dataset.price, 10);
+        if (Number.isFinite(p)) {
+          btn.textContent = btn.classList.contains('lqt-yes-btn') ? `YES ${p}%` : `NO ${p}%`;
+        }
+      }, 800);
+      return;
+    }
 
     const side = btn.classList.contains('lqt-yes-btn') ? 'yes' : 'no';
     const sym  = btn.dataset.sym;
