@@ -1420,7 +1420,29 @@ function renderCommodityLeanBar(data) {
          </div>`
       : '';
 
-    cell.style.outline = '';
+    // ── High-conviction highlight ──────────────────────────────────────────────
+    // Fires when rolling history shows avg held-side lean ≥75% AND consistency
+    // ≥75% — no mixed direction. Does not require goSignal GO.
+    let isHotSignal = false;
+    let hotDir = null;
+    if (!isStale) {
+      const hist = _leanHistory[sym];
+      if (hist && hist.length >= 5) {
+        const last = hist[hist.length - 1];
+        const heldDir = last.dir || (last.up >= 50 ? 'UP' : 'DOWN');
+        const heldVals = hist.map((h) => heldDir === 'UP' ? h.up : h.down);
+        const avgLeanHist = heldVals.reduce((a, b) => a + b, 0) / heldVals.length;
+        const matchCount = hist.filter((h) => h.dir === heldDir).length;
+        const consistencyHist = (matchCount / hist.length) * 100;
+        if (avgLeanHist >= 75 && consistencyHist >= 75) {
+          isHotSignal = true;
+          hotDir = heldDir === 'UP' ? 'YES' : 'NO';
+        }
+      }
+    }
+
+    cell.style.outline = isHotSignal ? '2px solid #22c55e' : '';
+    cell.style.boxShadow = isHotSignal ? '0 0 8px 2px rgba(34,197,94,0.35)' : '';
 
     const microPct = snap && snap.microMomentumPct != null ? snap.microMomentumPct : null;
     const microHtml = (() => {
@@ -1437,27 +1459,37 @@ function renderCommodityLeanBar(data) {
     const yesPct = kalshiCentsDisplay != null ? kalshiCentsDisplay : null;
     const noPct  = yesPct != null ? 100 - yesPct : null;
     const closeAttr = d.targetCloseTime ? `data-close="${Number(d.targetCloseTime)}"` : '';
+    const yesHot = isHotSignal && hotDir === 'YES';
+    const noHot  = isHotSignal && hotDir === 'NO';
     const tradeButtons = ticker && !isStale && yesPct != null ? `
       <div style="display:flex;gap:4px;width:100%;margin-top:4px;">
         <button class="lqt-yes-btn"
           data-sym="${sym}" data-ticker="${ticker}"
           data-price="${yesPct}" ${closeAttr}
-          style="flex:1;background:#052e16;border:1px solid #166534;border-radius:6px;
+          style="flex:1;background:${yesHot ? '#064e3b' : '#052e16'};border:${yesHot ? '2px solid #22c55e' : '1px solid #166534'};border-radius:6px;
                  color:#22c55e;font-weight:800;font-size:13px;padding:9px 0;
-                 cursor:pointer;line-height:1;min-width:0;touch-action:manipulation;">
-          YES ${yesPct}%
+                 cursor:pointer;line-height:1;min-width:0;touch-action:manipulation;
+                 ${yesHot ? 'box-shadow:0 0 6px 1px rgba(34,197,94,0.5);' : ''}">
+          YES ${yesPct}%${yesHot ? ' ⚡' : ''}
         </button>
         <button class="lqt-no-btn"
           data-sym="${sym}" data-ticker="${ticker}"
           data-price="${noPct}" ${closeAttr}
-          style="flex:1;background:#2d0a0a;border:1px solid #7f1d1d;border-radius:6px;
+          style="flex:1;background:${noHot ? '#450a0a' : '#2d0a0a'};border:${noHot ? '2px solid #ef4444' : '1px solid #7f1d1d'};border-radius:6px;
                  color:#ef4444;font-weight:800;font-size:13px;padding:9px 0;
-                 cursor:pointer;line-height:1;min-width:0;touch-action:manipulation;">
-          NO ${noPct}%
+                 cursor:pointer;line-height:1;min-width:0;touch-action:manipulation;
+                 ${noHot ? 'box-shadow:0 0 6px 1px rgba(239,68,68,0.5);' : ''}">
+          NO ${noPct}%${noHot ? ' ⚡' : ''}
         </button>
       </div>` : '';
 
+    const hotBanner = isHotSignal ? `
+      <div style="display:flex;align-items:center;gap:4px;background:#052e16;border:1px solid #16a34a;border-radius:3px;padding:2px 5px;margin-bottom:3px;">
+        <span style="color:#22c55e;font-size:10px;font-weight:800;letter-spacing:0.4px;">⚡ STRONG SIGNAL — trade ${hotDir}</span>
+      </div>` : '';
+
     cell.innerHTML = `
+      ${hotBanner}
       <div style="display:flex;align-items:center;gap:3px;flex-wrap:wrap;">
         ${agreeDot}
         <span style="color:${isStale ? '#57606a' : '#c9d1d9'};font-size:11px;font-weight:700;">${sym}</span>
