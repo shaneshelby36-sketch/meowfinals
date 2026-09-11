@@ -1437,7 +1437,7 @@ function renderCommodityLeanBar(data) {
         const histYesNo = heldDir === 'UP' ? 'YES' : 'NO';
         const priceAgrees = price == null || strike == null ||
           (histYesNo === 'YES' ? price >= strike : price < strike);
-        if (avgLeanHist >= 75 && consistencyHist >= 75 && priceAgrees) {
+        if (avgLeanHist >= 67 && consistencyHist >= 75 && priceAgrees) {
           isHotSignal = true;
           hotDir = histYesNo;
         }
