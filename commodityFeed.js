@@ -82,32 +82,53 @@ class CommodityFeed extends EventEmitter {
     this._usingPollFallback = false;
   }
 
-  // REST poll fallback: fetch live price for each symbol every 5s via Polygon last quote.
+  // REST poll fallback: fetch live price every 5s via Polygon snapshot → last-bar fallback.
   // Emits one tick at Date.now() per poll so the 30s VWAP windows fill with real timestamps.
   _startRestPoll() {
     if (this._pollTimer) return; // already polling
     this._usingPollFallback = true;
     console.log('[commodity-feed] WebSocket unavailable — falling back to REST polling for live prices');
     this.emit('connected');
+
+    const fetchPrice = async (ticker) => {
+      // Try 1: snapshot endpoint — most reliable on paid plans, gives live bid/ask/mid.
+      try {
+        const url = `${POLYGON_REST_BASE}/v2/snapshot/locale/global/markets/forex/tickers/${encodeURIComponent(ticker)}?apiKey=${this.apiKey}`;
+        const res = await fetch(url, { headers: { 'User-Agent': 'crypto-prediction-engine' } });
+        if (res.ok) {
+          const data = await res.json();
+          const snap = data.ticker && data.ticker.day;
+          const fmv = data.ticker && data.ticker.fmv;
+          if (Number.isFinite(fmv) && fmv > 0) return fmv;
+          if (snap && Number.isFinite(snap.c) && snap.c > 0) return snap.c;
+        }
+      } catch (_) {}
+      // Try 2: last-minute aggregate bar close price.
+      try {
+        const url = `${POLYGON_REST_BASE}/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/minute/${
+          new Date(Date.now() - 5 * 60_000).toISOString().slice(0, 10)
+        }/${new Date().toISOString().slice(0, 10)}?adjusted=false&sort=desc&limit=1&apiKey=${this.apiKey}`;
+        const res = await fetch(url, { headers: { 'User-Agent': 'crypto-prediction-engine' } });
+        if (res.ok) {
+          const data = await res.json();
+          const bar = Array.isArray(data.results) && data.results[0];
+          if (bar && Number.isFinite(bar.c) && bar.c > 0) return bar.c;
+        }
+      } catch (_) {}
+      return null;
+    };
+
     const poll = async () => {
       for (const sym of this.symbols) {
         const ticker = POLYGON_TICKER[sym];
         if (!ticker) continue;
         try {
-          // /v1/last_quote gives the live bid/ask — take mid as the price.
-          const url = `${POLYGON_REST_BASE}/v1/last_quote/currencies/${ticker.replace('C:', '')}?apiKey=${this.apiKey}`;
-          const res = await fetch(url, { headers: { 'User-Agent': 'crypto-prediction-engine' } });
-          if (!res.ok) continue;
-          const data = await res.json();
-          const last = data.last;
-          if (!last) continue;
-          const price = last.ask != null && last.bid != null
-            ? (last.ask + last.bid) / 2
-            : last.ask ?? last.bid ?? null;
-          if (price == null || price <= 0) continue;
-          this.emit('trade', { productId: sym, price, size: 1, time: Date.now() });
-        } catch (_) { /* ignore per-symbol errors */ }
-        await sleep(300); // spread requests to avoid rate-limit
+          const price = await fetchPrice(ticker);
+          if (price != null) {
+            this.emit('trade', { productId: sym, price, size: 1, time: Date.now() });
+          }
+        } catch (_) {}
+        await sleep(400);
       }
     };
     poll();
