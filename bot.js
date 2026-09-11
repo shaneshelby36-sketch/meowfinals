@@ -5203,7 +5203,7 @@ class TradingBot {
       minConfidence: 55, // engine confidence (0-100) required to act (Edge tab)
       stopLossCents: 23, // exit if held bid falls this many cents below entry
       takeProfitCents: 15, // exit if held bid rises this many cents above entry (see final-5 override)
-      nearCertainExitCents: 97, // if held bid reaches this, bank it — don't wait on settlement for the last few ¢
+      nearCertainExitCents: 96, // if held bid reaches this, bank it — don't wait on settlement for the last few ¢
       minEntryCents: 40, // never buy a side cheaper than this — blocks longshot lottery tickets
       maxEntryCents: EDGE_MAX_ENTRY_DEFAULT_CENTS, // edge: never buy richer than this
       edgePreCloseSmallLossCents: EDGE_PRE_CLOSE_SMALL_LOSS_DEFAULT_CENTS,
@@ -9097,17 +9097,21 @@ class TradingBot {
 
     const stopLevel = this._stopLevelCents(trade, now);
     const takeProfitLevel = this._takeProfitLevelCents(trade);
-    // ~97¢ = market basically sure — don't sit for settlement lag over 3¢.
+    // ~96¢ = market basically sure — don't sit for settlement lag over 4¢.
     const nearCertainExitCents = Number.isFinite(Number(this.config.nearCertainExitCents))
       ? Number(this.config.nearCertainExitCents)
-      : 97;
+      : 96;
+    // Use peak as fallback bid when live quote is momentarily null (thin market / stale tick).
+    const effectiveBidForNearCertain = heldSideBidCents != null
+      ? heldSideBidCents
+      : (Number.isFinite(trade.peakHeldBidCents) ? trade.peakHeldBidCents : null);
     const nearCertainHit =
-      heldSideBidCents != null &&
+      effectiveBidForNearCertain != null &&
       Number.isFinite(nearCertainExitCents) &&
       nearCertainExitCents > 0 &&
-      heldSideBidCents >= nearCertainExitCents &&
+      effectiveBidForNearCertain >= nearCertainExitCents &&
       Number.isFinite(trade.entryPriceCents) &&
-      heldSideBidCents > trade.entryPriceCents;
+      effectiveBidForNearCertain > trade.entryPriceCents;
 
     const takeProfitHit =
       heldSideBidCents != null &&
