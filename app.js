@@ -1019,13 +1019,11 @@ function checkGoAlerts(data) {
     const priceGate = kalshiCents != null && kalshiCents >= 70;
 
     let signal = 'WAIT';
-    if (!tooLate && weakeningCount < 2 && allAgree) {
-      if (!tooEarly && allLeanOk && confOk) {
+    if (!tooLate && !tooEarly && weakeningCount < 2 && allAgree) {
+      if (allLeanOk && confOk) {
         signal = 'GO';
-      } else if (!tooEarly && priceGate) {
+      } else if (priceGate) {
         signal = 'GO';
-      } else if (tooEarly && allLeanStrong && confOk && weakeningCount === 0) {
-        signal = 'EARLY GO';
       }
     }
 
@@ -1037,7 +1035,7 @@ function checkGoAlerts(data) {
     // Fire on transition TO GO. On very first load (prev===undefined) we skip
     // silently so we don't blast the user immediately on page load —
     // but on the second cycle (prev is now set) transitions work normally.
-    if (!firedThisCycle && (signal === 'GO' || signal === 'EARLY GO') && prev !== signal && prev !== undefined && prev !== 'init') {
+    if (!firedThisCycle && signal === 'GO' && prev !== signal && prev !== undefined && prev !== 'init') {
       const lastFired = _goAlertLastFired[sym] || 0;
       if (now - lastFired >= GO_ALERT_COOLDOWN_MS) {
         _goAlertLastFired[sym] = now;
@@ -1301,16 +1299,9 @@ function renderCommodityLeanBar(data) {
       // ≥70¢ gate — if Kalshi price is already this high, likely holds to settle
       const kalshiCents = d.kalshiPriceCents != null ? Number(d.kalshiPriceCents) : null;
       const priceGate = kalshiCents != null && kalshiCents >= 70;
-      // Early-entry edge: all 3 leans ≥80%, all agree, not weakening — strong enough
-      // to consider entering before the normal 6.5-min window opens
-      const earlyEdge = tooEarly && allLeanStrong && allAgree && weakeningCount === 0 && confOk;
-
-      if (tooEarly && !earlyEdge) {
+      if (tooEarly) {
         goSignal = 'EARLY'; goColor = '#57606a';
         goTitle = 'Too early — wait until 6.5 min or less remain';
-      } else if (earlyEdge) {
-        goSignal = 'EARLY GO'; goColor = '#06b6d4';
-        goTitle = `All 3 windows ≥80% lean + conf ${avgConf}% — possible early edge (${agreeDir})`;
       } else if (tooLate) {
         goSignal = 'LATE'; goColor = '#57606a';
         goTitle = 'Too late — less than 2 min left';

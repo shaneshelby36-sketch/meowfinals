@@ -82,41 +82,25 @@ class CommodityFeed extends EventEmitter {
     this._usingPollFallback = false;
   }
 
-  // REST poll fallback: fetch live price every 5s via Polygon snapshot → last-bar fallback.
-  // Emits one tick at Date.now() per poll so the 30s VWAP windows fill with real timestamps.
+  // REST poll fallback: fetch the latest 1-min bar every 5s and spread its OHLC
+  // as 4 synthetic ticks evenly across the last 60s — same approach as the CA
+  // WebSocket handler. This guarantees both the 0-30s and 30-60s VWAP windows
+  // always have data, so micro-momentum (bp) can be calculated.
   _startRestPoll() {
     if (this._pollTimer) return; // already polling
     this._usingPollFallback = true;
-    console.log('[commodity-feed] WebSocket unavailable — falling back to REST polling for live prices');
+    console.log('[commodity-feed] WebSocket unavailable — falling back to REST polling for commodity prices');
     this.emit('connected');
 
-    const fetchPrice = async (ticker) => {
-      // Try 1: snapshot endpoint — most reliable on paid plans, gives live bid/ask/mid.
-      try {
-        const url = `${POLYGON_REST_BASE}/v2/snapshot/locale/global/markets/forex/tickers/${encodeURIComponent(ticker)}?apiKey=${this.apiKey}`;
-        const res = await fetch(url, { headers: { 'User-Agent': 'crypto-prediction-engine' } });
-        const data = await res.json().catch(() => null);
-        console.log(`[commodity-feed] snapshot ${ticker} status=${res.status} data=${JSON.stringify(data).slice(0, 200)}`);
-        if (res.ok && data) {
-          const snap = data.ticker && data.ticker.day;
-          const fmv = data.ticker && data.ticker.fmv;
-          if (Number.isFinite(fmv) && fmv > 0) return fmv;
-          if (snap && Number.isFinite(snap.c) && snap.c > 0) return snap.c;
-        }
-      } catch (e) { console.log(`[commodity-feed] snapshot error ${ticker}: ${e.message}`); }
-      // Try 2: last-minute aggregate bar close price.
-      try {
-        const today = new Date().toISOString().slice(0, 10);
-        const url = `${POLYGON_REST_BASE}/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/minute/${today}/${today}?adjusted=false&sort=desc&limit=1&apiKey=${this.apiKey}`;
-        const res = await fetch(url, { headers: { 'User-Agent': 'crypto-prediction-engine' } });
-        const data = await res.json().catch(() => null);
-        console.log(`[commodity-feed] aggs ${ticker} status=${res.status} data=${JSON.stringify(data).slice(0, 200)}`);
-        if (res.ok && data) {
-          const bar = Array.isArray(data.results) && data.results[0];
-          if (bar && Number.isFinite(bar.c) && bar.c > 0) return bar.c;
-        }
-      } catch (e) { console.log(`[commodity-feed] aggs error ${ticker}: ${e.message}`); }
-      return null;
+    const fetchBar = async (ticker) => {
+      const today = new Date().toISOString().slice(0, 10);
+      const url = `${POLYGON_REST_BASE}/v2/aggs/ticker/${encodeURIComponent(ticker)}/range/1/minute/${today}/${today}?adjusted=false&sort=desc&limit=1&apiKey=${this.apiKey}`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'crypto-prediction-engine' } });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => null);
+      const bar = data && Array.isArray(data.results) && data.results[0];
+      if (!bar || !Number.isFinite(bar.c) || bar.c <= 0) return null;
+      return bar;
     };
 
     const poll = async () => {
@@ -124,12 +108,21 @@ class CommodityFeed extends EventEmitter {
         const ticker = POLYGON_TICKER[sym];
         if (!ticker) continue;
         try {
-          const price = await fetchPrice(ticker);
-          console.log(`[commodity-feed] poll ${sym} (${ticker}) → price=${price}`);
-          if (price != null) {
-            this.emit('trade', { productId: sym, price, size: 1, time: Date.now() });
+          const bar = await fetchBar(ticker);
+          if (bar) {
+            // Spread OHLC as 4 ticks across the last 60s so both VWAP windows
+            // (0-30s and 30-60s) always have data for micro-momentum calculation.
+            const nowMs = Date.now();
+            const o = bar.o ?? bar.c;
+            const h = bar.h ?? bar.c;
+            const l = bar.l ?? bar.c;
+            const c = bar.c;
+            const size = (bar.v || 4) / 4;
+            for (const [price, offset] of [[o, 55000], [h, 40000], [l, 20000], [c, 0]]) {
+              this.emit('trade', { productId: sym, price, size, time: nowMs - offset });
+            }
           }
-        } catch (e) { console.log(`[commodity-feed] poll error ${sym}: ${e.message}`); }
+        } catch (_) {}
         await sleep(400);
       }
     };
