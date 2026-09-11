@@ -3411,7 +3411,7 @@ function modelKalshiFavoriteGate({ market, side, priceCents, config = {} } = {})
 /** Default model-entry cutoff. It must sit outside the late-exit zone with margin. */
 const MODEL_MIN_MINUTES_TO_OPEN_DEFAULT = 2.5;
 /** Max minutes remaining allowed for a new entry. 0 = off (no early-entry block). */
-const MODEL_MAX_MINUTES_TO_OPEN_DEFAULT = 0;
+const MODEL_MAX_MINUTES_TO_OPEN_DEFAULT = 10;
 const MODEL_PEAK_TOUCH_TP_DEFAULT = 10;
 const MODEL_PEAK_TOUCH_WINDOW_DEFAULT = 2;
 /** Confidence required to allow entries below the normal min. */

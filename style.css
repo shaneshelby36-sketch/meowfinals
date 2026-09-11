@@ -1164,6 +1164,25 @@ body[data-view-mode="bot"] .asset-picker {
 .bot-log-row.kind-error .bot-log-msg { color: var(--down); }
 .bot-log-row.kind-gate .bot-log-msg { color: var(--wait); }
 .bot-log-row.kind-skip .bot-log-msg { color: var(--muted, #888); }
+.bot-log-row.kind-manual {
+  border-left: 2px solid var(--wait, #d29922);
+  padding-left: 6px;
+  margin-left: -8px;
+}
+.trade-manual-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  letter-spacing: 0.06em;
+  color: var(--wait, #d29922);
+  border: 1px solid var(--wait, #d29922);
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-left: 5px;
+  vertical-align: middle;
+  opacity: 0.85;
+}
 
 /* Lean history panel */
 .bot-lean-history { margin-top: 12px; }

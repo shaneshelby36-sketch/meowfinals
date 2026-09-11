@@ -2282,11 +2282,14 @@ function buildTradeLogHtml(tradeLog, tradeLogTotal, { noCopy = false } = {}) {
       ]
         .filter(Boolean)
         .join(' · ');
+      const isManual = String(t.strategy || '').toLowerCase() === 'manual';
+      const manualBadge = isManual ? ` <span class="trade-manual-badge">MANUAL</span>` : '';
+      const rowKind = `kind-${t.status === 'open' ? 'open' : 'close'}${isManual ? ' kind-manual' : ''}`;
       return `
-        <div class="bot-log-row kind-${t.status === 'open' ? 'open' : 'close'}" data-log-id="${rowId}" data-copy-line="${escapeHtml(copyLine)}">
+        <div class="bot-log-row ${rowKind}" data-log-id="${rowId}" data-copy-line="${escapeHtml(copyLine)}">
           <span class="bot-log-time">${formatTradeTime(t.closedAt || t.openedAt)}</span>
           <span class="bot-log-msg">
-            <strong>${t.symbol || '?'} ${side}</strong>
+            <strong>${t.symbol || '?'} ${side}</strong>${manualBadge}
             ${status} · ${entry}${t.status === 'closed' ? ` → ${exit}` : ''}
             ${Number.isFinite(t.stakeDollars) ? ` · $${Number(t.stakeDollars).toFixed(2)}` : ''}${contractsNote}${conf}${leanNote}${peakNote}${troughNote}${beChaseNote}${minsLeftNote}${durationNote}${spreadNote}${fees}${gross}${skim}
             <span class="bot-log-sub">opened ${formatTradeTime(t.openedAt)}${t.mode ? ` · ${t.mode}` : ''}</span>
