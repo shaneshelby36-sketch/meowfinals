@@ -1622,6 +1622,46 @@ function wireLeanBarQuickTrade() {
   });
 }
 
+function wireCancelManualTrade() {
+  document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.lqt-cancel-btn');
+    if (!btn) return;
+    e.stopPropagation();
+
+    const tradeId = btn.dataset.tradeId;
+    if (!tradeId) return;
+
+    const origText = btn.textContent.trim();
+    btn.disabled = true;
+    btn.textContent = '…';
+
+    try {
+      const { engineUrl } = loadSettings();
+      const res = await fetch(`${engineUrl}/api/bot/manual-trade/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tradeId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
+      btn.style.background = '#052e16';
+      btn.style.color = '#22c55e';
+      btn.textContent = '✓ Cancelled';
+      setTimeout(() => fetchLatest(), 800);
+    } catch (err) {
+      btn.style.background = '#1a0000';
+      btn.textContent = '✗ ' + err.message;
+      console.error('[cancel-trade]', err.message);
+      setTimeout(() => {
+        btn.textContent = origText;
+        btn.disabled = false;
+        btn.style.background = '';
+        btn.style.color = '';
+      }, 2000);
+    }
+  });
+}
+
 function startPolling() {
   if (pollTimer) clearInterval(pollTimer);
   const { refreshSeconds } = loadSettings();
@@ -2143,6 +2183,13 @@ function buildOpenPositionsHtml(openTrades) {
         const col  = diffCents > 0 ? '#22c55e' : diffCents < 0 ? '#ef4444' : '#8b949e';
         pnlHtml = `<span style="color:${col};font-weight:700;font-size:12px;">${sign}${diffCents}¢ (${sign}$${diffDollars})</span>`;
       }
+      const cancelBtn = isManual
+        ? `<button class="lqt-cancel-btn" data-trade-id="${t.id}"
+              style="margin-top:6px;width:100%;background:#1a0000;border:1px solid #7f1d1d;border-radius:6px;
+                     color:#ef4444;font-weight:700;font-size:12px;padding:6px 0;cursor:pointer;touch-action:manipulation;">
+             ✕ Cancel trade
+           </button>`
+        : '';
       return `
         <div class="bot-position-row${isManual ? ' bot-position-manual' : ''}">
           <div class="bot-position-main">
@@ -2156,6 +2203,7 @@ function buildOpenPositionsHtml(openTrades) {
             ${isManual ? `<span style="color:#f59e0b;font-weight:700;">⚡ AUTO-STOP ARMED</span>` : `<span>Conf ${conf}</span>`}
           </div>
           ${t.holdReason ? `<div class="bot-position-hold">${escapeHtml(String(t.holdReason))}</div>` : ''}
+          ${cancelBtn}
         </div>`;
     })
     .join('');
@@ -5614,6 +5662,7 @@ window.addEventListener('DOMContentLoaded', () => {
   wireSettingsUI();
   wireBotUI();
   wireLeanBarQuickTrade();
+  wireCancelManualTrade();
   document.getElementById('open-windows-btn').addEventListener('click', openOtherWindows);
   registerServiceWorker();
   requestWakeLock();

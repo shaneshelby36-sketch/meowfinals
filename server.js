@@ -1003,6 +1003,19 @@ app.get("/", (req, res) => {
     }
   });
 
+  app.post('/api/bot/manual-trade/cancel', async (req, res) => {
+    if (!bot) {
+      res.status(404).json({ enabled: false, message: 'Bot is not enabled (set KALSHI_ENABLED=true).' });
+      return;
+    }
+    try {
+      const result = await bot.cancelManualTrade(req.body || {});
+      res.status(result.ok ? 200 : 400).json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: err.message || 'Internal error cancelling manual trade.' });
+    }
+  });
+
   const SYMBOL_TO_PRODUCT = {
     BTC: 'BTC-USD',
     XRP: 'XRP-USD',

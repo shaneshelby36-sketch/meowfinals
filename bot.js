@@ -11574,6 +11574,46 @@ class TradingBot {
   }
 
   /**
+   * Cancel an open manual trade by id. In live mode, sells the position on
+   * Kalshi at the current bid before removing it from the ledger.
+   */
+  async cancelManualTrade({ tradeId }) {
+    const id = String(tradeId || '');
+    if (!id) return { ok: false, error: 'tradeId is required' };
+
+    const trade = this.openTrades.find((t) => t.id === id);
+    if (!trade) return { ok: false, error: 'Trade not found or already closed' };
+    if (!isManualTrade(trade)) return { ok: false, error: 'Only manual trades can be cancelled this way' };
+
+    const isLive = this.client && this.client.hasCredentials;
+    const market = this._latestMarkets ? this._latestMarkets[trade.ticker] : null;
+    const liveBid = market ? this._heldSideBidCents(trade, market) : null;
+    const exitPrice = Number.isFinite(liveBid) ? liveBid : Number(trade.entryPriceCents);
+
+    if (isLive) {
+      try {
+        await this.client.createOrder({
+          ticker: String(trade.ticker).toUpperCase(),
+          side: String(trade.side).toLowerCase(),
+          action: 'sell',
+          count: trade.contracts,
+          priceCents: Math.max(1, Math.round(exitPrice) - 2),
+          timeInForce: 'immediate_or_cancel',
+        });
+      } catch (err) {
+        console.error(`[bot] cancel manual trade sell failed for ${trade.symbol}: ${err.message}`);
+        // Still close in ledger so it doesn't stay orphaned
+      }
+    }
+
+    await this._closePosition(trade, exitPrice, 'manual_cancel', { liveSellPriceCents: exitPrice });
+    const msg = `Manual trade cancelled: ${trade.symbol} ${String(trade.side).toUpperCase()} ${trade.contracts}ct @ ${Math.round(exitPrice)}¢`;
+    this._logActivity(msg, { kind: 'close', symbol: trade.symbol, side: trade.side, strategy: 'manual', tradeId: trade.id });
+    console.log(`[bot] ${msg}`);
+    return { ok: true, message: msg };
+  }
+
+  /**
    * predictions: the full result object from buildPredictions() — i.e. has
    * both .BTC and .XRP, each with .windows.w5/w10/w15. The bot trades
    * whichever one matches this.config.symbol, but will still manage
