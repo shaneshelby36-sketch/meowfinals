@@ -5455,6 +5455,7 @@ class TradingBot {
     this.ledger = loadLedger();
     this.calibration = loadCalibration();
     this.lastError = null;
+    this._lastPersistedError = null;
     this.lastDecision = 'Waiting for a prediction cycle.';
     // Live Kalshi strikes for the prediction engine (distance-to-target + session key).
     // Filled as markets are fetched; server merges these into buildPredictions.
@@ -6368,7 +6369,7 @@ class TradingBot {
   _haltTrading(reason) {
     if (this._inShadow) return false;
     const msg = String(reason || 'Bot stopped.');
-    this.lastError = msg;
+    this._lastPersistedError = this.lastError = msg;
     this.lastDecision = msg;
     if (!this.isRunning) {
       this._persist();
@@ -6475,7 +6476,7 @@ class TradingBot {
         `Wallet $${(wallet / 100).toFixed(2)} + Insurance $${(insurance / 100).toFixed(2)} stay locked` +
         (label ? ` — ${label}` : '') +
         '. New entries will resume automatically once funded.';
-    this.lastError = waitMessage;
+    this._lastPersistedError = this.lastError = waitMessage;
     this.lastDecision = waitMessage;
     return false;
   }
@@ -6494,7 +6495,7 @@ class TradingBot {
     });
     const removed = initialCount - this.ledger.trades.length;
     if (removed > 0) {
-      this.lastError = `Removed ${removed} invalid paper trade${removed === 1 ? '' : 's'} with no valid entry quote.`;
+      this._lastPersistedError = this.lastError = `Removed ${removed} invalid paper trade${removed === 1 ? '' : 's'} with no valid entry quote.`;
       this._persist();
     }
   }
@@ -8072,7 +8073,7 @@ class TradingBot {
 
         if (!soldOk) {
           const msg = (lastErr && lastErr.message) || 'sell failed';
-          this.lastError = `Failed live exit (${reason}) on ${trade.ticker}: ${msg}. Position left OPEN.`;
+          this._lastPersistedError = this.lastError = `Failed live exit (${reason}) on ${trade.ticker}: ${msg}. Position left OPEN.`;
           console.error('[bot]', this.lastError);
           if (forceRetry) {
             this._armPendingForceExit(trade, reason);
@@ -10661,7 +10662,7 @@ class TradingBot {
     // this guard an empty Kalshi quote could be stored as `null` and then
     // appear in the dashboard as e.g. "BTC @ NO null".
     if (!Number.isFinite(priceCents) || priceCents < 1 || priceCents > 99) {
-      this.lastError = `Skipped ${symbol} ${side || 'unknown'} entry: no valid Kalshi quote is available.`;
+      this._lastPersistedError = this.lastError = `Skipped ${symbol} ${side || 'unknown'} entry: no valid Kalshi quote is available.`;
       return false;
     }
     if (isBackupBotRole()) {
@@ -10728,7 +10729,7 @@ class TradingBot {
     }
     const closeAt = Number(closeTime);
     if (!Number.isFinite(closeAt) || closeAt <= Date.now() + 5000) {
-      this.lastError = `Skipped ${symbol} ${side || 'unknown'} entry: market close time is missing or already ending.`;
+      this._lastPersistedError = this.lastError = `Skipped ${symbol} ${side || 'unknown'} entry: market close time is missing or already ending.`;
       return false;
     }
     const isSettle = strategy === 'settle';
@@ -10957,7 +10958,7 @@ class TradingBot {
           ) {
             if (attempt === maxEntryAttempts - 1) {
               this._noteEntryMiss(symbol, null, closeAt, side);
-              this.lastError =
+              this._lastPersistedError = this.lastError =
                 `Skipped ${symbol} ${String(side).toUpperCase()} live entry: live ask ${freshAsk != null ? freshAsk + '¢' : 'n/a'} can't cross inside settle band ` +
                 `(would need ${workingPrice}¢). Focusing on other cryptos.`;
               this.lastDecision = this.lastError;
@@ -11136,7 +11137,7 @@ class TradingBot {
           coolMs < 60_000
             ? `~${Math.max(1, Math.round(coolMs / 1000))}s`
             : `~${Math.max(1, Math.round(coolMs / 60000))}m`;
-        this.lastError =
+        this._lastPersistedError = this.lastError =
           `Live entry on ${symbol} ${String(side).toUpperCase()} did not fill` +
           (lastErr ? ` (${lastErr.message})` : '') +
           ` — skipping this ${String(side).toUpperCase()} ${coolLabel} (miss #${miss.streak}); other cryptos/sides still open.`;
@@ -11536,7 +11537,7 @@ class TradingBot {
       }
       if (!soldOk) {
         const msg = (lastErr && lastErr.message) || 'buy failed';
-        this.lastError = `Manual trade failed: ${msg}`;
+        this._lastPersistedError = this.lastError = `Manual trade failed: ${msg}`;
         return { ok: false, error: `Manual buy failed on Kalshi: ${msg}` };
       }
     }
@@ -11649,7 +11650,7 @@ class TradingBot {
         this.livePortfolioValueCents = Number(balance.portfolio_value);
         this.liveBalanceUpdatedAt = Date.now();
       } catch (err) {
-        this.lastError = `Unable to refresh live balance: ${err.message}`;
+        this._lastPersistedError = this.lastError = `Unable to refresh live balance: ${err.message}`;
       }
     }
 
@@ -11694,7 +11695,7 @@ class TradingBot {
             `Wallet $${((Number(capital.reserveCents) || 0) / 100).toFixed(2)} + ` +
             `Insurance $${((Number(capital.insuranceCents) || 0) / 100).toFixed(2)} stay locked. ` +
             `New entries will resume automatically once funded.`;
-        this.lastError = waitMessage;
+        this._lastPersistedError = this.lastError = waitMessage;
         this.lastDecision = waitMessage;
         return;
       }
@@ -12047,7 +12048,7 @@ class TradingBot {
     try {
       market = await this._fetchLiveMarket(seriesTicker, 5000);
     } catch (err) {
-      this.lastError = `Failed to fetch Kalshi market for ${seriesTicker}: ${err.message}`;
+      this._lastPersistedError = this.lastError = `Failed to fetch Kalshi market for ${seriesTicker}: ${err.message}`;
       console.error('[bot]', this.lastError);
       return null;
     }
@@ -12088,7 +12089,7 @@ class TradingBot {
     const yesBid = Number(market.yes_bid);
     const yesAsk = Number(market.yes_ask);
     if (!Number.isFinite(yesBid) || !Number.isFinite(yesAsk) || yesBid < 1 || yesAsk > 99 || yesBid > yesAsk) {
-      this.lastError = `Skipped ${symbol}: Kalshi has no usable two-sided quote yet.`;
+      this._lastPersistedError = this.lastError = `Skipped ${symbol}: Kalshi has no usable two-sided quote yet.`;
       return null;
     }
 
@@ -12102,7 +12103,7 @@ class TradingBot {
     const side = edge > 0 ? 'yes' : 'no';
     const priceCents = side === 'yes' ? yesAsk : 100 - yesBid;
     if (!Number.isFinite(priceCents) || priceCents < 1 || priceCents > 99) {
-      this.lastError = `Skipped ${symbol}: selected ${side.toUpperCase()} price is unavailable.`;
+      this._lastPersistedError = this.lastError = `Skipped ${symbol}: selected ${side.toUpperCase()} price is unavailable.`;
       return null;
     }
     if (this._hasRecentEntryMiss(symbol, closeTime, side)) {
@@ -12519,7 +12520,7 @@ class TradingBot {
     try {
       market = await this._fetchLiveMarket(seriesTicker, 5000);
     } catch (err) {
-      this.lastError = `Failed to fetch Kalshi market for ${seriesTicker}: ${err.message}`;
+      this._lastPersistedError = this.lastError = `Failed to fetch Kalshi market for ${seriesTicker}: ${err.message}`;
       console.error('[bot]', this.lastError);
       say(this.lastError);
       return null;
@@ -12639,7 +12640,7 @@ class TradingBot {
     }
     const priceCents = side === 'yes' ? yesAsk : noAsk;
     if (!Number.isFinite(priceCents) || priceCents < 1 || priceCents > 99) {
-      this.lastError = `Skipped ${symbol}: selected ${side.toUpperCase()} price is unavailable.`;
+      this._lastPersistedError = this.lastError = `Skipped ${symbol}: selected ${side.toUpperCase()} price is unavailable.`;
       say(this.lastError);
       return null;
     }
@@ -13181,7 +13182,7 @@ class TradingBot {
     try {
       market = await this._fetchLiveMarket(seriesTicker, 5000);
     } catch (err) {
-      this.lastError = `Failed to fetch Kalshi market for ${seriesTicker}: ${err.message}`;
+      this._lastPersistedError = this.lastError = `Failed to fetch Kalshi market for ${seriesTicker}: ${err.message}`;
       console.error('[bot]', this.lastError);
       return null;
     }
@@ -13245,7 +13246,7 @@ class TradingBot {
     }
     const noAskOk = Number.isFinite(noAsk) && noAsk >= 1 && noAsk <= 99;
     if (!yesAskOk && !noAskOk) {
-      this.lastError = `Skipped ${symbol}: Kalshi has no usable YES or NO ask yet.`;
+      this._lastPersistedError = this.lastError = `Skipped ${symbol}: Kalshi has no usable YES or NO ask yet.`;
       return null;
     }
 
@@ -13757,7 +13758,7 @@ class TradingBot {
       dailyLossCents: dailyLossHalted ? (this._dailyLossCents || 0) : null,
       runningSince: this.runningSince,
       config: this.config,
-      lastError: this.lastError,
+      lastError: this.lastError || this._lastPersistedError || null,
       lastDecision: this.lastDecision,
       openTrades: this.openTrades,
       overdueOpenCount: overdueOpen.length,
