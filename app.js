@@ -1588,38 +1588,40 @@ function renderCommodityLeanBar(data) {
     const yesPct = kalshiCentsDisplay != null ? kalshiCentsDisplay : null;
     const noPct  = yesPct != null ? 100 - yesPct : null;
     const closeAttr = d.targetCloseTime ? `data-close="${Number(d.targetCloseTime)}"` : '';
-    // Entry lock: buttons disabled when >10 min remains, or when price is below 80¢ (too cheap).
-    const MANUAL_MIN_ENTRY_PCT = 80;
+    // Entry lock: buttons disabled when >10 min remains.
+    // Low-price warning: price below MANUAL_LOW_PRICE_PCT shows a ⚠ label — still clickable,
+    // but submitManualTrade will cap the stake to MANUAL_LOW_PRICE_MAX_STAKE_DOLLARS.
+    const MANUAL_LOW_PRICE_PCT = 80;         // warn threshold — easy to change
     const ctMs = d.targetCloseTime ? Number(d.targetCloseTime) : null;
     const msLeftNow = ctMs ? ctMs - Date.now() : null;
     const timeLocked = msLeftNow != null && msLeftNow > 10 * 60 * 1000;
     const lockMinsLeft = timeLocked ? Math.ceil(msLeftNow / 60000) : null;
-    const yesLocked = timeLocked || (yesPct != null && yesPct < MANUAL_MIN_ENTRY_PCT);
-    const noLocked  = timeLocked || (noPct  != null && noPct  < MANUAL_MIN_ENTRY_PCT);
-    const entryLocked = yesLocked && noLocked; // both locked (for back-compat references below)
-    const yesHot = !yesLocked && isHotSignal && hotDir === 'YES';
-    const noHot  = !noLocked  && isHotSignal && hotDir === 'NO';
+    const entryLocked = timeLocked; // back-compat
+    const yesLow = !timeLocked && yesPct != null && yesPct < MANUAL_LOW_PRICE_PCT;
+    const noLow  = !timeLocked && noPct  != null && noPct  < MANUAL_LOW_PRICE_PCT;
+    const yesHot = !timeLocked && isHotSignal && hotDir === 'YES';
+    const noHot  = !timeLocked && isHotSignal && hotDir === 'NO';
     const tradeButtons = ticker && !isStale && yesPct != null ? `
       <div style="display:flex;gap:4px;width:100%;margin-top:4px;">
         <button class="lqt-yes-btn"
           data-sym="${sym}" data-ticker="${ticker}"
           data-price="${yesPct}" ${closeAttr}
-          ${yesLocked ? 'data-locked="1"' : ''}
-          style="flex:1;background:${yesLocked ? '#0d1117' : yesHot ? '#064e3b' : '#052e16'};border:${yesHot ? '2px solid #22c55e' : '1px solid #166534'};border-radius:6px;
-                 color:${yesLocked ? '#30363d' : '#22c55e'};font-weight:800;font-size:13px;padding:9px 0;
-                 cursor:${yesLocked ? 'not-allowed' : 'pointer'};line-height:1;min-width:0;touch-action:manipulation;
+          ${timeLocked ? 'data-locked="1"' : ''}
+          style="flex:1;background:${timeLocked ? '#0d1117' : yesHot ? '#064e3b' : '#052e16'};border:${yesHot ? '2px solid #22c55e' : yesLow ? '1px solid #854d0e' : '1px solid #166534'};border-radius:6px;
+                 color:${timeLocked ? '#30363d' : yesLow ? '#fbbf24' : '#22c55e'};font-weight:800;font-size:13px;padding:9px 0;
+                 cursor:${timeLocked ? 'not-allowed' : 'pointer'};line-height:1;min-width:0;touch-action:manipulation;
                  ${yesHot ? 'box-shadow:0 0 6px 1px rgba(34,197,94,0.5);' : ''}">
-          ${timeLocked ? `🔒 ${lockMinsLeft}m` : yesLocked ? `YES ${yesPct}% 🚫` : `YES ${yesPct}%${yesHot ? ' ⚡' : ''}`}
+          ${timeLocked ? `🔒 ${lockMinsLeft}m` : yesLow ? `YES ${yesPct}% ⚠` : `YES ${yesPct}%${yesHot ? ' ⚡' : ''}`}
         </button>
         <button class="lqt-no-btn"
           data-sym="${sym}" data-ticker="${ticker}"
           data-price="${noPct}" ${closeAttr}
-          ${noLocked ? 'data-locked="1"' : ''}
-          style="flex:1;background:${noLocked ? '#0d1117' : noHot ? '#450a0a' : '#2d0a0a'};border:${noHot ? '2px solid #ef4444' : '1px solid #7f1d1d'};border-radius:6px;
-                 color:${noLocked ? '#30363d' : '#ef4444'};font-weight:800;font-size:13px;padding:9px 0;
-                 cursor:${noLocked ? 'not-allowed' : 'pointer'};line-height:1;min-width:0;touch-action:manipulation;
+          ${timeLocked ? 'data-locked="1"' : ''}
+          style="flex:1;background:${timeLocked ? '#0d1117' : noHot ? '#450a0a' : '#2d0a0a'};border:${noHot ? '2px solid #ef4444' : noLow ? '1px solid #854d0e' : '1px solid #7f1d1d'};border-radius:6px;
+                 color:${timeLocked ? '#30363d' : noLow ? '#fbbf24' : '#ef4444'};font-weight:800;font-size:13px;padding:9px 0;
+                 cursor:${timeLocked ? 'not-allowed' : 'pointer'};line-height:1;min-width:0;touch-action:manipulation;
                  ${noHot ? 'box-shadow:0 0 6px 1px rgba(239,68,68,0.5);' : ''}">
-          ${timeLocked ? `🔒 ${lockMinsLeft}m` : noLocked ? `NO ${noPct}% 🚫` : `NO ${noPct}%${noHot ? ' ⚡' : ''}`}
+          ${timeLocked ? `🔒 ${lockMinsLeft}m` : noLow ? `NO ${noPct}% ⚠` : `NO ${noPct}%${noHot ? ' ⚡' : ''}`}
         </button>
       </div>` : '';
 
@@ -1657,6 +1659,9 @@ function renderCommodityLeanBar(data) {
 
 // ---------- lean bar quick-trade ----------
 
+const MANUAL_LOW_PRICE_PCT = 80;           // warn threshold (must match render constant above)
+const MANUAL_LOW_PRICE_MAX_STAKE_DOLLARS = 1; // stake cap for low-price entries — change this to adjust
+
 let _leanBarStakeDollars = 1;
 let _leanThreshold = 55;
 
@@ -1674,9 +1679,14 @@ function leanBarStakeAdj(delta) {
 
 async function submitManualTrade({ symbol, ticker, side, entryPriceCents, manualStopCents, windowCloseTime }) {
   const { engineUrl } = loadSettings();
+  // Low-price cap: if entry is below the warn threshold, cap stake to $1 (or configured max).
+  const isLowPrice = entryPriceCents != null && entryPriceCents < MANUAL_LOW_PRICE_PCT;
+  const effectiveStake = isLowPrice
+    ? Math.min(_leanBarStakeDollars, MANUAL_LOW_PRICE_MAX_STAKE_DOLLARS)
+    : _leanBarStakeDollars;
   // Convert dollar stake → contracts: floor($stake / pricePerContract)
   const pricePerContract = (entryPriceCents || 50) / 100;
-  const contracts = Math.max(1, Math.floor(_leanBarStakeDollars / pricePerContract));
+  const contracts = Math.max(1, Math.floor(effectiveStake / pricePerContract));
   const res = await fetch(`${engineUrl}/api/bot/manual-trade`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
