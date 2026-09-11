@@ -1434,9 +1434,12 @@ function renderCommodityLeanBar(data) {
         const avgLeanHist = heldVals.reduce((a, b) => a + b, 0) / heldVals.length;
         const matchCount = hist.filter((h) => h.dir === heldDir).length;
         const consistencyHist = (matchCount / hist.length) * 100;
-        if (avgLeanHist >= 75 && consistencyHist >= 75) {
+        const histYesNo = heldDir === 'UP' ? 'YES' : 'NO';
+        const priceAgrees = price == null || strike == null ||
+          (histYesNo === 'YES' ? price >= strike : price < strike);
+        if (avgLeanHist >= 75 && consistencyHist >= 75 && priceAgrees) {
           isHotSignal = true;
-          hotDir = heldDir === 'UP' ? 'YES' : 'NO';
+          hotDir = histYesNo;
         }
       }
     }
