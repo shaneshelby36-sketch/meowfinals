@@ -1493,9 +1493,13 @@ function renderCommodityLeanBar(data) {
         const matchCount = hist.filter((h) => h.dir === heldDir).length;
         const consistencyHist = (matchCount / hist.length) * 100;
         const histYesNo = heldDir === 'UP' ? 'YES' : 'NO';
+        // Commodity price vs strike must agree (if available)
         const priceAgrees = price == null || strike == null ||
           (histYesNo === 'YES' ? price >= strike : price < strike);
-        if (avgLeanHist >= 67 && consistencyHist >= 75 && priceAgrees) {
+        // Kalshi market must be pricing the same side (if available) — no cross-direction highlights
+        const kalshiAgrees = kalshiCentsDisplay == null ||
+          (histYesNo === 'YES' ? kalshiCentsDisplay >= 50 : kalshiCentsDisplay < 50);
+        if (avgLeanHist >= 67 && consistencyHist >= 75 && priceAgrees && kalshiAgrees) {
           isHotSignal = true;
           hotDir = histYesNo;
         }
