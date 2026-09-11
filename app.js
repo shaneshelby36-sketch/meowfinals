@@ -1972,19 +1972,22 @@ async function refreshBotStatus() {
       chips.push(chip('Kalshi available', capital.liveAvailableCents == null ? 'Checking…' : `$${(capital.liveAvailableCents / 100).toFixed(2)}`));
     }
     if (data.lastDecision) chips.push(chip('Decision', data.lastDecision));
-    if (data.lastError) chips.push(chip('Last error', data.lastError));
     // Show/hide the daily loss reset button based on halt state.
     const resetRow = document.getElementById('daily-loss-reset-row');
     if (resetRow) resetRow.style.display = data.dailyLossHalted ? '' : 'none';
     renderSettleWindowRec(data.settleWindowRec);
     const activityScroll = captureLogScroll('bot-activity-log-list', 'bottom');
     const tradeScroll = captureLogScroll('bot-trade-log-list', 'top');
+    const lastErrorHtml = data.lastError
+      ? `<div style="margin-top:8px;background:#1a0000;border:1px solid #7f1d1d;border-radius:6px;color:#fca5a5;font-size:12px;padding:6px 10px;">⚠ Last error: ${escapeHtml(String(data.lastError))}</div>`
+      : '';
     body.innerHTML = [
       buildCapitalLedgerHtml(capital, { depositControls: true }),
       buildHourlyPnlHtml(data.hourlyPnl || (data.stats && data.stats.hourlyPnl)),
       buildOpenPositionsHtml(data.openTrades),
       `<div class="bot-stat-chips">${chips.join('')}</div>`,
       buildTradeLogHtml(data.tradeLog, data.tradeLogTotal),
+      lastErrorHtml,
       buildLeanHistoryHtml(),
       buildActivityLogHtml(data.activityLog, data.recentTrades),
     ].join('');
@@ -2183,17 +2186,18 @@ function buildOpenPositionsHtml(openTrades) {
       const stopNote = isManual && Number.isFinite(t.manualStopCents)
         ? ` · stop −${t.manualStopCents}¢`
         : '';
-      // Live P&L vs entry
-      const liveBid = Number.isFinite(t.liveBidCents) ? t.liveBidCents : null;
+      // Live P&L vs entry — prefer ask (matches Kalshi display), fall back to bid
+      const livePrice = Number.isFinite(t.liveAskCents) ? t.liveAskCents
+                      : Number.isFinite(t.liveBidCents) ? t.liveBidCents : null;
       const entry   = Number.isFinite(t.entryPriceCents) ? t.entryPriceCents : null;
       const ct      = Number.isFinite(t.contracts) ? t.contracts : 1;
       let pnlHtml = '';
-      if (liveBid != null && entry != null) {
-        const diffCents = liveBid - entry;
+      if (livePrice != null && entry != null) {
+        const diffCents = Math.round(livePrice - entry);
         const diffDollars = (diffCents * ct / 100).toFixed(2);
         const sign = diffCents >= 0 ? '+' : '';
         const col  = diffCents > 0 ? '#22c55e' : diffCents < 0 ? '#ef4444' : '#8b949e';
-        pnlHtml = `<span style="color:${col};font-weight:700;font-size:12px;">${sign}${diffCents}¢ (${sign}$${diffDollars})</span>`;
+        pnlHtml = `<span style="color:${col};font-weight:700;font-size:12px;" title="vs entry ${entry}¢ · ask ${Math.round(livePrice)}¢">${sign}${diffCents}¢ (${sign}$${diffDollars})</span>`;
       }
       const cancelBtn = isManual
         ? `<button class="lqt-cancel-btn" data-trade-id="${t.id}"

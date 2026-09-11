@@ -82,7 +82,8 @@ class CommodityFeed extends EventEmitter {
     this._usingPollFallback = false;
   }
 
-  // REST poll fallback: fetch latest price for each symbol every 5s via Polygon snapshot.
+  // REST poll fallback: fetch live price for each symbol every 5s via Polygon last quote.
+  // Emits one tick at Date.now() per poll so the 30s VWAP windows fill with real timestamps.
   _startRestPoll() {
     if (this._pollTimer) return; // already polling
     this._usingPollFallback = true;
@@ -93,19 +94,18 @@ class CommodityFeed extends EventEmitter {
         const ticker = POLYGON_TICKER[sym];
         if (!ticker) continue;
         try {
-          const url = `${POLYGON_REST_BASE}/v2/aggs/ticker/${encodeURIComponent(ticker)}/prev?adjusted=false&apiKey=${this.apiKey}`;
+          // /v1/last_quote gives the live bid/ask — take mid as the price.
+          const url = `${POLYGON_REST_BASE}/v1/last_quote/currencies/${ticker.replace('C:', '')}?apiKey=${this.apiKey}`;
           const res = await fetch(url, { headers: { 'User-Agent': 'crypto-prediction-engine' } });
           if (!res.ok) continue;
           const data = await res.json();
-          const result = Array.isArray(data.results) && data.results[0];
-          if (!result) continue;
-          const nowMs = Date.now();
-          // Spread OHLC into 4 synthetic ticks over last 60s so micro-momentum has enough resolution
-          const o = result.o, h = result.h, l = result.l, c = result.c;
-          const size = (result.v || 4) / 4;
-          for (const [price, offset] of [[o, 0], [h, 20000], [l, 40000], [c, 60000]]) {
-            this.emit('trade', { productId: sym, price, size, time: nowMs - 60000 + offset });
-          }
+          const last = data.last;
+          if (!last) continue;
+          const price = last.ask != null && last.bid != null
+            ? (last.ask + last.bid) / 2
+            : last.ask ?? last.bid ?? null;
+          if (price == null || price <= 0) continue;
+          this.emit('trade', { productId: sym, price, size: 1, time: Date.now() });
         } catch (_) { /* ignore per-symbol errors */ }
         await sleep(300); // spread requests to avoid rate-limit
       }

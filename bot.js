@@ -8983,6 +8983,12 @@ class TradingBot {
 
     const heldSideBidCents = this._heldSideBidCents(trade, market);
     if (Number.isFinite(heldSideBidCents)) trade.liveBidCents = heldSideBidCents;
+    // For display P&L: use ask (what you'd realistically sell at) if available, else bid
+    const liveAsk = market ? (trade.side === 'yes'
+      ? (Number.isFinite(market.yes_ask) ? market.yes_ask : heldSideBidCents)
+      : (Number.isFinite(market.no_ask)  ? market.no_ask  : heldSideBidCents)
+    ) : heldSideBidCents;
+    if (Number.isFinite(liveAsk)) trade.liveAskCents = liveAsk;
     // Peak held bid: settle (weak-ticket) + model (trail before dumps) + manual (trailing stop).
     if (
       (isSettleTrade(trade) || isModelTrade(trade) || isManualTrade(trade)) &&
