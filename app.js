@@ -935,9 +935,6 @@ function leanBarSetTab(tab) {
   if (cryptoBtn) { cryptoBtn.style.background = tab === 'crypto' ? '#3b82f6' : 'transparent'; cryptoBtn.style.color = tab === 'crypto' ? '#fff' : '#57606a'; }
   if (autoBtn)   { autoBtn.style.background   = tab === 'auto'   ? '#7c5cd8' : 'transparent'; autoBtn.style.color   = tab === 'auto'   ? '#fff' : '#57606a'; }
   // Refresh the instability warning bar for the newly visible tab
-  if (typeof updateLeanBarWarning === 'function' && _latestLeanData) {
-    updateLeanBarWarning(_latestLeanData);
-  }
   if (tab === 'auto') refreshAutoManualPanel();
 }
 
