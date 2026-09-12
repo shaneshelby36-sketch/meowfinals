@@ -4141,6 +4141,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'dailyLossLimitDollars',
   'manualStopLossCents',
   'manualStopFreefallCents', // if bid drops this many ¢ past the stop level, bypass recovery window. 0 = off
+  'modelEntriesEnabled',
   'autoManualEnabled',
   'autoManualCrypto',
   'autoManualCommo',
@@ -5431,6 +5432,7 @@ class TradingBot {
       dailyLossLimitDollars: DAILY_LOSS_LIMIT_DEFAULT_DOLLARS, // kill-switch: halt new entries when day P&L hits this loss
       manualStopLossCents: MANUAL_STOP_LOSS_DEFAULT_CENTS, // stop-loss for lean-bar quick manual trades
       manualStopFreefallCents: 0, // bypass recovery window if bid falls this far past stop. 0 = off
+      modelEntriesEnabled: 1,    // set to 0 to pause model auto-entries without changing strategyMode
       autoManualEnabled: false,
       autoManualCrypto: true,    // include crypto symbols in auto-manual scanning
       autoManualCommo: true,     // include commodity symbols in auto-manual scanning
@@ -11967,6 +11969,11 @@ class TradingBot {
     }
 
     if (modelMode) {
+      // modelEntriesEnabled=0 pauses new model entries without changing strategyMode
+      if (!this.config.modelEntriesEnabled && this.config.modelEntriesEnabled !== undefined) {
+        this.lastDecision = 'Model entries paused (modelEntriesEnabled=0).';
+        return;
+      }
       // Fill up to maxOpen with ranked MODEL opportunities in one cycle
       // (several coins can correlate near the same time). Late cutoff is
       // per-opportunity — one coin near settle must not freeze the others.
