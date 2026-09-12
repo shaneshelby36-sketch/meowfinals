@@ -11550,8 +11550,9 @@ class TradingBot {
   async _runAutoManualCycle(predictions) {
     const cfg = this.config;
     if (!cfg.autoManualEnabled || cfg.autoManualEnabled === 'off') return;
-    if (!this.isRunning) return;
+    if (!this.isRunning) { console.log('[auto-manual] skip: bot not running'); return; }
     if (this._inShadow || this._inCoinShadow) return;
+    console.log('[auto-manual] cycle start — scanning candidates');
 
     const CRYPTO_SYMBOLS = new Set(['BTC', 'ETH', 'SOL', 'XRP', 'BNB', 'NEAR', 'HYPE', 'DOGE', 'ZEC']);
     const COMMO_SYMBOLS  = new Set(['GOLD', 'SILVER', 'OIL', 'NATGAS', 'COPPER']);
@@ -11573,31 +11574,31 @@ class TradingBot {
     for (const symbol of candidates) {
       // 1. Prediction ready?
       const pred = predictions && predictions[symbol];
-      if (!pred || !pred.ready) continue;
+      if (!pred || !pred.ready) { console.log(`[auto-manual] ${symbol}: skip — pred not ready`); continue; }
 
       // 2. Market available in cache?
       const seriesTicker = SERIES_BY_SYMBOL[symbol];
       const market = this._lastLiveMarket && this._lastLiveMarket[seriesTicker];
-      if (!market || !market.ticker) continue;
+      if (!market || !market.ticker) { console.log(`[auto-manual] ${symbol}: skip — no market cache`); continue; }
 
       // 3. Minutes remaining
       const closeMs = this._marketCloseMs(market);
-      if (!Number.isFinite(closeMs)) continue;
+      if (!Number.isFinite(closeMs)) { console.log(`[auto-manual] ${symbol}: skip — no close time`); continue; }
       const now = Date.now();
       const minutesRemaining = (closeMs - now) / 60000;
-      if (minutesRemaining < minMinutes || minutesRemaining > maxMinutes) continue;
+      if (minutesRemaining < minMinutes || minutesRemaining > maxMinutes) { console.log(`[auto-manual] ${symbol}: skip — ${minutesRemaining.toFixed(1)}m left (need ${minMinutes}–${maxMinutes}m)`); continue; }
 
       // 4. Windows
       const windows = pred.windows || {};
       const w5  = windows['5']  || windows['w5']  || windows[5];
       const w10 = windows['10'] || windows['w10'] || windows[10];
       const w15 = windows['15'] || windows['w15'] || windows[15];
-      if (!w5 || !w10 || !w15) continue;
+      if (!w5 || !w10 || !w15) { console.log(`[auto-manual] ${symbol}: skip — missing windows (w5=${!!w5} w10=${!!w10} w15=${!!w15})`); continue; }
 
       // 5. All 3 windows agree on direction
       const allYes = w5.probabilityUp >= 50 && w10.probabilityUp >= 50 && w15.probabilityUp >= 50;
       const allNo  = w5.probabilityUp <  50 && w10.probabilityUp <  50 && w15.probabilityUp <  50;
-      if (!allYes && !allNo) continue;
+      if (!allYes && !allNo) { console.log(`[auto-manual] ${symbol}: skip — windows disagree (${w5.probabilityUp}/${w10.probabilityUp}/${w15.probabilityUp})`); continue; }
       const direction = allYes ? 'yes' : 'no';
 
       // 6. Held-side lean — average across 3 windows.
@@ -11610,20 +11611,20 @@ class TradingBot {
 
       // 7. Avg confidence
       const avgConf = ((Number(w5.confidence) || 0) + (Number(w10.confidence) || 0) + (Number(w15.confidence) || 0)) / 3;
-      if (avgConf < minConfidence) continue;
+      if (avgConf < minConfidence) { console.log(`[auto-manual] ${symbol}: skip — conf ${avgConf.toFixed(1)}% < ${minConfidence}%`); continue; }
 
       // 8. Ask on held side — fetch early so lean gate can use it
       const ask = direction === 'yes'
         ? Number(market.yes_ask)
         : Number(market.no_ask);
-      if (!Number.isFinite(ask) || ask < minEntryCents) continue;
+      if (!Number.isFinite(ask) || ask < minEntryCents) { console.log(`[auto-manual] ${symbol}: skip — ask ${ask}¢ < ${minEntryCents}¢`); continue; }
 
       // Lean gate: rich price only needs soft lean backing (≥55%); cheaper needs full minLeanPct
       const leanFloor = ask >= minEntryCents ? 55 : minLeanPct;
-      if (avgLean < leanFloor) continue;
+      if (avgLean < leanFloor) { console.log(`[auto-manual] ${symbol}: skip — avgLean ${avgLean.toFixed(1)}% < floor ${leanFloor}% (ask ${ask}¢)`); continue; }
 
       // 9. No open on this symbol
-      if (this._hasOpenOnSymbol(symbol)) continue;
+      if (this._hasOpenOnSymbol(symbol)) { console.log(`[auto-manual] ${symbol}: skip — already open`); continue; }
 
       // 10. Session cooldown — keyed by symbol + 15-min window bucket
       const sessionKey = Math.floor(closeMs / (15 * 60 * 1000));
@@ -11637,7 +11638,7 @@ class TradingBot {
           const at = Number(t.closedAt);
           if (Number.isFinite(at) && at > bestAt) { bestAt = at; lastForSym = t; }
         }
-        if (!lastForSym || lastForSym.exitReason === 'stop_loss') continue;
+        if (!lastForSym || lastForSym.exitReason === 'stop_loss') { console.log(`[auto-manual] ${symbol}: skip — session cooldown (last exit: ${lastForSym?.exitReason})`); continue; }
         // near_certain / take_profit / pre_close_bank → re-entry ok
       }
 

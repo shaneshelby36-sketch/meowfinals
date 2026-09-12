@@ -1,6 +1,6 @@
 {
   "symbol": "AUTO",
-  "strategyMode": "model",
+  "strategyMode": "edge",
   "edgeThresholdPct": 1,
   "minConfidence": 56,
   "stopLossCents": 23,
