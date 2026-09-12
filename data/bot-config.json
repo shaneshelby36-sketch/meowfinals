@@ -117,6 +117,7 @@
   "autoManualCommo": 1,
   "autoManualStakeDollars": 1,
   "autoManualMinEntryCents": 80,
+  "autoManualMaxEntryCents": 90,
   "autoManualMinLeanPct": 63,
   "autoManualMinConfidence": 70,
   "autoManualMinMinutes": 2,

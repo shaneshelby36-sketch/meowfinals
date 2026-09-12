@@ -4147,6 +4147,7 @@ const EDITABLE_NUMERIC_FIELDS = [
   'autoManualCommo',
   'autoManualStakeDollars',
   'autoManualMinEntryCents',
+  'autoManualMaxEntryCents',
   'autoManualMinLeanPct',
   'autoManualMinConfidence',
   'autoManualMinMinutes',
@@ -5438,6 +5439,7 @@ class TradingBot {
       autoManualCommo: true,     // include commodity symbols in auto-manual scanning
       autoManualStakeDollars: 1,
       autoManualMinEntryCents: 80,  // Kalshi ask on held side must be >= this
+      autoManualMaxEntryCents: 90,  // Kalshi ask on held side must be <= this
       autoManualMinLeanPct: 63,     // avg lean across 3 windows on held side (soft floor for rich price: 55%)
       autoManualMinConfidence: 70,  // avg confidence across windows
       autoManualMinMinutes: 2,      // don't enter if less than this left
@@ -11638,14 +11640,17 @@ class TradingBot {
       const ask = direction === 'yes'
         ? Number(market.yes_ask)
         : Number(market.no_ask);
+      const maxEntryCents = Number(cfg.autoManualMaxEntryCents) > 0 ? Number(cfg.autoManualMaxEntryCents) : 90;
       if (!Number.isFinite(ask) || ask < minEntryCents) { console.log(`[auto-manual] ${symbol}: skip — ask ${ask}¢ < ${minEntryCents}¢`); continue; }
+      if (ask > maxEntryCents) { console.log(`[auto-manual] ${symbol}: skip — ask ${ask}¢ > max ${maxEntryCents}¢`); continue; }
 
       // Lean gate: rich price only needs soft lean backing (≥55%); cheaper needs full minLeanPct
       const leanFloor = ask >= minEntryCents ? 55 : minLeanPct;
       if (avgLean < leanFloor) { console.log(`[auto-manual] ${symbol}: skip — avgLean ${avgLean.toFixed(1)}% < floor ${leanFloor}% (ask ${ask}¢)`); continue; }
 
-      // 9. No open on this symbol
-      if (this._hasOpenOnSymbol(symbol)) { console.log(`[auto-manual] ${symbol}: skip — already open`); continue; }
+      // 9. Only one auto-manual trade open at a time across all symbols
+      const anyAutoManualOpen = this.openTrades.some((t) => t && t.strategy === 'manual');
+      if (anyAutoManualOpen) { console.log(`[auto-manual] ${symbol}: skip — auto-manual trade already open`); break; }
 
       // 10. Session cooldown — keyed by symbol + 15-min window bucket
       const sessionKey = Math.floor(closeMs / (15 * 60 * 1000));
