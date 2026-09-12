@@ -11880,6 +11880,12 @@ class TradingBot {
       await this._runBackupRescue();
     }
 
+    // Auto-manual runs here — before any early returns in the entry scanner,
+    // so it fires regardless of strategyMode / funds / position count gates.
+    if (this.config.autoManualEnabled && this.config.autoManualEnabled !== 'off') {
+      await this._runAutoManualCycle(predictions);
+    }
+
     try {
     if (!this.isRunning) {
       this.lastDecision = 'Bot is stopped; it will continue monitoring any already-open positions but will not open new ones.';
@@ -12017,9 +12023,6 @@ class TradingBot {
     }
     } finally {
       this._inRunCycle = false;
-    }
-    if (this.config.autoManualEnabled && this.config.autoManualEnabled !== 'off') {
-      await this._runAutoManualCycle(predictions);
     }
   }
 
