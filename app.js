@@ -824,6 +824,7 @@ function checkTradeFlash(botData) {
 // Session P&L + open positions summary for the bar footer
 function renderLeanBarBotOverlay(botData) {
   checkTradeFlash(botData);
+  if (_leanBarTab === 'auto') refreshAutoManualPanel();
   const el = document.getElementById('lean-bar-pnl');
   if (!el || !botData) return;
   const netCents = botData.stats && botData.stats.netPnlCents != null ? botData.stats.netPnlCents : null;
@@ -923,15 +924,124 @@ function leanBarSetTab(tab) {
   _leanBarTab = tab;
   const commoRow = document.getElementById('lean-bar-commo');
   const cryptoRow = document.getElementById('lean-bar-crypto');
-  const commoBtn = document.getElementById('lean-tab-commo');
+  const autoRow   = document.getElementById('lean-bar-auto');
+  const commoBtn  = document.getElementById('lean-tab-commo');
   const cryptoBtn = document.getElementById('lean-tab-crypto');
-  if (commoRow) commoRow.style.display = tab === 'commo' ? 'flex' : 'none';
-  if (cryptoRow) cryptoRow.style.display = tab === 'crypto' ? 'flex' : 'none';
-  if (commoBtn) { commoBtn.style.background = tab === 'commo' ? '#10b981' : 'transparent'; commoBtn.style.color = tab === 'commo' ? '#fff' : '#57606a'; }
+  const autoBtn   = document.getElementById('lean-tab-auto');
+  if (commoRow)  commoRow.style.display  = tab === 'commo'  ? 'flex'  : 'none';
+  if (cryptoRow) cryptoRow.style.display = tab === 'crypto' ? 'flex'  : 'none';
+  if (autoRow)   autoRow.style.display   = tab === 'auto'   ? 'block' : 'none';
+  if (commoBtn)  { commoBtn.style.background  = tab === 'commo'  ? '#10b981' : 'transparent'; commoBtn.style.color  = tab === 'commo'  ? '#fff' : '#57606a'; }
   if (cryptoBtn) { cryptoBtn.style.background = tab === 'crypto' ? '#3b82f6' : 'transparent'; cryptoBtn.style.color = tab === 'crypto' ? '#fff' : '#57606a'; }
+  if (autoBtn)   { autoBtn.style.background   = tab === 'auto'   ? '#7c5cd8' : 'transparent'; autoBtn.style.color   = tab === 'auto'   ? '#fff' : '#57606a'; }
   // Refresh the instability warning bar for the newly visible tab
   if (typeof updateLeanBarWarning === 'function' && _latestLeanData) {
     updateLeanBarWarning(_latestLeanData);
+  }
+  if (tab === 'auto') refreshAutoManualPanel();
+}
+
+// ── Auto-manual panel state ───────────────────────────────────────────────────
+let _autoManualStakeDollars = 1;
+
+function autoManualToggle() {
+  const el = document.getElementById('auto-manual-enabled');
+  if (!el) return;
+  const enabled = el.checked;
+  const { engineUrl } = loadSettings();
+  fetch(`${engineUrl}/api/bot/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ autoManualEnabled: enabled }),
+  }).catch(() => {});
+}
+
+function autoManualCryptoToggle() {
+  const el = document.getElementById('auto-manual-crypto');
+  if (!el) return;
+  const { engineUrl } = loadSettings();
+  fetch(`${engineUrl}/api/bot/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ autoManualCrypto: el.checked }),
+  }).catch(() => {});
+}
+
+function autoManualCommoToggle() {
+  const el = document.getElementById('auto-manual-commo');
+  if (!el) return;
+  const { engineUrl } = loadSettings();
+  fetch(`${engineUrl}/api/bot/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ autoManualCommo: el.checked }),
+  }).catch(() => {});
+}
+
+function autoManualStakeAdj(delta) {
+  _autoManualStakeDollars = Math.max(1, Math.min(100, _autoManualStakeDollars + delta));
+  const el = document.getElementById('auto-manual-stake-value');
+  if (el) el.textContent = `$${_autoManualStakeDollars}`;
+}
+
+function saveAutoManualSettings() {
+  const { engineUrl } = loadSettings();
+  const enabled    = document.getElementById('auto-manual-enabled')?.checked ?? false;
+  const crypto     = document.getElementById('auto-manual-crypto')?.checked ?? true;
+  const commo      = document.getElementById('auto-manual-commo')?.checked ?? true;
+  fetch(`${engineUrl}/api/bot/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      autoManualEnabled:    enabled,
+      autoManualCrypto:     crypto,
+      autoManualCommo:      commo,
+      autoManualStakeDollars: _autoManualStakeDollars,
+    }),
+  }).then(() => {
+    const statusEl = document.getElementById('auto-manual-status');
+    if (statusEl) { statusEl.textContent = 'Saved.'; setTimeout(() => { if (statusEl.textContent === 'Saved.') statusEl.textContent = ''; }, 2000); }
+  }).catch(() => {});
+}
+
+function refreshAutoManualPanel() {
+  const cfg = _latestBotStatus && _latestBotStatus.config;
+  if (!cfg) return;
+  // Master toggle
+  const enabledEl = document.getElementById('auto-manual-enabled');
+  if (enabledEl) enabledEl.checked = !!(cfg.autoManualEnabled && cfg.autoManualEnabled !== 'off' && cfg.autoManualEnabled !== false);
+  // Sub-toggles
+  const cryptoEl = document.getElementById('auto-manual-crypto');
+  if (cryptoEl) cryptoEl.checked = cfg.autoManualCrypto !== false && cfg.autoManualCrypto !== 'off';
+  const commoEl = document.getElementById('auto-manual-commo');
+  if (commoEl) commoEl.checked = cfg.autoManualCommo !== false && cfg.autoManualCommo !== 'off';
+  // Stake
+  if (Number.isFinite(Number(cfg.autoManualStakeDollars)) && Number(cfg.autoManualStakeDollars) >= 1) {
+    _autoManualStakeDollars = Number(cfg.autoManualStakeDollars);
+  }
+  const stakeEl = document.getElementById('auto-manual-stake-value');
+  if (stakeEl) stakeEl.textContent = `$${_autoManualStakeDollars}`;
+  // Read-only filter labels
+  const minEntryEl = document.getElementById('auto-manual-min-entry');
+  if (minEntryEl) minEntryEl.textContent = cfg.autoManualMinEntryCents ?? 80;
+  const minLeanEl = document.getElementById('auto-manual-min-lean');
+  if (minLeanEl) minLeanEl.textContent = cfg.autoManualMinLeanPct ?? 65;
+  const minConfEl = document.getElementById('auto-manual-min-conf');
+  if (minConfEl) minConfEl.textContent = cfg.autoManualMinConfidence ?? 70;
+  const minMinEl = document.getElementById('auto-manual-min-min');
+  if (minMinEl) minMinEl.textContent = cfg.autoManualMinMinutes ?? 2;
+  const maxMinEl = document.getElementById('auto-manual-max-min');
+  if (maxMinEl) maxMinEl.textContent = cfg.autoManualMaxMinutes ?? 10;
+  // Status line — show last decision if it was auto-manual
+  const statusEl = document.getElementById('auto-manual-status');
+  if (statusEl) {
+    const decision = _latestBotStatus && _latestBotStatus.lastDecision;
+    if (decision && String(decision).startsWith('[auto-manual]')) {
+      statusEl.textContent = decision;
+      statusEl.style.color = '#22c55e';
+    } else if (statusEl.textContent !== 'Saved.') {
+      statusEl.textContent = '';
+    }
   }
 }
 

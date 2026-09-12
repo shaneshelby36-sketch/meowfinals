@@ -4141,6 +4141,15 @@ const EDITABLE_NUMERIC_FIELDS = [
   'dailyLossLimitDollars',
   'manualStopLossCents',
   'manualStopFreefallCents', // if bid drops this many ¢ past the stop level, bypass recovery window. 0 = off
+  'autoManualEnabled',
+  'autoManualCrypto',
+  'autoManualCommo',
+  'autoManualStakeDollars',
+  'autoManualMinEntryCents',
+  'autoManualMinLeanPct',
+  'autoManualMinConfidence',
+  'autoManualMinMinutes',
+  'autoManualMaxMinutes',
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -5422,6 +5431,15 @@ class TradingBot {
       dailyLossLimitDollars: DAILY_LOSS_LIMIT_DEFAULT_DOLLARS, // kill-switch: halt new entries when day P&L hits this loss
       manualStopLossCents: MANUAL_STOP_LOSS_DEFAULT_CENTS, // stop-loss for lean-bar quick manual trades
       manualStopFreefallCents: 0, // bypass recovery window if bid falls this far past stop. 0 = off
+      autoManualEnabled: false,
+      autoManualCrypto: true,    // include crypto symbols in auto-manual scanning
+      autoManualCommo: true,     // include commodity symbols in auto-manual scanning
+      autoManualStakeDollars: 1,
+      autoManualMinEntryCents: 80,  // Kalshi ask on held side must be >= this
+      autoManualMinLeanPct: 65,     // all 3 windows lean >= this on held side
+      autoManualMinConfidence: 70,  // avg confidence across windows
+      autoManualMinMinutes: 2,      // don't enter if less than this left
+      autoManualMaxMinutes: 10,     // don't enter if more than this left
       paperStartingBalanceDollars: 100, // trading bankroll (also the capital backing paper trades)
       mode: 'paper', // 'paper' | 'live'
       liveAuthorized: false,
@@ -5510,6 +5528,7 @@ class TradingBot {
     this._inRunCycle = false;
     this._lastLiveMarket = Object.create(null);
     this._lastLiveMarketAt = Object.create(null);
+    this._autoManualFiredSessions = new Map(); // symbol:sessionKey → true
     this._loadKalshiSeriesCacheFromDisk();
     this._removeInvalidPaperTrades();
     this._seedTradeLogFromLedger();
@@ -11524,6 +11543,123 @@ class TradingBot {
   }
 
   /**
+   * Auto-manual scanner: runs once per runCycle, checks every eligible symbol
+   * for a high-confidence directional entry and fires addManualTrade when all
+   * filters pass. At most one new entry per cycle.
+   */
+  async _runAutoManualCycle(predictions) {
+    const cfg = this.config;
+    if (!cfg.autoManualEnabled || cfg.autoManualEnabled === 'off') return;
+    if (!this.isRunning) return;
+    if (this._inShadow || this._inCoinShadow) return;
+
+    const CRYPTO_SYMBOLS = new Set(['BTC', 'ETH', 'SOL', 'XRP', 'BNB', 'NEAR', 'HYPE', 'DOGE', 'ZEC']);
+    const COMMO_SYMBOLS  = new Set(['GOLD', 'SILVER', 'OIL', 'NATGAS', 'COPPER']);
+
+    // Build candidate list
+    const candidates = Object.keys(SERIES_BY_SYMBOL).filter((sym) => {
+      if (CRYPTO_SYMBOLS.has(sym)) return cfg.autoManualCrypto || cfg.autoManualCrypto === undefined;
+      if (COMMO_SYMBOLS.has(sym))  return cfg.autoManualCommo  || cfg.autoManualCommo  === undefined;
+      return false;
+    });
+
+    const minEntryCents = Number(cfg.autoManualMinEntryCents) || 80;
+    const minLeanPct    = Number(cfg.autoManualMinLeanPct)    || 65;
+    const minConfidence = Number(cfg.autoManualMinConfidence) || 70;
+    const minMinutes    = Number(cfg.autoManualMinMinutes)    || 2;
+    const maxMinutes    = Number(cfg.autoManualMaxMinutes)    || 10;
+    const stakeDollars  = Number(cfg.autoManualStakeDollars)  || 1;
+
+    for (const symbol of candidates) {
+      // 1. Prediction ready?
+      const pred = predictions && predictions[symbol];
+      if (!pred || !pred.ready) continue;
+
+      // 2. Market available in cache?
+      const seriesTicker = SERIES_BY_SYMBOL[symbol];
+      const market = this._lastLiveMarket && this._lastLiveMarket[seriesTicker];
+      if (!market || !market.ticker) continue;
+
+      // 3. Minutes remaining
+      const closeMs = this._marketCloseMs(market);
+      if (!Number.isFinite(closeMs)) continue;
+      const now = Date.now();
+      const minutesRemaining = (closeMs - now) / 60000;
+      if (minutesRemaining < minMinutes || minutesRemaining > maxMinutes) continue;
+
+      // 4. Windows
+      const windows = pred.windows || {};
+      const w5  = windows['5']  || windows['w5']  || windows[5];
+      const w10 = windows['10'] || windows['w10'] || windows[10];
+      const w15 = windows['15'] || windows['w15'] || windows[15];
+      if (!w5 || !w10 || !w15) continue;
+
+      // 5. All 3 windows agree on direction
+      const allYes = w5.probabilityUp >= 50 && w10.probabilityUp >= 50 && w15.probabilityUp >= 50;
+      const allNo  = w5.probabilityUp <  50 && w10.probabilityUp <  50 && w15.probabilityUp <  50;
+      if (!allYes && !allNo) continue;
+      const direction = allYes ? 'yes' : 'no';
+
+      // 6. Held-side lean for each window
+      const lean5  = direction === 'yes' ? w5.probabilityUp  : (100 - w5.probabilityUp);
+      const lean10 = direction === 'yes' ? w10.probabilityUp : (100 - w10.probabilityUp);
+      const lean15 = direction === 'yes' ? w15.probabilityUp : (100 - w15.probabilityUp);
+      if (lean5 < minLeanPct || lean10 < minLeanPct || lean15 < minLeanPct) continue;
+
+      // 7. Avg confidence
+      const avgConf = ((w5.confidence || 0) + (w10.confidence || 0) + (w15.confidence || 0)) / 3;
+      if (avgConf < minConfidence) continue;
+
+      // 8. Ask on held side
+      const ask = direction === 'yes'
+        ? Number(market.yes_ask)
+        : Number(market.no_ask);
+      if (!Number.isFinite(ask) || ask < minEntryCents) continue;
+
+      // 9. No open on this symbol
+      if (this._hasOpenOnSymbol(symbol)) continue;
+
+      // 10. Session cooldown — keyed by symbol + 15-min window bucket
+      const sessionKey = Math.floor(closeMs / (15 * 60 * 1000));
+      const firedKey   = `${symbol}:${sessionKey}`;
+      if (this._autoManualFiredSessions.has(firedKey)) {
+        // Re-entry allowed only if the last closed trade on this symbol was NOT a stop_loss
+        let lastForSym = null;
+        let bestAt = -Infinity;
+        for (const t of this.ledger.trades || []) {
+          if (!t || t.status !== 'closed' || t.symbol !== symbol) continue;
+          const at = Number(t.closedAt);
+          if (Number.isFinite(at) && at > bestAt) { bestAt = at; lastForSym = t; }
+        }
+        if (!lastForSym || lastForSym.exitReason === 'stop_loss') continue;
+        // near_certain / take_profit / pre_close_bank → re-entry ok
+      }
+
+      // 11. All checks passed — fire
+      const contracts = Math.max(1, Math.floor(stakeDollars / (ask / 100)));
+      const result = await this.addManualTrade({
+        symbol,
+        ticker:          market.ticker,
+        side:            direction,
+        entryPriceCents: ask,
+        contracts,
+        windowCloseTime: closeMs,
+        manualStopCents: this.config.manualStopLossCents,
+      });
+
+      if (result && result.ok) {
+        this._autoManualFiredSessions.set(firedKey, true);
+        const msg = `[auto-manual] entered ${symbol} ${direction.toUpperCase()} @ ${ask}¢ (${minutesRemaining.toFixed(1)}m left)`;
+        this.lastDecision = msg;
+        this._logActivity(msg, { kind: 'open', symbol, strategy: 'manual' });
+        console.log(msg);
+        break; // at most one entry per cycle
+      }
+    }
+  }
+
+
+  /**
    * Place a real Kalshi buy order from the dashboard lean bar, then register
    * it in the ledger as strategy:'manual'. In paper mode or when credentials
    * are absent, falls back to ledger-only (no live order).
@@ -11862,6 +11998,9 @@ class TradingBot {
     }
     } finally {
       this._inRunCycle = false;
+    }
+    if (this.config.autoManualEnabled && this.config.autoManualEnabled !== 'off') {
+      await this._runAutoManualCycle(predictions);
     }
   }
 

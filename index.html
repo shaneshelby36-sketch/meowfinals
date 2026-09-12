@@ -94,6 +94,9 @@
       <button id="lean-tab-crypto" onclick="leanBarSetTab('crypto')" style="
         flex:0 0 auto;padding:0 18px;background:transparent;border:none;color:#57606a;
         font-size:13px;font-weight:700;letter-spacing:0.5px;cursor:pointer;border-left:1px solid #21262d;touch-action:manipulation;">CRYPTO</button>
+      <button id="lean-tab-auto" onclick="leanBarSetTab('auto')" style="
+        flex:0 0 auto;padding:0 18px;background:transparent;border:none;color:#57606a;
+        font-size:13px;font-weight:700;letter-spacing:0.5px;cursor:pointer;border-left:1px solid #21262d;touch-action:manipulation;">AUTO</button>
       <div style="flex:1;"></div>
       <!-- Stake stepper -->
       <div style="display:flex;align-items:center;gap:0;border-left:1px solid #21262d;padding:0 6px;gap:4px;" title="Dollar stake per manual trade — contracts = floor(stake / price)">
@@ -140,6 +143,62 @@
       <div id="commo-lean-hype" data-sym="HYPE" class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;border-right:1px solid #21262d;"></div>
       <div id="commo-lean-zec"  data-sym="ZEC"  class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;border-right:1px solid #21262d;"></div>
       <div id="commo-lean-doge" data-sym="DOGE" class="commo-lean-cell" style="flex:1;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:2px 4px;"></div>
+    </div>
+    <!-- AUTO panel -->
+    <div id="lean-bar-auto" style="display:none;padding:8px 12px;background:#0d1117;color:#c9d1d9;font-size:12px;">
+      <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+        <!-- Master toggle -->
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;font-size:13px;">
+          <input type="checkbox" id="auto-manual-enabled" onchange="autoManualToggle()"
+            style="width:15px;height:15px;cursor:pointer;accent-color:#10b981;">
+          Auto-manual
+        </label>
+        <span style="color:#30363d;">|</span>
+        <!-- Crypto toggle -->
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+          <input type="checkbox" id="auto-manual-crypto" onchange="autoManualCryptoToggle()" checked
+            style="width:13px;height:13px;cursor:pointer;accent-color:#3b82d4;">
+          <span style="color:#57606a;font-size:11px;font-weight:600;">CRYPTO</span>
+        </label>
+        <!-- Commo toggle -->
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;">
+          <input type="checkbox" id="auto-manual-commo" onchange="autoManualCommoToggle()" checked
+            style="width:13px;height:13px;cursor:pointer;accent-color:#3b82d4;">
+          <span style="color:#57606a;font-size:11px;font-weight:600;">COMMO</span>
+        </label>
+        <span style="color:#30363d;">|</span>
+        <!-- Stake stepper -->
+        <div style="display:flex;align-items:center;gap:4px;" title="Dollar stake per auto-manual trade">
+          <span style="color:#57606a;font-size:11px;font-weight:600;">Stake $</span>
+          <button onclick="autoManualStakeAdj(-1)" style="
+            width:26px;height:22px;background:#161b22;border:1px solid #30363d;border-radius:4px;
+            color:#c9d1d9;font-size:14px;font-weight:700;cursor:pointer;line-height:1;touch-action:manipulation;">−</button>
+          <span id="auto-manual-stake-value" style="min-width:24px;text-align:center;color:#c9d1d9;font-size:12px;font-weight:700;">$1</span>
+          <button onclick="autoManualStakeAdj(1)" style="
+            width:26px;height:22px;background:#161b22;border:1px solid #30363d;border-radius:4px;
+            color:#c9d1d9;font-size:14px;font-weight:700;cursor:pointer;line-height:1;touch-action:manipulation;">+</button>
+        </div>
+        <span style="color:#30363d;">|</span>
+        <!-- Read-only filter displays -->
+        <span title="Minimum Kalshi ask on held side (¢)" style="color:#57606a;font-size:11px;">
+          Min entry <span id="auto-manual-min-entry" style="color:#c9d1d9;font-weight:700;">80</span>¢
+        </span>
+        <span title="All 3 windows lean ≥ this % on held side" style="color:#57606a;font-size:11px;">
+          Min lean <span id="auto-manual-min-lean" style="color:#c9d1d9;font-weight:700;">65</span>%
+        </span>
+        <span title="Avg confidence across 3 windows" style="color:#57606a;font-size:11px;">
+          Min conf <span id="auto-manual-min-conf" style="color:#c9d1d9;font-weight:700;">70</span>%
+        </span>
+        <span title="Minutes remaining in window" style="color:#57606a;font-size:11px;">
+          <span id="auto-manual-min-min" style="color:#c9d1d9;font-weight:700;">2</span>–<span id="auto-manual-max-min" style="color:#c9d1d9;font-weight:700;">10</span>m
+        </span>
+        <span style="color:#30363d;">|</span>
+        <button onclick="saveAutoManualSettings()" style="
+          padding:3px 12px;background:#161b22;border:1px solid #30363d;border-radius:4px;
+          color:#c9d1d9;font-size:12px;font-weight:600;cursor:pointer;touch-action:manipulation;">Save</button>
+      </div>
+      <!-- Status line -->
+      <div id="auto-manual-status" style="margin-top:5px;color:#57606a;font-size:11px;min-height:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
     </div>
   </div>
 
