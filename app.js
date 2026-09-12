@@ -1670,10 +1670,10 @@ const MANUAL_LOW_PRICE_PCT = 80;           // warn threshold (must match render 
 const MANUAL_LOW_PRICE_MAX_STAKE_DOLLARS = 1; // stake cap for low-price entries — change this to adjust
 
 let _leanBarStakeDollars = 1;
-let _leanThreshold = 55;
+let _leanThreshold = 63;
 
 function leanThresholdChange(val) {
-  _leanThreshold = Math.max(50, Math.min(85, Number(val)));
+  _leanThreshold = Math.max(60, Math.min(85, Number(val)));
   const label = document.getElementById('lean-threshold-value');
   if (label) label.textContent = `${_leanThreshold}%`;
 }
