@@ -4773,7 +4773,7 @@ const EDITABLE_STRING_FIELDS = {
     return SERIES_BY_SYMBOL[s] ? s : null;
   },
   strategyMode: (v) =>
-    (['edge', 'settle', 'model'].includes(String(v || '').toLowerCase()) ? String(v).toLowerCase() : null),
+    (['edge', 'settle', 'model', 'manual'].includes(String(v || '').toLowerCase()) ? String(v).toLowerCase() : null),
   settleTieredExits: (v) => parseOnOffField(v, true),
   halfStakeNear: (v) => parseOnOffField(v, true),
   secondOpenRequiresGreen: (v) => parseOnOffField(v, true),
@@ -11924,6 +11924,9 @@ class TradingBot {
     // One open is fine; a second only if something already held is green.
     // A 3rd settle open is allowed while any hold has tagged 90¢ (half stake).
     // Model skips the green gate — windows decide; maxOpenPositions still caps.
+    // Manual mode: no auto entries — only lean bar + auto-manual cycle open positions.
+    if (String(this.config.strategyMode || '').toLowerCase() === 'manual') return;
+
     const settleMode = isSettleStrategyMode(this.config);
     const modelMode = isModelStrategyMode(this.config);
     if (this.openTrades.length >= 1 && !modelMode) {
