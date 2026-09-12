@@ -5436,7 +5436,7 @@ class TradingBot {
       autoManualCommo: true,     // include commodity symbols in auto-manual scanning
       autoManualStakeDollars: 1,
       autoManualMinEntryCents: 80,  // Kalshi ask on held side must be >= this
-      autoManualMinLeanPct: 65,     // all 3 windows lean >= this on held side
+      autoManualMinLeanPct: 63,     // avg lean across 3 windows on held side (soft floor for rich price: 55%)
       autoManualMinConfidence: 70,  // avg confidence across windows
       autoManualMinMinutes: 2,      // don't enter if less than this left
       autoManualMaxMinutes: 10,     // don't enter if more than this left
@@ -11600,21 +11600,27 @@ class TradingBot {
       if (!allYes && !allNo) continue;
       const direction = allYes ? 'yes' : 'no';
 
-      // 6. Held-side lean for each window
-      const lean5  = direction === 'yes' ? w5.probabilityUp  : (100 - w5.probabilityUp);
-      const lean10 = direction === 'yes' ? w10.probabilityUp : (100 - w10.probabilityUp);
-      const lean15 = direction === 'yes' ? w15.probabilityUp : (100 - w15.probabilityUp);
-      if (lean5 < minLeanPct || lean10 < minLeanPct || lean15 < minLeanPct) continue;
+      // 6. Held-side lean — average across 3 windows.
+      // Rich price (≥ minEntryCents) relaxes the lean floor: price is the primary signal,
+      // lean just needs to confirm direction. Below that threshold, full lean required.
+      const lean5  = direction === 'yes' ? Number(w5.probabilityUp)  : (100 - Number(w5.probabilityUp));
+      const lean10 = direction === 'yes' ? Number(w10.probabilityUp) : (100 - Number(w10.probabilityUp));
+      const lean15 = direction === 'yes' ? Number(w15.probabilityUp) : (100 - Number(w15.probabilityUp));
+      const avgLean = (lean5 + lean10 + lean15) / 3;
 
       // 7. Avg confidence
-      const avgConf = ((w5.confidence || 0) + (w10.confidence || 0) + (w15.confidence || 0)) / 3;
+      const avgConf = ((Number(w5.confidence) || 0) + (Number(w10.confidence) || 0) + (Number(w15.confidence) || 0)) / 3;
       if (avgConf < minConfidence) continue;
 
-      // 8. Ask on held side
+      // 8. Ask on held side — fetch early so lean gate can use it
       const ask = direction === 'yes'
         ? Number(market.yes_ask)
         : Number(market.no_ask);
       if (!Number.isFinite(ask) || ask < minEntryCents) continue;
+
+      // Lean gate: rich price only needs soft lean backing (≥55%); cheaper needs full minLeanPct
+      const leanFloor = ask >= minEntryCents ? 55 : minLeanPct;
+      if (avgLean < leanFloor) continue;
 
       // 9. No open on this symbol
       if (this._hasOpenOnSymbol(symbol)) continue;
