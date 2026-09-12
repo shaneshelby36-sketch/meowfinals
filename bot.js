@@ -11595,11 +11595,13 @@ class TradingBot {
       const w15 = windows['15'] || windows['w15'] || windows[15];
       if (!w5 || !w10 || !w15) { console.log(`[auto-manual] ${symbol}: skip — missing windows (w5=${!!w5} w10=${!!w10} w15=${!!w15})`); continue; }
 
-      // 5. All 3 windows agree on direction
+      // 5. All 3 windows agree on direction + not weakening (mirrors frontend GO signal)
       const allYes = w5.probabilityUp >= 50 && w10.probabilityUp >= 50 && w15.probabilityUp >= 50;
       const allNo  = w5.probabilityUp <  50 && w10.probabilityUp <  50 && w15.probabilityUp <  50;
       if (!allYes && !allNo) { console.log(`[auto-manual] ${symbol}: skip — windows disagree (${w5.probabilityUp}/${w10.probabilityUp}/${w15.probabilityUp})`); continue; }
       const direction = allYes ? 'yes' : 'no';
+      const weakeningCount = [w5, w10, w15].filter((w) => w.signalScore && w.signalScore.trend === 'weakening').length;
+      if (weakeningCount >= 2) { console.log(`[auto-manual] ${symbol}: skip — ${weakeningCount}/3 windows weakening`); continue; }
 
       // 6. Held-side lean — average across 3 windows.
       // Rich price (≥ minEntryCents) relaxes the lean floor: price is the primary signal,
