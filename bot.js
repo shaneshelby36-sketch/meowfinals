@@ -11566,6 +11566,23 @@ class TradingBot {
       return false;
     });
 
+    // Refresh market cache for any candidate missing from _lastLiveMarket.
+    // This keeps kalshiTicker populated for the lean bar even when no trades are open.
+    // Rate-limited: only refresh once per 10s per symbol to avoid hammering Kalshi.
+    if (!this._autoManualMarketRefreshedAt) this._autoManualMarketRefreshedAt = {};
+    const now = Date.now();
+    for (const symbol of candidates) {
+      const seriesTicker = SERIES_BY_SYMBOL[symbol];
+      const cached = this._lastLiveMarket && this._lastLiveMarket[seriesTicker];
+      const lastRefresh = this._autoManualMarketRefreshedAt[symbol] || 0;
+      if (!cached && now - lastRefresh > 10_000) {
+        this._autoManualMarketRefreshedAt[symbol] = now;
+        try {
+          await this._fetchLiveMarket(seriesTicker, 3000);
+        } catch (_) {}
+      }
+    }
+
     const minEntryCents = Number(cfg.autoManualMinEntryCents) || 80;
     const minLeanPct    = Number(cfg.autoManualMinLeanPct)    || 65;
     const minConfidence = Number(cfg.autoManualMinConfidence) || 70;
